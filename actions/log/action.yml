@@ -1,0 +1,14 @@
+name: Log
+description: Log a message to the console
+
+inputs:
+  message:
+    description: 'The message to log'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Log message
+      shell: bash
+      run: node ./index.js --message="Hello Universe!"
