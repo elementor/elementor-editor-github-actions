@@ -7,6 +7,9 @@ const args = minimist(process.argv.slice(2), {
 	default: {
 		message: 'Hello, World!',
 	},
+	alias: {
+		m: 'message',
+	},
 });
 
 echo(args.message);
