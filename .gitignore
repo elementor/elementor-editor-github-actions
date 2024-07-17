@@ -1,3 +1,10 @@
-node_modules
-.vscode
-.idea
+node_modules/
+.vscode/
+.idea/
+log/
+.DS_Store/
+tmp/
+
+*.log
+*.map
+.env
