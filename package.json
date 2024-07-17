@@ -1,31 +1,31 @@
 {
-  "name": "elementor-editor-github-actions",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "type": "module",
-  "scripts": {
-    "build": "tsup --config ./tsup.config.ts",
-    "lint": "concurrently -n eslint,tsc -c magenta,green \"eslint .\" \"tsc\""
-  },
-  "engines": {
-    "node": ">=20.0.0",
-    "npm": ">=10.0.0"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "devDependencies": {
-    "@eslint/js": "^9.7.0",
-    "concurrently": "^8.2.2",
-    "eslint": "^8.57.0",
-    "globals": "^15.8.0",
-    "prettier": "^3.3.3",
-    "tsup": "^8.1.0",
-    "typescript": "^5.5.3",
-    "typescript-eslint": "^7.16.1"
-  },
-  "dependencies": {
-    "zx": "^8.1.4"
-  }
+	"name": "elementor-editor-github-actions",
+	"version": "1.0.0",
+	"description": "",
+	"main": "index.js",
+	"type": "module",
+	"scripts": {
+		"build": "tsup --config ./tsup.config.ts",
+		"lint": "concurrently -n eslint,tsc,prettier -c magenta,green,red \"eslint .\" \"tsc\" \"prettier . --check\""
+	},
+	"engines": {
+		"node": ">=20.0.0",
+		"npm": ">=10.0.0"
+	},
+	"keywords": [],
+	"author": "",
+	"license": "ISC",
+	"devDependencies": {
+		"@eslint/js": "^9.7.0",
+		"concurrently": "^8.2.2",
+		"eslint": "^8.57.0",
+		"globals": "^15.8.0",
+		"prettier": "^3.3.3",
+		"tsup": "^8.1.0",
+		"typescript": "^5.5.3",
+		"typescript-eslint": "^7.16.1"
+	},
+	"dependencies": {
+		"zx": "^8.1.4"
+	}
 }
