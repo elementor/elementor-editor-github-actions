@@ -1,0 +1,22 @@
+name: Log Test
+
+on: [workflow_dispatch]
+
+# This allows a subsequently queued workflow run to interrupt previous runs
+concurrency:
+    group: ${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    log-test:
+        name: Log action test
+        runs-on: ubuntu-latest
+        if: startsWith( github.repository, 'elementor/' )
+        steps:
+            - name: Checkout source code
+              uses: actions/checkout@v4
+
+            - name: Log action
+              uses: ./actions/log
+              with:
+                  message: 'Hello, Universe!'

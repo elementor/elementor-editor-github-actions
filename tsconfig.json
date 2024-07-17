@@ -1,0 +1,19 @@
+{
+	"compilerOptions": {
+		"module": "NodeNext",
+		"target": "ESNext",
+		"lib": ["ESNext"],
+		"esModuleInterop": true,
+		"skipLibCheck": true,
+		"allowJs": true,
+		"resolveJsonModule": true,
+		"moduleDetection": "force",
+		"isolatedModules": true,
+		"verbatimModuleSyntax": true,
+		"moduleResolution": "NodeNext",
+		"strict": true,
+		"noUncheckedIndexedAccess": true,
+		"noImplicitOverride": true,
+		"noEmit": true
+	}
+}
