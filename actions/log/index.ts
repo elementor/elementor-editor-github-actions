@@ -1,3 +1,12 @@
-import { $, argv } from 'zx';
+#!/usr/bin/env zx
 
-$`echo ${argv.meesgae}`;
+import { echo, minimist } from 'zx';
+
+const args = minimist(process.argv.slice(2), {
+	string: ['message'],
+	default: {
+		message: 'Hello, World!',
+	},
+});
+
+echo(args.message);

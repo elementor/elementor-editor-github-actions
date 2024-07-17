@@ -11,4 +11,4 @@ runs:
     steps:
         - name: Log message
           shell: bash
-          run: node ./dist/index.js --message="Hello Universe!"
+          run: npx zx@8 ./dist/index.js --message="${{inputs.message}}"
