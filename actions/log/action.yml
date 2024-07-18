@@ -10,7 +10,7 @@ runs:
     using: 'composite'
     steps:
         - name: Install ZX
-          run: npm install -g zx
+          run: npm install zx
           shell: bash
 
         - name: Log message
