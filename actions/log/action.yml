@@ -9,6 +9,10 @@ inputs:
 runs:
     using: 'composite'
     steps:
+        - name: Install ZX
+          run: npm install -g zx
+          shell: bash
+
         - name: Log message
           shell: bash
           run: npx zx ./actions/log/dist/index.js --message="${{inputs.message}}"
