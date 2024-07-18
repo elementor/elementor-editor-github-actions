@@ -1,8 +1,6 @@
 #!/usr/bin/env zx
 
-// import { echo, minimist } from 'zx';
-
-// import 'zx/globals';
+import { echo, minimist } from 'zx';
 
 const args = minimist(process.argv.slice(2), {
 	string: ['message'],
