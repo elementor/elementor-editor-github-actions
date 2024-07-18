@@ -11,6 +11,4 @@ runs:
     steps:
         - name: Log message
           shell: bash
-          run: |
-              ls -la ./actions/log/dist
-              npx zx ./actions/log/dist/index.js --message="${{ inputs.message }}"
+          run: npx zx ./actions/log/dist/index.js --message="${{ inputs.message }}"
