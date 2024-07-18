@@ -1,0 +1,15 @@
+on:
+    workflow_call:
+        inputs:
+            message:
+                required: true
+                type: string
+
+jobs:
+    log:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Log message
+              uses: ./actions/log
+              with:
+                  message: ${{ inputs.message }}
