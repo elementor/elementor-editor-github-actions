@@ -2,7 +2,7 @@
 
 // import { echo, minimist } from 'zx';
 
-import 'zx/globals';
+// import 'zx/globals';
 
 const args = minimist(process.argv.slice(2), {
 	string: ['message'],
