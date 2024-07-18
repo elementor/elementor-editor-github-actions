@@ -1,3 +1,5 @@
+name: Log
+
 on:
     workflow_call:
         inputs:
