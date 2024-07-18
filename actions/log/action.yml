@@ -11,7 +11,7 @@ runs:
     steps:
         - name: Install ZX
           shell: bash
-          run: npm install zx
+          run: sudo npm install -g zx
 
         - name: Log message
           shell: bash
