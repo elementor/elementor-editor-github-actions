@@ -7,6 +7,5 @@ function defineActionConfig(action: string) {
 		entry: [`actions/${action}/index.ts`],
 		outDir: `actions/${action}/dist`,
 		format: 'esm',
-		noExternal: [/.+/],
 	});
 }
