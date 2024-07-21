@@ -1,13 +1,13 @@
 import { defineConfig } from 'tsup';
-import removeZxImportsEsbuildPlugin from './scripts/remove-zx-imports-esbuild-plugin.js';
+import removeZxImportsTsupPlugin from './scripts/remove-zx-imports-tsup-plugin.js';
 
-export default [defineActionConfig('log')];
+export default [defineActionConfig('setup-wp-env')];
 
 function defineActionConfig(action: string) {
 	return defineConfig({
-		entry: [`actions/${action}/index.ts`],
-		outDir: `actions/${action}/dist`,
+		entry: [`src/${action}/*.ts`],
+		outDir: `dist/${action}`,
 		format: 'esm',
-		esbuildPlugins: [removeZxImportsEsbuildPlugin()],
+		plugins: [removeZxImportsTsupPlugin()],
 	});
 }

@@ -1,0 +1,49 @@
+name: Setup WP Env
+description: Setup WordPress environment for testing
+
+inputs:
+    wp:
+        description: WordPress version
+        required: true
+    php:
+        description: PHP version
+        required: true
+    plugins:
+        description: WordPress plugins
+        required: false
+        default: ''
+    themes:
+        description: WordPress themes
+        required: false
+        default: ''
+    active-theme:
+        description: Active theme
+        required: false
+        default: ''
+    mappings:
+        description: Mappings directories into the WordPress container (e.g. templates:/path/to/local/templates)
+        required: false
+        default: ''
+
+runs:
+    using: composite
+    steps:
+        - name: Creating wp-env config file
+          run: |
+              npx zx@8 ./dist/setup-wp-env/create-wp-env-config.js \
+              --wp="${{ inputs.wp }}" \
+              --php="${{ inputs.php }}" \
+              --plugins="${{ inputs.plugins }}" \
+              --themes="${{ inputs.themes }}" \
+              --active-theme="${{ inputs.active-theme }}" \
+              --mappings="${{ inputs.mappings }}" \
+              --dir="./.wp-env-tmp"
+          shell: bash
+
+        - name: Run wp-env
+          run: cd ./.wp-env-tmp && npx wp-env start
+          shell: bash
+
+        - name: Cleanup wp-env tmp directory
+          run: rm -rf ./.wp-env-tmp
+          shell: bash
