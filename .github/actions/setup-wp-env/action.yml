@@ -40,8 +40,12 @@ runs:
               --dir="./.wp-env-tmp"
           shell: bash
 
+        - name: Output wp-env config file
+          run: cat ./.wp-env-tmp/.wp-env.json
+          shell: bash
+
         - name: Run wp-env
-          run: cd ./.wp-env-tmp && npx wp-env start
+          run: cd ./.wp-env-tmp && npx @wordpress/env start
           shell: bash
 
         - name: Cleanup wp-env tmp directory
