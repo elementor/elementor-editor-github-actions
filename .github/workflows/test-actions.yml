@@ -8,7 +8,7 @@ concurrency:
     cancel-in-progress: true
 
 jobs:
-    test:
+    test-wp-env:
         name: Setup WP Env
         runs-on: ubuntu-latest
         if: startsWith( github.repository, 'elementor/' )
