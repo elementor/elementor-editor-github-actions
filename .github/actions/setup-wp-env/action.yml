@@ -3,25 +3,25 @@ description: Setup WordPress environment for testing
 
 inputs:
     wp:
-        description: WordPress version
-        required: true
+        description: WordPress version (e.g. `5.8`, `6.6`)
+        required: false
     php:
-        description: PHP version
-        required: true
+        description: PHP version (e.g. `7.4`, `8.0`)
+        required: false
     plugins:
-        description: WordPress plugins
+        description: A comma separated list of plugins to install (e.g. `./path/to/plugin, elementor/elementor#main, https://localhost/path/to/plugin.zip`)
         required: false
         default: ''
     themes:
-        description: WordPress themes
+        description: A comma separated list of themes to install (e.g. `./path/to/theme, elementor/hello-elementor#main, https://localhost/path/to/theme.zip`)
         required: false
         default: ''
     active-theme:
-        description: Active theme
+        description: The slug of a theme to activate (e.g. `hello-elementor`)
         required: false
         default: ''
     mappings:
-        description: Mappings directories into the WordPress container (e.g. templates:/path/to/local/templates)
+        description: Mappings directories into the WordPress container (e.g. `templates:/path/to/local/templates, plugins:/path/to/local/plugins`)
         required: false
         default: ''
 
@@ -37,7 +37,7 @@ runs:
               --themes="${{ inputs.themes }}" \
               --active-theme="${{ inputs.active-theme }}" \
               --mappings="${{ inputs.mappings }}" \
-              --dir="./.wp-env-tmp"
+              --config-dir="./.wp-env-tmp"
           shell: bash
 
         - name: Output wp-env config file

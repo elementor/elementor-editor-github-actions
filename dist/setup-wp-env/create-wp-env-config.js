@@ -7,7 +7,7 @@ async function main() {
     plugins,
     themes,
     mappings,
-    dir,
+    "config-dir": configDir,
     "active-theme": activeTheme
   } = getOptions({
     wp: { type: "string", default: null },
@@ -16,14 +16,14 @@ async function main() {
     themes: { type: "string", default: "" },
     "active-theme": { type: "string", default: "" },
     mappings: { type: "string", default: "" },
-    dir: { type: "string", default: "./" }
+    "config-dir": { type: "string", default: "./" }
   });
   const config = {
     core: wp ? `WordPress/Wordpress#${wp}` : null,
     phpVersion: php ? php : null,
-    themes: normalizeArray(themes),
-    mappings: normalizeMappings(mappings),
-    plugins: normalizeArray(plugins),
+    themes: parseAsArray(themes),
+    mappings: mappingsFromString(mappings),
+    plugins: parseAsArray(plugins),
     lifecycleScripts: {
       afterStart: prepareCommands(
         ["cli", "tests-cli"],
@@ -34,8 +34,8 @@ async function main() {
       )
     }
   };
-  await fs.ensureDir(dir);
-  await fs.writeJSON(`${dir}/.wp-env.json`, config, { spaces: 2 });
+  await fs.ensureDir(configDir);
+  await fs.writeJSON(`${configDir}/.wp-env.json`, config, { spaces: 2 });
 }
 function getOptions(args) {
   const entries = Object.entries(args);
@@ -47,11 +47,11 @@ function getOptions(args) {
     )
   });
 }
-function normalizeMappings(mappings) {
-  const config = normalizeArray(mappings).map((mapping) => mapping.split(":")).filter(([from, to]) => from && to);
+function mappingsFromString(mappings) {
+  const config = parseAsArray(mappings).map((mapping) => mapping.split(":")).filter(([from, to]) => from && to);
   return Object.fromEntries(config);
 }
-function normalizeArray(array) {
+function parseAsArray(array) {
   return array.split(",").map((item) => item.trim()).filter(Boolean);
 }
 function prepareCommands(envs, commands) {
