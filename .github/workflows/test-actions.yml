@@ -16,7 +16,7 @@ jobs:
             - name: Checkout source code
               uses: actions/checkout@v4
 
-            - name: Log action
+            - name: Setup WP Env
               uses: ./.github/actions/setup-wp-env
               with:
                   php: '8.0'
