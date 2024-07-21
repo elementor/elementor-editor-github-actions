@@ -80,7 +80,10 @@ function prepareCommands(envs: Array<'cli' | 'tests-cli'>, commands: string[]) {
 	const mergedCommands = commands.filter(Boolean).join(' && ');
 
 	return envs
-		.map((env) => `npx wp-env run ${env} bash -c '${mergedCommands}'`)
+		.map(
+			(env) =>
+				`npx @wordpress/env run ${env} bash -c '${mergedCommands}'`,
+		)
 		.join(' && ');
 }
 
