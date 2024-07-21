@@ -1,4 +1,4 @@
-name: Log Test
+name: Test Actions
 
 on: [pull_request, workflow_dispatch]
 
@@ -8,15 +8,18 @@ concurrency:
     cancel-in-progress: true
 
 jobs:
-    log-test:
-        name: Log action test
+    test-wp-env:
+        name: Setup WP Env
         runs-on: ubuntu-latest
         if: startsWith( github.repository, 'elementor/' )
         steps:
             - name: Checkout source code
               uses: actions/checkout@v4
 
-            - name: Log action
-              uses: ./actions/log
+            - name: Setup WP Env
+              uses: ./.github/actions/setup-wp-env
               with:
-                  message: 'Hello, Universe!'
+                  php: '8.0'
+                  wp: '6.6'
+                  themes: 'https://downloads.wordpress.org/theme/hello-elementor.zip'
+                  active-theme: 'hello-elementor'

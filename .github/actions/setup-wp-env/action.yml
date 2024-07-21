@@ -1,0 +1,53 @@
+name: Setup WP Env
+description: Setup WordPress environment for testing
+
+inputs:
+    wp:
+        description: WordPress version (e.g. `5.8`, `6.6`)
+        required: false
+    php:
+        description: PHP version (e.g. `7.4`, `8.0`)
+        required: false
+    plugins:
+        description: A comma separated list of plugins to install (e.g. `./path/to/plugin, elementor/elementor#main, https://localhost/path/to/plugin.zip`)
+        required: false
+        default: ''
+    themes:
+        description: A comma separated list of themes to install (e.g. `./path/to/theme, elementor/hello-elementor#main, https://localhost/path/to/theme.zip`)
+        required: false
+        default: ''
+    active-theme:
+        description: The slug of a theme to activate (e.g. `hello-elementor`)
+        required: false
+        default: ''
+    mappings:
+        description: Mappings directories into the WordPress container (e.g. `templates:/path/to/local/templates, plugins:/path/to/local/plugins`)
+        required: false
+        default: ''
+
+runs:
+    using: composite
+    steps:
+        - name: Creating wp-env config file
+          run: |
+              npx zx@8 ./dist/setup-wp-env/create-wp-env-config.js \
+              --wp="${{ inputs.wp }}" \
+              --php="${{ inputs.php }}" \
+              --plugins="${{ inputs.plugins }}" \
+              --themes="${{ inputs.themes }}" \
+              --active-theme="${{ inputs.active-theme }}" \
+              --mappings="${{ inputs.mappings }}" \
+              --config-dir="./.wp-env-tmp"
+          shell: bash
+
+        - name: Output wp-env config file
+          run: cat ./.wp-env-tmp/.wp-env.json
+          shell: bash
+
+        - name: Run wp-env
+          run: cd ./.wp-env-tmp && npx @wordpress/env start
+          shell: bash
+
+        - name: Cleanup wp-env tmp directory
+          run: rm -rf ./.wp-env-tmp
+          shell: bash
