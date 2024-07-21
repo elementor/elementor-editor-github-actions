@@ -1,4 +1,4 @@
-name: Log Test
+name: Test Actions
 
 on: [pull_request, workflow_dispatch]
 
@@ -8,8 +8,8 @@ concurrency:
     cancel-in-progress: true
 
 jobs:
-    log-test:
-        name: Log action test
+    test:
+        name: Setup WP Env
         runs-on: ubuntu-latest
         if: startsWith( github.repository, 'elementor/' )
         steps:
