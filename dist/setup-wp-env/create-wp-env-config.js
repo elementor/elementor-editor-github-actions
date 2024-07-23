@@ -17,7 +17,7 @@ async function main() {
     "active-theme": {
       type: "string",
       default: "",
-      validate: (value) => typeof value === "string" && /^[a-z0-9-]+$/i.test(value)
+      validate: (value) => typeof value === "string" && /^[a-z0-9-]+$/.test(value)
     },
     mappings: { type: "string", default: "" },
     "config-dir": { type: "string", default: "./" }
