@@ -18,7 +18,7 @@ async function main() {
 			type: 'string',
 			default: '',
 			validate: (value) =>
-				typeof value === 'string' && /^[a-z0-9-]+$/.test(value),
+				typeof value === 'string' && /^[a-z0-9-]+$/i.test(value),
 		},
 		mappings: { type: 'string', default: '' },
 		'config-dir': { type: 'string', default: './' },
@@ -98,10 +98,7 @@ function prepareCommands(envs: Array<'cli' | 'tests-cli'>, commands: string[]) {
 	const mergedCommands = commands.filter(Boolean).join(' && ');
 
 	return envs
-		.map(
-			(env) =>
-				`npx @wordpress/env run ${env} bash -c '${mergedCommands}'`,
-		)
+		.map((env) => `npx wp-env run ${env} bash -c '${mergedCommands}'`)
 		.join(' && ');
 }
 

@@ -17,7 +17,7 @@ async function main() {
     "active-theme": {
       type: "string",
       default: "",
-      validate: (value) => typeof value === "string" && /^[a-z0-9-]+$/.test(value)
+      validate: (value) => typeof value === "string" && /^[a-z0-9-]+$/i.test(value)
     },
     mappings: { type: "string", default: "" },
     "config-dir": { type: "string", default: "./" }
@@ -66,8 +66,6 @@ function parseAsArray(array) {
 }
 function prepareCommands(envs, commands) {
   const mergedCommands = commands.filter(Boolean).join(" && ");
-  return envs.map(
-    (env) => `npx @wordpress/env run ${env} bash -c '${mergedCommands}'`
-  ).join(" && ");
+  return envs.map((env) => `npx wp-env run ${env} bash -c '${mergedCommands}'`).join(" && ");
 }
 await main();
