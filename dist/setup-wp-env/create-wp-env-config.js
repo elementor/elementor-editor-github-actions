@@ -14,7 +14,11 @@ async function main() {
     php: { type: "string", default: null },
     plugins: { type: "string", default: "" },
     themes: { type: "string", default: "" },
-    "active-theme": { type: "string", default: "" },
+    "active-theme": {
+      type: "string",
+      default: "",
+      validate: (value) => typeof value === "string" && /^[a-z0-9-]+$/.test(value)
+    },
     mappings: { type: "string", default: "" },
     "config-dir": { type: "string", default: "./" }
   });
@@ -28,7 +32,7 @@ async function main() {
       afterStart: prepareCommands(
         ["cli", "tests-cli"],
         [
-          activeTheme && `wp theme activate ${activeTheme}`,
+          activeTheme && `INPUT_ACTIVE_THEME="${activeTheme}" && wp theme activate "$INPUT_ACTIVE_THEME"`,
           `wp rewrite structure '/%postname%' --hard`
         ]
       )
@@ -39,13 +43,19 @@ async function main() {
 }
 function getOptions(args) {
   const entries = Object.entries(args);
-  return minimist(process.argv.slice(2), {
+  const options = minimist(process.argv.slice(2), {
     string: entries.filter(([, { type }]) => type === "string").map(([key]) => key),
     boolean: entries.filter(([, { type }]) => type === "boolean").map(([key]) => key),
     default: Object.fromEntries(
       entries.map(([key, { default: value }]) => [key, value])
     )
   });
+  entries.forEach(([key, { validate }]) => {
+    if (validate && !validate(options[key])) {
+      throw new Error(`Invalid value for option --${key}`);
+    }
+  });
+  return options;
 }
 function mappingsFromString(mappings) {
   const config = parseAsArray(mappings).map((mapping) => mapping.split(":")).filter(([from, to]) => from && to);

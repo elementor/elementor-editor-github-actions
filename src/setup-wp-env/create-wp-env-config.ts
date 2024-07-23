@@ -14,7 +14,12 @@ async function main() {
 		php: { type: 'string', default: null },
 		plugins: { type: 'string', default: '' },
 		themes: { type: 'string', default: '' },
-		'active-theme': { type: 'string', default: '' },
+		'active-theme': {
+			type: 'string',
+			default: '',
+			validate: (value) =>
+				typeof value === 'string' && /^[a-z0-9-]+$/.test(value),
+		},
 		mappings: { type: 'string', default: '' },
 		'config-dir': { type: 'string', default: './' },
 	});
@@ -44,12 +49,16 @@ async function main() {
 function getOptions(
 	args: Record<
 		string,
-		{ type: 'string' | 'boolean'; default: string | boolean | null }
+		{
+			type: 'string' | 'boolean';
+			default: string | boolean | null;
+			validate?: (value: unknown) => boolean;
+		}
 	>,
 ) {
 	const entries = Object.entries(args);
 
-	return minimist(process.argv.slice(2), {
+	const options = minimist(process.argv.slice(2), {
 		string: entries
 			.filter(([, { type }]) => type === 'string')
 			.map(([key]) => key),
@@ -60,6 +69,14 @@ function getOptions(
 			entries.map(([key, { default: value }]) => [key, value]),
 		),
 	});
+
+	entries.forEach(([key, { validate }]) => {
+		if (validate && !validate(options[key])) {
+			throw new Error(`Invalid value for option --${key}`);
+		}
+	});
+
+	return options;
 }
 
 function mappingsFromString(mappings: string) {
