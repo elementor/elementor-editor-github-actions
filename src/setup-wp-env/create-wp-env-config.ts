@@ -29,7 +29,8 @@ async function main() {
 			afterStart: prepareCommands(
 				['cli', 'tests-cli'],
 				[
-					activeTheme && `wp theme activate ${activeTheme}`,
+					activeTheme &&
+						`INPUT_ACTIVE_THEME="${activeTheme}" && wp theme activate "$INPUT_ACTIVE_THEME"`,
 					`wp rewrite structure '/%postname%' --hard`,
 				],
 			),

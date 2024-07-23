@@ -38,7 +38,7 @@ runs:
               INPUT_MAPPINGS: ${{ inputs.mappings }}
               ACTION_PATH: ${{ github.action_path }}
           run: |
-              npx zx@8 $ACTION_PATH/dist/setup-wp-env/create-wp-env-config.js \
+              npx zx@8 $ACTION_PATH/../../../dist/setup-wp-env/create-wp-env-config.js \
               --wp="$INPUT_WP" \
               --php="$INPUT_PHP" \
               --plugins="$INPUT_PLUGINS" \
