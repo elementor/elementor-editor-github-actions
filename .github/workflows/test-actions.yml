@@ -24,8 +24,5 @@ jobs:
                   themes: 'https://downloads.wordpress.org/theme/hello-elementor.zip'
                   active-theme: 'hello-elementor'
                   config: |
-                      elementor-templates:./tests/playwright/templates
-                      elementor-config:./tests/wp-env/config
-                  config2: |-
-                      elementor-templates:./tests/playwright/templates
-                      elementor-config:./tests/wp-env/config
+                      ELEMENTOR_SHOW_HIDDEN_EXPERIMENTS:true
+                      SOME_STRING:"THIS IS SOME STRING"

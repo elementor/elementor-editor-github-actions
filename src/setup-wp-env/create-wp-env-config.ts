@@ -7,10 +7,9 @@ async function main() {
 		plugins,
 		themes,
 		mappings,
-		'config-dir': configDir,
+		dir,
 		'active-theme': activeTheme,
-		config1,
-		config2,
+		config,
 	} = getOptions({
 		wp: { type: 'string', default: null },
 		php: { type: 'string', default: null },
@@ -23,14 +22,14 @@ async function main() {
 				typeof value === 'string' && /^[a-z0-9-]+$/.test(value),
 		},
 		mappings: { type: 'string', default: '' },
-		'config-dir': { type: 'string', default: './' },
+		dir: { type: 'string', default: './' },
 		config1: { type: 'string', default: '' },
 		config2: { type: 'string', default: '' },
 	});
 
-	console.log(config1, config2);
+	console.log(config);
 
-	const config = {
+	const content = {
 		core: wp ? `WordPress/Wordpress#${wp}` : null,
 		phpVersion: php ? php : null,
 		themes: parseAsArray(themes),
@@ -48,8 +47,8 @@ async function main() {
 		},
 	};
 
-	await fs.ensureDir(configDir);
-	await fs.writeJSON(`${configDir}/.wp-env.json`, config, { spaces: 2 });
+	await fs.ensureDir(dir);
+	await fs.writeJSON(`${dir}/.wp-env.json`, content, { spaces: 2 });
 }
 
 function getOptions(
