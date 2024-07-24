@@ -45,7 +45,7 @@ runs:
               INPUT_ACTIVE_THEME: ${{ inputs.active-theme }}
               INPUT_MAPPINGS: ${{ inputs.mappings }}
               ACTION_PATH: ${{ github.action_path }}
-              INPUT_CONFIG: ${{ input.config }}
+              INPUT_CONFIG: ${{ inputs.config }}
           run: |
               npx zx@8 $ACTION_PATH/../../../dist/setup-wp-env/create-wp-env-config.js \
               --wp="$INPUT_WP" \
