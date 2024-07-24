@@ -21,7 +21,7 @@ inputs:
         required: false
         default: ''
     mappings:
-        description: A list of directory mapping between your machine and the WordPress container, separated by commas or new lines (e.g. `templates:/path/to/local/templates,plugins:/path/to/local/plugins`)
+        description: A list of directory mapping between your machine and the WordPress container, separated by commas or new lines (e.g. `templates:/path/to/local/templates, plugins:/path/to/local/plugins`)
         required: false
         default: ''
     config:
