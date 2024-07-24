@@ -23,6 +23,6 @@ jobs:
                   wp: '6.6'
                   themes: 'https://downloads.wordpress.org/theme/hello-elementor.zip'
                   active-theme: 'hello-elementor'
+                  debug: false
                   config: |-
                       ELEMENTOR_SHOW_HIDDEN_EXPERIMENTS:1
-                      WP_DEBUG:0

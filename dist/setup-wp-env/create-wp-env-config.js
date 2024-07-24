@@ -9,7 +9,8 @@ async function main() {
     mappings,
     dir,
     "active-theme": activeTheme,
-    config
+    config,
+    debug
   } = getOptions({
     wp: { type: "string", default: null },
     php: { type: "string", default: null },
@@ -22,7 +23,8 @@ async function main() {
     },
     mappings: { type: "string", default: "" },
     dir: { type: "string", default: "./" },
-    config: { type: "string", default: "" }
+    config: { type: "string", default: "" },
+    debug: { type: "string", default: "false" }
   });
   const content = {
     core: wp ? `WordPress/Wordpress#${wp}` : null,
@@ -30,7 +32,11 @@ async function main() {
     themes: arrayFromString(themes),
     mappings: mapFromString(mappings),
     plugins: arrayFromString(plugins),
-    config: mapFromString(config),
+    config: {
+      WP_DEBUG: debug === "true",
+      SCRIPT_DEBUG: debug === "true",
+      ...mapFromString(config)
+    },
     lifecycleScripts: {
       afterStart: prepareCommands(
         ["cli", "tests-cli"],
@@ -60,8 +66,8 @@ function getOptions(args) {
   });
   return options;
 }
-function mapFromString(mappings) {
-  const config = arrayFromString(mappings).map((mapping) => mapping.split(":").map((item) => item.trim())).filter(([from, to]) => from && to);
+function mapFromString(map) {
+  const config = arrayFromString(map).map((mapping) => mapping.split(":").map((item) => item.trim())).filter(([from, to]) => from && to);
   return Object.fromEntries(config);
 }
 function arrayFromString(array) {
