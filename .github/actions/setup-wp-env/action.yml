@@ -21,7 +21,11 @@ inputs:
         required: false
         default: ''
     mappings:
-        description: Mappings directories into the WordPress container (e.g. `templates:/path/to/local/templates, plugins:/path/to/local/plugins`)
+        description: Mappings directories into the WordPress container (e.g. `templates:/path/to/local/templates,plugins:/path/to/local/plugins`) (separator can be ',' or '\n')
+        required: false
+        default: ''
+    config:
+        description: Set env configuration on the WordPress container (e.g. `ELEMENTOR_SHOW_HIDDEN_EXPERIMENTS:true,SOME_STRING:"THIS IS SOME STRING"`) (separator can be ',' or '\n')
         required: false
         default: ''
 
@@ -41,7 +45,7 @@ runs:
               INPUT_ACTIVE_THEME: ${{ inputs.active-theme }}
               INPUT_MAPPINGS: ${{ inputs.mappings }}
               ACTION_PATH: ${{ github.action_path }}
-              INPUT_CONFIG: ${{ github.config }}
+              INPUT_CONFIG: ${{ input.config }}
           run: |
               npx zx@8 $ACTION_PATH/../../../dist/setup-wp-env/create-wp-env-config.js \
               --wp="$INPUT_WP" \
