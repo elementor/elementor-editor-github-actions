@@ -19,22 +19,21 @@ async function main() {
 			type: 'string',
 			default: '',
 			validate: (value) =>
-				typeof value === 'string' && /^[a-z0-9-]+$/.test(value),
+				(typeof value === 'string' && /^[a-z0-9-]+$/.test(value)) ||
+				value === '',
 		},
 		mappings: { type: 'string', default: '' },
 		dir: { type: 'string', default: './' },
-		config1: { type: 'string', default: '' },
-		config2: { type: 'string', default: '' },
+		config: { type: 'string', default: '' },
 	});
-
-	console.log(config);
 
 	const content = {
 		core: wp ? `WordPress/Wordpress#${wp}` : null,
 		phpVersion: php ? php : null,
 		themes: parseAsArray(themes),
-		mappings: mappingsFromString(mappings),
+		mappings: mapFromString(mappings),
 		plugins: parseAsArray(plugins),
+		config: mapFromString(config),
 		lifecycleScripts: {
 			afterStart: prepareCommands(
 				['cli', 'tests-cli'],
@@ -84,7 +83,7 @@ function getOptions(
 	return options;
 }
 
-function mappingsFromString(mappings: string) {
+function mapFromString(mappings: string) {
 	const config = parseAsArray(mappings)
 		.map((mapping) => mapping.split(':'))
 		.filter(([from, to]) => from && to);
@@ -94,7 +93,7 @@ function mappingsFromString(mappings: string) {
 
 function parseAsArray(array: string) {
 	return array
-		.split(',')
+		.split(/[,\r\n]/)
 		.map((item) => item.trim())
 		.filter(Boolean);
 }
