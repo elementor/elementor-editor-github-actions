@@ -25,7 +25,7 @@ inputs:
         required: false
         default: ''
     config:
-        description: Set env configuration on the WordPress container (e.g. `ELEMENTOR_SHOW_HIDDEN_EXPERIMENTS:true,SOME_STRING:"THIS IS SOME STRING"`) (separator can be ',' or '\n')
+        description: Set env configuration on the WordPress container (e.g. `ELEMENTOR_SHOW_HIDDEN_EXPERIMENTS:1,SOME_CONST:SOME STRING HERE`) (separator can be ',' or '\n')
         required: false
         default: ''
 
