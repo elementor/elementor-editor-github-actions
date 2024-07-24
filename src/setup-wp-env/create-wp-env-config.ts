@@ -30,9 +30,9 @@ async function main() {
 	const content = {
 		core: wp ? `WordPress/Wordpress#${wp}` : null,
 		phpVersion: php ? php : null,
-		themes: parseAsArray(themes),
+		themes: arrayFromString(themes),
 		mappings: mapFromString(mappings),
-		plugins: parseAsArray(plugins),
+		plugins: arrayFromString(plugins),
 		config: mapFromString(config),
 		lifecycleScripts: {
 			afterStart: prepareCommands(
@@ -84,14 +84,14 @@ function getOptions(
 }
 
 function mapFromString(mappings: string) {
-	const config = parseAsArray(mappings)
-		.map((mapping) => mapping.split(':'))
+	const config = arrayFromString(mappings)
+		.map((mapping) => mapping.split(':').map((item) => item.trim()))
 		.filter(([from, to]) => from && to);
 
 	return Object.fromEntries(config);
 }
 
-function parseAsArray(array: string) {
+function arrayFromString(array: string) {
 	return array
 		.split(/[,\r\n]/)
 		.map((item) => item.trim())

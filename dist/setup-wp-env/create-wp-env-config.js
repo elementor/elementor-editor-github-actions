@@ -27,9 +27,9 @@ async function main() {
   const content = {
     core: wp ? `WordPress/Wordpress#${wp}` : null,
     phpVersion: php ? php : null,
-    themes: parseAsArray(themes),
+    themes: arrayFromString(themes),
     mappings: mapFromString(mappings),
-    plugins: parseAsArray(plugins),
+    plugins: arrayFromString(plugins),
     config: mapFromString(config),
     lifecycleScripts: {
       afterStart: prepareCommands(
@@ -61,10 +61,10 @@ function getOptions(args) {
   return options;
 }
 function mapFromString(mappings) {
-  const config = parseAsArray(mappings).map((mapping) => mapping.split(":")).filter(([from, to]) => from && to);
+  const config = arrayFromString(mappings).map((mapping) => mapping.split(":").map((item) => item.trim())).filter(([from, to]) => from && to);
   return Object.fromEntries(config);
 }
-function parseAsArray(array) {
+function arrayFromString(array) {
   return array.split(/[,\r\n]/).map((item) => item.trim()).filter(Boolean);
 }
 function prepareCommands(envs, commands) {

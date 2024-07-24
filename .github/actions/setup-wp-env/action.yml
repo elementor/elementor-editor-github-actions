@@ -21,11 +21,11 @@ inputs:
         required: false
         default: ''
     mappings:
-        description: Mappings directories into the WordPress container (e.g. `templates:/path/to/local/templates,plugins:/path/to/local/plugins`) (separator can be ',' or '\n')
+        description: A list of directory mapping between your machine and the WordPress container, separated by commas or new lines (e.g. `templates:/path/to/local/templates,plugins:/path/to/local/plugins`)
         required: false
         default: ''
     config:
-        description: Set env configuration on the WordPress container (e.g. `ELEMENTOR_SHOW_HIDDEN_EXPERIMENTS:1,SOME_CONST:SOME STRING HERE`) (separator can be ',' or '\n')
+        description: A list of PHP constants that'll be passed to the WordPress container, separated by commas or new lines (e.g. `WP_DEBUG:1, SCRIPT_DEBUG:1`)
         required: false
         default: ''
 
