@@ -23,3 +23,9 @@ jobs:
                   wp: '6.6'
                   themes: 'https://downloads.wordpress.org/theme/hello-elementor.zip'
                   active-theme: 'hello-elementor'
+                  config: |
+                      elementor-templates:./tests/playwright/templates
+                      elementor-config:./tests/wp-env/config
+                  config2: |-
+                      elementor-templates:./tests/playwright/templates
+                      elementor-config:./tests/wp-env/config

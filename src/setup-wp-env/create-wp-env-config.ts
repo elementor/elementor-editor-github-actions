@@ -9,6 +9,8 @@ async function main() {
 		mappings,
 		'config-dir': configDir,
 		'active-theme': activeTheme,
+		config1,
+		config2,
 	} = getOptions({
 		wp: { type: 'string', default: null },
 		php: { type: 'string', default: null },
@@ -22,7 +24,11 @@ async function main() {
 		},
 		mappings: { type: 'string', default: '' },
 		'config-dir': { type: 'string', default: './' },
+		config1: { type: 'string', default: '' },
+		config2: { type: 'string', default: '' },
 	});
+
+	console.log(config1, config2);
 
 	const config = {
 		core: wp ? `WordPress/Wordpress#${wp}` : null,
