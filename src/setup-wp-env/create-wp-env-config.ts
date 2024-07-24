@@ -83,8 +83,8 @@ function getOptions(
 	return options;
 }
 
-function mapFromString(mappings: string) {
-	const config = arrayFromString(mappings)
+function mapFromString(map: string) {
+	const config = arrayFromString(map)
 		.map((mapping) => mapping.split(':').map((item) => item.trim()))
 		.filter(([from, to]) => from && to);
 
