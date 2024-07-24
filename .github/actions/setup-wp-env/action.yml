@@ -21,7 +21,11 @@ inputs:
         required: false
         default: ''
     mappings:
-        description: Mappings directories into the WordPress container (e.g. `templates:/path/to/local/templates, plugins:/path/to/local/plugins`)
+        description: A list of directory mapping between your machine and the WordPress container, separated by commas or new lines (e.g. `templates:/path/to/local/templates, plugins:/path/to/local/plugins`)
+        required: false
+        default: ''
+    config:
+        description: A list of PHP constants that'll be passed to the WordPress container, separated by commas or new lines (e.g. `WP_DEBUG:1, SCRIPT_DEBUG:1`)
         required: false
         default: ''
 
@@ -41,6 +45,7 @@ runs:
               INPUT_ACTIVE_THEME: ${{ inputs.active-theme }}
               INPUT_MAPPINGS: ${{ inputs.mappings }}
               ACTION_PATH: ${{ github.action_path }}
+              INPUT_CONFIG: ${{ inputs.config }}
           run: |
               npx zx@8 $ACTION_PATH/../../../dist/setup-wp-env/create-wp-env-config.js \
               --wp="$INPUT_WP" \
@@ -49,7 +54,8 @@ runs:
               --themes="$INPUT_THEMES" \
               --active-theme="$INPUT_ACTIVE_THEME" \
               --mappings="$INPUT_ACTIVE_THEME" \
-              --config-dir="./.wp-env-tmp"
+              --config="$INPUT_CONFIG" \
+              --dir="./.wp-env-tmp"
           shell: bash
 
         - name: Output wp-env config file

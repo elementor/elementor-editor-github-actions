@@ -7,8 +7,9 @@ async function main() {
     plugins,
     themes,
     mappings,
-    "config-dir": configDir,
-    "active-theme": activeTheme
+    dir,
+    "active-theme": activeTheme,
+    config
   } = getOptions({
     wp: { type: "string", default: null },
     php: { type: "string", default: null },
@@ -17,17 +18,19 @@ async function main() {
     "active-theme": {
       type: "string",
       default: "",
-      validate: (value) => typeof value === "string" && /^[a-z0-9-]+$/.test(value)
+      validate: (value) => typeof value === "string" && /^[a-z0-9-]+$/.test(value) || value === ""
     },
     mappings: { type: "string", default: "" },
-    "config-dir": { type: "string", default: "./" }
+    dir: { type: "string", default: "./" },
+    config: { type: "string", default: "" }
   });
-  const config = {
+  const content = {
     core: wp ? `WordPress/Wordpress#${wp}` : null,
     phpVersion: php ? php : null,
-    themes: parseAsArray(themes),
-    mappings: mappingsFromString(mappings),
-    plugins: parseAsArray(plugins),
+    themes: arrayFromString(themes),
+    mappings: mapFromString(mappings),
+    plugins: arrayFromString(plugins),
+    config: mapFromString(config),
     lifecycleScripts: {
       afterStart: prepareCommands(
         ["cli", "tests-cli"],
@@ -38,8 +41,8 @@ async function main() {
       )
     }
   };
-  await fs.ensureDir(configDir);
-  await fs.writeJSON(`${configDir}/.wp-env.json`, config, { spaces: 2 });
+  await fs.ensureDir(dir);
+  await fs.writeJSON(`${dir}/.wp-env.json`, content, { spaces: 2 });
 }
 function getOptions(args) {
   const entries = Object.entries(args);
@@ -57,12 +60,12 @@ function getOptions(args) {
   });
   return options;
 }
-function mappingsFromString(mappings) {
-  const config = parseAsArray(mappings).map((mapping) => mapping.split(":")).filter(([from, to]) => from && to);
+function mapFromString(mappings) {
+  const config = arrayFromString(mappings).map((mapping) => mapping.split(":").map((item) => item.trim())).filter(([from, to]) => from && to);
   return Object.fromEntries(config);
 }
-function parseAsArray(array) {
-  return array.split(",").map((item) => item.trim()).filter(Boolean);
+function arrayFromString(array) {
+  return array.split(/[,\r\n]/).map((item) => item.trim()).filter(Boolean);
 }
 function prepareCommands(envs, commands) {
   const mergedCommands = commands.filter(Boolean).join(" && ");

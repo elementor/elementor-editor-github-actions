@@ -7,8 +7,9 @@ async function main() {
 		plugins,
 		themes,
 		mappings,
-		'config-dir': configDir,
+		dir,
 		'active-theme': activeTheme,
+		config,
 	} = getOptions({
 		wp: { type: 'string', default: null },
 		php: { type: 'string', default: null },
@@ -18,18 +19,21 @@ async function main() {
 			type: 'string',
 			default: '',
 			validate: (value) =>
-				typeof value === 'string' && /^[a-z0-9-]+$/.test(value),
+				(typeof value === 'string' && /^[a-z0-9-]+$/.test(value)) ||
+				value === '',
 		},
 		mappings: { type: 'string', default: '' },
-		'config-dir': { type: 'string', default: './' },
+		dir: { type: 'string', default: './' },
+		config: { type: 'string', default: '' },
 	});
 
-	const config = {
+	const content = {
 		core: wp ? `WordPress/Wordpress#${wp}` : null,
 		phpVersion: php ? php : null,
-		themes: parseAsArray(themes),
-		mappings: mappingsFromString(mappings),
-		plugins: parseAsArray(plugins),
+		themes: arrayFromString(themes),
+		mappings: mapFromString(mappings),
+		plugins: arrayFromString(plugins),
+		config: mapFromString(config),
 		lifecycleScripts: {
 			afterStart: prepareCommands(
 				['cli', 'tests-cli'],
@@ -42,8 +46,8 @@ async function main() {
 		},
 	};
 
-	await fs.ensureDir(configDir);
-	await fs.writeJSON(`${configDir}/.wp-env.json`, config, { spaces: 2 });
+	await fs.ensureDir(dir);
+	await fs.writeJSON(`${dir}/.wp-env.json`, content, { spaces: 2 });
 }
 
 function getOptions(
@@ -79,17 +83,17 @@ function getOptions(
 	return options;
 }
 
-function mappingsFromString(mappings: string) {
-	const config = parseAsArray(mappings)
-		.map((mapping) => mapping.split(':'))
+function mapFromString(map: string) {
+	const config = arrayFromString(map)
+		.map((mapping) => mapping.split(':').map((item) => item.trim()))
 		.filter(([from, to]) => from && to);
 
 	return Object.fromEntries(config);
 }
 
-function parseAsArray(array: string) {
+function arrayFromString(array: string) {
 	return array
-		.split(',')
+		.split(/[,\r\n]/)
 		.map((item) => item.trim())
 		.filter(Boolean);
 }
