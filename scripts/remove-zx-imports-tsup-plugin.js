@@ -14,9 +14,9 @@ export default function removeZxImportsTsupPlugin() {
 		buildEnd: ({ writtenFiles }) =>
 			Promise.all(
 				writtenFiles.map(async (file) => {
-					const content = (await fs.readFile(file.name, 'utf-8'))
-						.replaceAll(/^import .+ from "zx";?$/gm, '')
-						.replaceAll('var import_zx = require("zx");', '');
+					const content = (
+						await fs.readFile(file.name, 'utf-8')
+					).replaceAll(/^import .+ from "zx";?$/gm, '');
 
 					await fs.writeFile(file.name, content, 'utf-8');
 				}),

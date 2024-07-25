@@ -1,5 +1,3 @@
-"use strict";
-
 // actions/setup-wp-env/create-wp-env-config.ts
 
 
@@ -46,14 +44,14 @@ async function main() {
       )
     }
   };
-  await import_zx.fs.ensureDir(WP_ENV_TMP_DIR);
-  await import_zx.fs.writeJSON(`${WP_ENV_TMP_DIR}/.wp-env.json`, content, {
+  await fs.ensureDir(WP_ENV_TMP_DIR);
+  await fs.writeJSON(`${WP_ENV_TMP_DIR}/.wp-env.json`, content, {
     spaces: 2
   });
 }
 function getOptions(args) {
   const entries = Object.entries(args);
-  const options = (0, import_zx.minimist)(process.argv.slice(2), {
+  const options = minimist(process.argv.slice(2), {
     string: entries.filter(([, { type }]) => type === "string").map(([key]) => key),
     boolean: entries.filter(([, { type }]) => type === "boolean").map(([key]) => key),
     default: Object.fromEntries(
