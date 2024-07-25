@@ -14,4 +14,4 @@ inputs:
         description: A list of Elementor experiments to enable, separated by commas or new lines (e.g. `atomic_widgets, some_experiment`)
 runs:
     using: node20
-    main: ./dist/setup-elementor-env.js
+    main: ./dist/index.js
