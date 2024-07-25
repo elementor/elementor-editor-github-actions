@@ -1,5 +1,10 @@
 // actions/setup-wp-env/create-wp-env-config.ts
 
+
+// actions/consts.ts
+var WP_ENV_TMP_DIR = ".wp-env-tmp";
+
+// actions/setup-wp-env/create-wp-env-config.ts
 async function main() {
   const {
     wp,
@@ -7,10 +12,8 @@ async function main() {
     plugins,
     themes,
     mappings,
-    dir,
     "active-theme": activeTheme,
-    config,
-    "wp-debug": wpDebug
+    config
   } = getOptions({
     wp: { type: "string", default: null },
     php: { type: "string", default: null },
@@ -22,9 +25,7 @@ async function main() {
       validate: (value) => typeof value === "string" && /^[a-z0-9-]+$/.test(value) || value === ""
     },
     mappings: { type: "string", default: "" },
-    dir: { type: "string", default: "./" },
-    config: { type: "string", default: "" },
-    "wp-debug": { type: "string", default: "false" }
+    config: { type: "string", default: "" }
   });
   const content = {
     core: wp ? `WordPress/Wordpress#${wp}` : null,
@@ -32,11 +33,7 @@ async function main() {
     themes: arrayFromString(themes),
     mappings: mapFromString(mappings),
     plugins: arrayFromString(plugins),
-    config: {
-      WP_DEBUG: wpDebug === "true",
-      SCRIPT_DEBUG: wpDebug === "true",
-      ...mapFromString(config)
-    },
+    config: mapFromString(config),
     lifecycleScripts: {
       afterStart: prepareCommands(
         ["cli", "tests-cli"],
@@ -47,8 +44,10 @@ async function main() {
       )
     }
   };
-  await fs.ensureDir(dir);
-  await fs.writeJSON(`${dir}/.wp-env.json`, content, { spaces: 2 });
+  await fs.ensureDir(WP_ENV_TMP_DIR);
+  await fs.writeJSON(`${WP_ENV_TMP_DIR}/.wp-env.json`, content, {
+    spaces: 2
+  });
 }
 function getOptions(args) {
   const entries = Object.entries(args);

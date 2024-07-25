@@ -10,7 +10,7 @@
 		"moduleDetection": "force",
 		"isolatedModules": true,
 		"verbatimModuleSyntax": true,
-		"moduleResolution": "NodeNext",
+		"moduleResolution": "Bundler",
 		"strict": true,
 		"noUncheckedIndexedAccess": true,
 		"noImplicitOverride": true,

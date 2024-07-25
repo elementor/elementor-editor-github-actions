@@ -50,7 +50,6 @@ runs:
               INPUT_MAPPINGS: ${{ inputs.mappings }}
               ACTION_PATH: ${{ github.action_path }}
               INPUT_CONFIG: ${{ inputs.config }}
-              INPUT_WP_DEBUG: ${{ inputs.wp-debug }}
           run: |
               npx zx@8 $ACTION_PATH/dist/create-wp-env-config.js \
               --wp="$INPUT_WP" \
@@ -60,8 +59,6 @@ runs:
               --active-theme="$INPUT_ACTIVE_THEME" \
               --mappings="$INPUT_ACTIVE_THEME" \
               --config="$INPUT_CONFIG" \
-              --wp-debug="$INPUT_WP_DEBUG" \
-              --dir="./.wp-env-tmp"
           shell: bash
 
         - name: Output wp-env config file

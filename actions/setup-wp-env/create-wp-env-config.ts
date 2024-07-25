@@ -1,4 +1,5 @@
 import { minimist, fs } from 'zx';
+import { WP_ENV_TMP_DIR } from '../consts';
 
 async function main() {
 	const {
@@ -7,10 +8,8 @@ async function main() {
 		plugins,
 		themes,
 		mappings,
-		dir,
 		'active-theme': activeTheme,
 		config,
-		'wp-debug': wpDebug,
 	} = getOptions({
 		wp: { type: 'string', default: null },
 		php: { type: 'string', default: null },
@@ -24,9 +23,7 @@ async function main() {
 				value === '',
 		},
 		mappings: { type: 'string', default: '' },
-		dir: { type: 'string', default: './' },
 		config: { type: 'string', default: '' },
-		'wp-debug': { type: 'string', default: 'false' },
 	});
 
 	const content = {
@@ -35,11 +32,7 @@ async function main() {
 		themes: arrayFromString(themes),
 		mappings: mapFromString(mappings),
 		plugins: arrayFromString(plugins),
-		config: {
-			WP_DEBUG: wpDebug === 'true',
-			SCRIPT_DEBUG: wpDebug === 'true',
-			...mapFromString(config),
-		},
+		config: mapFromString(config),
 		lifecycleScripts: {
 			afterStart: prepareCommands(
 				['cli', 'tests-cli'],
@@ -52,8 +45,10 @@ async function main() {
 		},
 	};
 
-	await fs.ensureDir(dir);
-	await fs.writeJSON(`${dir}/.wp-env.json`, content, { spaces: 2 });
+	await fs.ensureDir(WP_ENV_TMP_DIR);
+	await fs.writeJSON(`${WP_ENV_TMP_DIR}/.wp-env.json`, content, {
+		spaces: 2,
+	});
 }
 
 function getOptions(
