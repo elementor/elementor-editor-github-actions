@@ -10,7 +10,7 @@ async function main() {
     dir,
     "active-theme": activeTheme,
     config,
-    debug
+    "wp-debug": wpDebug
   } = getOptions({
     wp: { type: "string", default: null },
     php: { type: "string", default: null },
@@ -24,7 +24,7 @@ async function main() {
     mappings: { type: "string", default: "" },
     dir: { type: "string", default: "./" },
     config: { type: "string", default: "" },
-    debug: { type: "string", default: "false" }
+    "wp-debug": { type: "string", default: "false" }
   });
   const content = {
     core: wp ? `WordPress/Wordpress#${wp}` : null,
@@ -33,8 +33,8 @@ async function main() {
     mappings: mapFromString(mappings),
     plugins: arrayFromString(plugins),
     config: {
-      WP_DEBUG: debug === "true",
-      SCRIPT_DEBUG: debug === "true",
+      WP_DEBUG: wpDebug === "true",
+      SCRIPT_DEBUG: wpDebug === "true",
       ...mapFromString(config)
     },
     lifecycleScripts: {
