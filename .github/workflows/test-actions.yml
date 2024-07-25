@@ -17,7 +17,7 @@ jobs:
               uses: actions/checkout@v4
 
             - name: Setup WP Env
-              uses: ./.github/actions/setup-wp-env
+              uses: ./actions/setup-wp-env
               with:
                   php: '8.0'
                   wp: '6.6'
