@@ -25,9 +25,13 @@ inputs:
         required: false
         default: ''
     config:
-        description: A list of PHP constants that'll be passed to the WordPress container, separated by commas or new lines (e.g. `WP_DEBUG:1, SCRIPT_DEBUG:1`)
+        description: A list of PHP constants that'll be passed to the WordPress container, separated by commas or new lines (e.g. `WP_MEMORY_LIMIT:64M, WPLANG:en_US`)
         required: false
         default: ''
+    wp-debug:
+        description: Enable WordPress debug mode (turn on WP_DEBUG and SCRIPT_DEBUG)
+        required: false
+        default: 'false'
 
 runs:
     using: composite
@@ -46,8 +50,9 @@ runs:
               INPUT_MAPPINGS: ${{ inputs.mappings }}
               ACTION_PATH: ${{ github.action_path }}
               INPUT_CONFIG: ${{ inputs.config }}
+              INPUT_WP_DEBUG: ${{ inputs.wp-debug }}
           run: |
-              npx zx@8 $ACTION_PATH/../../../dist/setup-wp-env/create-wp-env-config.js \
+              npx zx@8 $ACTION_PATH/dist/create-wp-env-config.js \
               --wp="$INPUT_WP" \
               --php="$INPUT_PHP" \
               --plugins="$INPUT_PLUGINS" \
@@ -55,6 +60,7 @@ runs:
               --active-theme="$INPUT_ACTIVE_THEME" \
               --mappings="$INPUT_ACTIVE_THEME" \
               --config="$INPUT_CONFIG" \
+              --wp-debug="$INPUT_WP_DEBUG" \
               --dir="./.wp-env-tmp"
           shell: bash
 

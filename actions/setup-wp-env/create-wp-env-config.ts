@@ -10,6 +10,7 @@ async function main() {
 		dir,
 		'active-theme': activeTheme,
 		config,
+		'wp-debug': wpDebug,
 	} = getOptions({
 		wp: { type: 'string', default: null },
 		php: { type: 'string', default: null },
@@ -25,6 +26,7 @@ async function main() {
 		mappings: { type: 'string', default: '' },
 		dir: { type: 'string', default: './' },
 		config: { type: 'string', default: '' },
+		'wp-debug': { type: 'string', default: 'false' },
 	});
 
 	const content = {
@@ -33,7 +35,11 @@ async function main() {
 		themes: arrayFromString(themes),
 		mappings: mapFromString(mappings),
 		plugins: arrayFromString(plugins),
-		config: mapFromString(config),
+		config: {
+			WP_DEBUG: wpDebug === 'true',
+			SCRIPT_DEBUG: wpDebug === 'true',
+			...mapFromString(config),
+		},
 		lifecycleScripts: {
 			afterStart: prepareCommands(
 				['cli', 'tests-cli'],
