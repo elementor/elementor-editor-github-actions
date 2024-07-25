@@ -52,7 +52,7 @@ runs:
               INPUT_CONFIG: ${{ inputs.config }}
               INPUT_DEBUG: ${{ inputs.debug }}
           run: |
-              npx zx@8 $ACTION_PATH/../../../dist/setup-wp-env/create-wp-env-config.js \
+              npx zx@8 $ACTION_PATH/dist/create-wp-env-config.js \
               --wp="$INPUT_WP" \
               --php="$INPUT_PHP" \
               --plugins="$INPUT_PLUGINS" \

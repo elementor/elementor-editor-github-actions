@@ -5,8 +5,8 @@ export default [defineActionConfig('setup-wp-env')];
 
 function defineActionConfig(action: string) {
 	return defineConfig({
-		entry: [`src/${action}/*.ts`],
-		outDir: `dist/${action}`,
+		entry: [`actions/${action}/*.ts`],
+		outDir: `actions/${action}/dist`,
 		format: 'esm',
 		plugins: [removeZxImportsTsupPlugin()],
 	});

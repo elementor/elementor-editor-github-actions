@@ -1,4 +1,4 @@
-// src/setup-wp-env/create-wp-env-config.ts
+// actions/setup-wp-env/create-wp-env-config.ts
 
 async function main() {
   const {
