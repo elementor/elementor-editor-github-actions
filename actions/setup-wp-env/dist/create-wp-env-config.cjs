@@ -1,7 +1,7 @@
 "use strict";
 
 // actions/setup-wp-env/create-wp-env-config.ts
-var import_zx = require("zx");
+
 
 // actions/consts.ts
 var WP_ENV_TMP_DIR = ".wp-env-tmp";
