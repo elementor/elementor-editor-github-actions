@@ -108,4 +108,4 @@ function prepareCommands(envs: Array<'cli' | 'tests-cli'>, commands: string[]) {
 }
 
 // Run the main function
-await main();
+main();

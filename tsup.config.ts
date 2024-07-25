@@ -14,8 +14,9 @@ function defineActionConfig(
 	return defineConfig({
 		entry: [`actions/${action}/${files.join(',') || '*.ts'}`],
 		outDir: `actions/${action}/dist`,
-		format: 'esm',
+		format: 'cjs',
 		plugins: [removeZxImportsTsupPlugin()],
 		noExternal: bundle ? [/.+/] : [],
+		platform: 'node',
 	});
 }

@@ -51,7 +51,7 @@ runs:
               ACTION_PATH: ${{ github.action_path }}
               INPUT_CONFIG: ${{ inputs.config }}
           run: |
-              npx zx@8 $ACTION_PATH/dist/create-wp-env-config.js \
+              npx zx@8 $ACTION_PATH/dist/create-wp-env-config.cjs \
               --wp="$INPUT_WP" \
               --php="$INPUT_PHP" \
               --plugins="$INPUT_PLUGINS" \

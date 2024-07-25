@@ -1,5 +1,7 @@
-// actions/setup-wp-env/create-wp-env-config.ts
+"use strict";
 
+// actions/setup-wp-env/create-wp-env-config.ts
+var import_zx = require("zx");
 
 // actions/consts.ts
 var WP_ENV_TMP_DIR = ".wp-env-tmp";
@@ -44,14 +46,14 @@ async function main() {
       )
     }
   };
-  await fs.ensureDir(WP_ENV_TMP_DIR);
-  await fs.writeJSON(`${WP_ENV_TMP_DIR}/.wp-env.json`, content, {
+  await import_zx.fs.ensureDir(WP_ENV_TMP_DIR);
+  await import_zx.fs.writeJSON(`${WP_ENV_TMP_DIR}/.wp-env.json`, content, {
     spaces: 2
   });
 }
 function getOptions(args) {
   const entries = Object.entries(args);
-  const options = minimist(process.argv.slice(2), {
+  const options = (0, import_zx.minimist)(process.argv.slice(2), {
     string: entries.filter(([, { type }]) => type === "string").map(([key]) => key),
     boolean: entries.filter(([, { type }]) => type === "boolean").map(([key]) => key),
     default: Object.fromEntries(
@@ -76,4 +78,4 @@ function prepareCommands(envs, commands) {
   const mergedCommands = commands.filter(Boolean).join(" && ");
   return envs.map((env) => `npx wp-env run ${env} bash -c '${mergedCommands}'`).join(" && ");
 }
-await main();
+main();
