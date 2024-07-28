@@ -61,6 +61,14 @@ runs:
               --config="$INPUT_CONFIG" \
           shell: bash
 
+        - name: Echoing wp-env config file
+          run: cat .wp-env.json
+          shell: bash
+
         - name: Run wp-env
           run: npx wp-env start
+          shell: bash
+
+        - name: Show ls
+          run: npx wp-env run cli bash -c "ls -la"
           shell: bash
