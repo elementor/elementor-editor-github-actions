@@ -101,7 +101,7 @@ export async function run() {
 	} catch (e) {
 		const error = e instanceof Error ? e : new Error('An error occurred');
 
-		core.error(error);
+		core.setFailed(error);
 	}
 }
 
