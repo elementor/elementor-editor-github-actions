@@ -61,14 +61,6 @@ runs:
               --config="$INPUT_CONFIG" \
           shell: bash
 
-        - name: Output wp-env config file
-          run: cat ./.wp-env-tmp/.wp-env.json
-          shell: bash
-
         - name: Run wp-env
-          run: cd ./.wp-env-tmp && npx wp-env start
-          shell: bash
-
-        - name: Cleanup wp-env tmp directory
-          run: rm -rf ./.wp-env-tmp
+          run: npx wp-env start
           shell: bash
