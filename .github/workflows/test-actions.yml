@@ -27,7 +27,7 @@ jobs:
                   plugins: |-
                       https://downloads.wordpress.org/plugin/elementor.zip
                   mappings: |-
-                      elementor-templates:./tests/elementor-templates
+                      elementor-templates:./stubs/elementor-templates
                   config: |-
                       ELEMENTOR_SHOW_HIDDEN_EXPERIMENTS:1
 
@@ -36,11 +36,12 @@ jobs:
               with:
                   env: 'development'
                   experiments: |-
-                      atomic_widgets:true
-                      e_onboarding:false
+                      pages_panel:true
+                      editor_v2:false
+                      e_nested_atomic_repeaters:false
                   templates: |-
                       elementor-templates
 
             - name: Test setup env
               run: |
-                  ls  -la ./.wp-env-tmp
+                  ls  -la

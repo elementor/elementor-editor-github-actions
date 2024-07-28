@@ -1,10 +1,5 @@
 // actions/setup-wp-env/create-wp-env-config.ts
 
-
-// actions/consts.ts
-var WP_ENV_TMP_DIR = ".wp-env-tmp";
-
-// actions/setup-wp-env/create-wp-env-config.ts
 async function main() {
   const {
     wp,
@@ -39,13 +34,12 @@ async function main() {
         ["cli", "tests-cli"],
         [
           activeTheme && `INPUT_ACTIVE_THEME="${activeTheme}" && wp theme activate "$INPUT_ACTIVE_THEME"`,
-          `wp rewrite structure '/%postname%' --hard`
+          `wp rewrite structure '/%postname%/' --hard`
         ]
       )
     }
   };
-  await fs.ensureDir(WP_ENV_TMP_DIR);
-  await fs.writeJSON(`${WP_ENV_TMP_DIR}/.wp-env.json`, content, {
+  await fs.writeJSON(path.resolve(process.cwd(), ".wp-env.json"), content, {
     spaces: 2
   });
 }

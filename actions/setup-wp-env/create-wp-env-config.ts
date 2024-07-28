@@ -1,5 +1,4 @@
-import { minimist, fs } from 'zx';
-import { WP_ENV_TMP_DIR } from '../consts';
+import { minimist, fs, path } from 'zx';
 
 async function main() {
 	const {
@@ -39,14 +38,13 @@ async function main() {
 				[
 					activeTheme &&
 						`INPUT_ACTIVE_THEME="${activeTheme}" && wp theme activate "$INPUT_ACTIVE_THEME"`,
-					`wp rewrite structure '/%postname%' --hard`,
+					`wp rewrite structure '/%postname%/' --hard`,
 				],
 			),
 		},
 	};
 
-	await fs.ensureDir(WP_ENV_TMP_DIR);
-	await fs.writeJSON(`${WP_ENV_TMP_DIR}/.wp-env.json`, content, {
+	await fs.writeJSON(path.resolve(process.cwd(), '.wp-env.json'), content, {
 		spaces: 2,
 	});
 }

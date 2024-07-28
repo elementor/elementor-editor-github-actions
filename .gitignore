@@ -3,7 +3,7 @@ node_modules/
 .idea/
 .DS_Store/
 tmp/
-.wp-env-tmp/
+.wp-env.json
 
 *.log
 *.map

@@ -1,10 +1,6 @@
 import * as core from '@actions/core';
 import * as exec from '@actions/exec';
-import * as path from 'node:path';
 import { z } from 'zod';
-import { WP_ENV_TMP_DIR } from '../consts';
-
-const wpEnvWorkingDir = path.resolve(process.cwd(), WP_ENV_TMP_DIR);
 
 export async function run() {
 	try {
@@ -116,11 +112,13 @@ async function parseInputs() {
 				),
 			})
 			.parse({
-				env: core.getInput('env'),
-				templates: core.getMultilineInput('templates'),
+				env: core.getInput('env', { trimWhitespace: true }),
+				templates: core.getMultilineInput('templates', {
+					trimWhitespace: true,
+				}),
 				experiments: core
-					.getMultilineInput('experiments')
-					.map((experiment) => experiment.trim().split(':'))
+					.getMultilineInput('experiments', { trimWhitespace: true })
+					.map((experiment) => experiment.split(':'))
 					.map(([key, value]) => [key, value?.toLowerCase()]),
 			});
 
@@ -163,7 +161,7 @@ async function runOnContainer({
 }) {
 	try {
 		await exec.exec(`npx`, ['wp-env', 'run', container, ...command], {
-			cwd: wpEnvWorkingDir,
+			cwd: process.cwd(),
 		});
 	} catch (e) {
 		throw new Error(error, { cause: e });
