@@ -42,6 +42,14 @@ jobs:
                   templates: |-
                       elementor-templates
 
-            - name: Test setup env
-              run: |
-                  ls  -la
+            - name: Ping to check if the site is up and import successful
+              uses: actions/github-script@v7
+              env:
+                  URL_TO_CHECK: 'http://localhost:8888/react-query-under-the-hood/'
+              with:
+                  script: |
+                      fetch('${{ INPUT_URL_TO_CHECK }}').then(response => {
+                          if (!response.ok) {
+                            core.setFailed('Request failed: ' + response.statusText);
+                          }
+                      });
