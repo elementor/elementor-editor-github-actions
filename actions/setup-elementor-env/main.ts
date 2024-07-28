@@ -146,7 +146,9 @@ async function parseInputs() {
 		let message = 'Failed to parse inputs';
 
 		if (error instanceof z.ZodError) {
-			message = `${message}: ${error.errors.map((error) => error.message).join('\n')}`;
+			message = `${message}: ${error.errors
+				.map((error) => `${error.path} - ${error.message}`)
+				.join('\n')}`;
 		}
 
 		throw new Error(message, { cause: error });
