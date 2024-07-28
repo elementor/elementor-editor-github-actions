@@ -24016,11 +24016,6 @@ async function run() {
 }
 async function parseInputs() {
   try {
-    console.log({
-      env: core.getInput("env"),
-      templates: core.getMultilineInput("templates"),
-      experiments: core.getMultilineInput("experiments").map((experiment) => experiment.trim().split(":")).map(([key, value]) => [key, value?.toLowerCase()])
-    });
     const parsed = z.object({
       env: z.union([z.literal("development"), z.literal("testing")]),
       templates: z.array(z.string().regex(/^[a-z0-9-_./]+$/)),
