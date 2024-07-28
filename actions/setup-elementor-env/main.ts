@@ -17,7 +17,7 @@ export async function run() {
 			await runOnContainer({
 				container,
 				command: ['wp', 'core', 'version'],
-				error: 'Please use setup-wp-env action before running this action',
+				error: '`setup-wp-env` is not being used - please use it in your workflow',
 			});
 		});
 
@@ -25,7 +25,7 @@ export async function run() {
 			await runOnContainer({
 				container,
 				command: ['wp', 'plugin', 'is-active', 'elementor'],
-				error: 'Elementor is not installed',
+				error: 'Elementor is not installed - please define it in setup-wp-env',
 			});
 		});
 
@@ -35,8 +35,7 @@ export async function run() {
 					container,
 					command: [
 						'wp',
-						'--user',
-						'admin',
+						'--user=admin',
 						'elementor',
 						'experiments',
 						'activate',
@@ -53,8 +52,7 @@ export async function run() {
 					container,
 					command: [
 						'wp',
-						'--user',
-						'admin',
+						'--user=admin',
 						'elementor',
 						'experiments',
 						'deactivate',
@@ -72,8 +70,7 @@ export async function run() {
 						container,
 						command: [
 							'wp',
-							'--user',
-							'admin',
+							'--user=admin',
 							'elementor',
 							'library',
 							'import-dir',
@@ -120,10 +117,10 @@ async function parseInputs() {
 			})
 			.parse({
 				env: core.getInput('env'),
-				templates: core.getInput('templates'),
+				templates: core.getMultilineInput('templates'),
 				experiments: core
 					.getMultilineInput('experiments')
-					.map((experiment) => experiment.split(':'))
+					.map((experiment) => experiment.trim().split(':'))
 					.map(([key, value]) => [key, value?.toLowerCase()]),
 			});
 

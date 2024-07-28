@@ -5,7 +5,8 @@
 	"scripts": {
 		"build": "tsup --config ./tsup.config.ts",
 		"dev": "npm run build -- --watch",
-		"lint": "concurrently -n eslint,tsc,prettier -c magenta,green,red \"eslint .\" \"tsc\" \"prettier . --check\""
+		"lint": "concurrently -n eslint,tsc,prettier -c magenta,green,red \"eslint .\" \"tsc\" \"prettier . --check\"",
+		"local-action": "bash ./scripts/local-action.sh $1"
 	},
 	"engines": {
 		"node": ">=20.0.0",
@@ -16,6 +17,7 @@
 	"private": true,
 	"devDependencies": {
 		"@eslint/js": "^9.7.0",
+		"@github/local-action": "^1.5.1",
 		"concurrently": "^8.2.2",
 		"eslint": "^8.57.0",
 		"globals": "^15.8.0",

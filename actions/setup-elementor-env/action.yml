@@ -8,10 +8,10 @@ inputs:
         default: 'testing'
     templates:
         required: false
-        description: Paths to the Elementor templates directory, separated by commas or new lines (e.g. `elementor-templates, elementor-templates-2`)
+        description: Paths to the Elementor templates directory, separated by new lines (e.g. `elementor-templates \n elementor-templates-2`)
     experiments:
         required: false
-        description: A list of Elementor experiments to enable, separated by commas or new lines (e.g. `atomic_widgets, some_experiment`)
+        description: A list of Elementor experiments to enable, separated by new lines (e.g. `atomic_widgets \n some_experiment`)
 runs:
     using: node20
     main: ./dist/index.cjs

@@ -23937,14 +23937,14 @@ async function run() {
       await runOnContainer({
         container,
         command: ["wp", "core", "version"],
-        error: "Please use setup-wp-env action before running this action"
+        error: "`setup-wp-env` is not being used - please use it in your workflow"
       });
     });
     await core.group("Validating elementor being activated", async () => {
       await runOnContainer({
         container,
         command: ["wp", "plugin", "is-active", "elementor"],
-        error: "Elementor is not installed"
+        error: "Elementor is not installed - please define it in setup-wp-env"
       });
     });
     if (experiments.on.length > 0) {
@@ -23953,8 +23953,7 @@ async function run() {
           container,
           command: [
             "wp",
-            "--user",
-            "admin",
+            "--user=admin",
             "elementor",
             "experiments",
             "activate",
@@ -23970,8 +23969,7 @@ async function run() {
           container,
           command: [
             "wp",
-            "--user",
-            "admin",
+            "--user=admin",
             "elementor",
             "experiments",
             "deactivate",
@@ -23988,8 +23986,7 @@ async function run() {
             container,
             command: [
               "wp",
-              "--user",
-              "admin",
+              "--user=admin",
               "elementor",
               "library",
               "import-dir",
@@ -24019,6 +24016,11 @@ async function run() {
 }
 async function parseInputs() {
   try {
+    console.log({
+      env: core.getInput("env"),
+      templates: core.getMultilineInput("templates"),
+      experiments: core.getMultilineInput("experiments").map((experiment) => experiment.trim().split(":")).map(([key, value]) => [key, value?.toLowerCase()])
+    });
     const parsed = z.object({
       env: z.union([z.literal("development"), z.literal("testing")]),
       templates: z.array(z.string().regex(/^[a-z0-9-_./]+$/)),
@@ -24030,8 +24032,8 @@ async function parseInputs() {
       )
     }).parse({
       env: core.getInput("env"),
-      templates: core.getInput("templates"),
-      experiments: core.getMultilineInput("experiments").map((experiment) => experiment.split(":")).map(([key, value]) => [key, value?.toLowerCase()])
+      templates: core.getMultilineInput("templates"),
+      experiments: core.getMultilineInput("experiments").map((experiment) => experiment.trim().split(":")).map(([key, value]) => [key, value?.toLowerCase()])
     });
     return {
       container: parsed.env === "development" ? "cli" : "tests-cli",
@@ -24044,7 +24046,7 @@ async function parseInputs() {
   } catch (error) {
     let message = "Failed to parse inputs";
     if (error instanceof z.ZodError) {
-      message = `${message}: ${error.errors.map((error2) => error2.message).join("\n")}`;
+      message = `${message}: ${error.errors.map((error2) => `${error2.path} - ${error2.message}`).join("\n")}`;
     }
     throw new Error(message, { cause: error });
   }
