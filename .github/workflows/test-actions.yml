@@ -48,7 +48,7 @@ jobs:
                   URL_TO_CHECK: 'http://localhost:8888/react-query-under-the-hood/'
               with:
                   script: |
-                      fetch("$URL_TO_CHECK").then(response => {
+                      fetch(process.env.URL_TO_CHECK).then(response => {
                           if (!response.ok) {
                             core.setFailed('Request failed: ' + response.statusText);
                           }
