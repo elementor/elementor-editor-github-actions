@@ -57,7 +57,7 @@ runs:
               --plugins="$INPUT_PLUGINS" \
               --themes="$INPUT_THEMES" \
               --active-theme="$INPUT_ACTIVE_THEME" \
-              --mappings="INPUT_MAPPINGS" \
+              --mappings="$INPUT_MAPPINGS" \
               --config="$INPUT_CONFIG" \
           shell: bash
 
