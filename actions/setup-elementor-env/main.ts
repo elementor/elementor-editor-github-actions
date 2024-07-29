@@ -9,11 +9,11 @@ export async function run() {
 			parseInputs,
 		);
 
-		await core.group('Validating setup-wp-env being used', async () => {
+		await core.group('Validating wp-env installation', async () => {
 			await runOnContainer({
 				container,
 				command: ['wp', 'core', 'version'],
-				error: '`setup-wp-env` is not being used - please use it in your workflow',
+				error: "Can't find a running `wp-env` instance. Please make sure it's running an accessible. (try using `setup-wp-env` action before this one)",
 			});
 		});
 
@@ -21,7 +21,7 @@ export async function run() {
 			await runOnContainer({
 				container,
 				command: ['wp', 'plugin', 'is-active', 'elementor'],
-				error: 'Elementor is not installed - please define it in setup-wp-env',
+				error: "Can't find an active Elementor installation. Please make sure it's installed and activated.",
 			});
 		});
 
@@ -37,7 +37,7 @@ export async function run() {
 						'activate',
 						experiments.on.join(','),
 					],
-					error: 'Failed to activate experiments',
+					error: `Failed to activate experiments: ${experiments.on.join(', ')}`,
 				});
 			});
 		}
@@ -54,7 +54,7 @@ export async function run() {
 						'deactivate',
 						experiments.off.join(','),
 					],
-					error: 'Failed to deactivate experiments',
+					error: `Failed to deactivate experiments: : ${experiments.on.join(', ')}`,
 				});
 			});
 		}
@@ -72,7 +72,7 @@ export async function run() {
 							'import-dir',
 							template,
 						],
-						error: 'Failed to import templates',
+						error: `Failed to import templates: ${template}`,
 					});
 				}
 			});
@@ -119,7 +119,10 @@ async function parseInputs() {
 				experiments: core
 					.getMultilineInput('experiments', { trimWhitespace: true })
 					.map((experiment) => experiment.split(':'))
-					.map(([key, value]) => [key, value?.toLowerCase()]),
+					.map(([key, value]) => [
+						key?.trim(),
+						value?.toLowerCase().trim(),
+					]),
 			});
 
 		return {

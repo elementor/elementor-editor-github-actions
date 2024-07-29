@@ -8,7 +8,7 @@ concurrency:
     cancel-in-progress: true
 
 jobs:
-    test-wp-env:
+    setup-wp-and-elementor-env:
         name: Setup WP and Elementor env
         runs-on: ubuntu-latest
         if: startsWith( github.repository, 'elementor/' )
@@ -48,8 +48,10 @@ jobs:
                   URL_TO_CHECK: 'http://localhost:8888/react-query-under-the-hood/'
               with:
                   script: |
-                      fetch(process.env.URL_TO_CHECK).then(response => {
-                          if (!response.ok) {
-                            core.setFailed('Request failed: ' + response.statusText);
-                          }
-                      });
+                      const { URL_TO_CHECK } = process.env;
+
+                      const response = await fetch(URL_TO_CHECK)
+
+                      if (!response.ok) {
+                        core.setFailed(`Failed to ping ${URL_TO_CHECK}, status: ${response.status}.`);
+                      }

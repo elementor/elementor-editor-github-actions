@@ -5,7 +5,7 @@
 	"scripts": {
 		"build": "tsup --config ./tsup.config.ts",
 		"dev": "npm run build -- --watch",
-		"lint": "concurrently -n eslint,tsc,prettier -c magenta,green,red \"eslint .\" \"tsc\" \"prettier . --check\"",
+		"lint": "concurrently -n eslint,tsc,prettier -c magenta,blue,red \"eslint .\" \"tsc\" \"prettier . --check\"",
 		"local-action": "bash ./scripts/local-action.sh $1"
 	},
 	"engines": {
