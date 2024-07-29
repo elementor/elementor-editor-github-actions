@@ -56,9 +56,9 @@ async function main() {
 	await fs.writeJSON(`${dir}/.wp-env.json`, content, { spaces: 2 });
 }
 
-function getOptions(
+function getOptions<T extends string>(
 	args: Record<
-		string,
+		T,
 		{
 			type: 'string' | 'boolean';
 			default: string | boolean | null;
@@ -66,9 +66,9 @@ function getOptions(
 		}
 	>,
 ) {
-	const entries = Object.entries(args);
+	const entries = Object.entries(args) as Array<[T, (typeof args)[T]]>;
 
-	const options = minimist(process.argv.slice(2), {
+	const options = minimist<Record<T, string>>(process.argv.slice(2), {
 		string: entries
 			.filter(([, { type }]) => type === 'string')
 			.map(([key]) => key),
@@ -90,9 +90,18 @@ function getOptions(
 }
 
 function mapFromString(map: string) {
-	const config = arrayFromString(map)
-		.map((mapping) => mapping.split(':').map((item) => item.trim()))
-		.filter(([from, to]) => from && to);
+	const config = arrayFromString(map).reduce<Array<[string, string]>>(
+		(acc, mapping) => {
+			const [from, to] = mapping.split(':').map((item) => item.trim());
+
+			if (from && to) {
+				acc.push([from, to]);
+			}
+
+			return acc;
+		},
+		[],
+	);
 
 	return Object.fromEntries(config);
 }
