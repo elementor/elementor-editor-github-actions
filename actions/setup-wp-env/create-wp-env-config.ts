@@ -1,4 +1,4 @@
-import { minimist, fs } from 'zx';
+import { minimist, fs, path } from 'zx';
 
 async function main() {
 	const {
@@ -7,10 +7,8 @@ async function main() {
 		plugins,
 		themes,
 		mappings,
-		dir,
 		'active-theme': activeTheme,
 		config,
-		'wp-debug': wpDebug,
 	} = getOptions({
 		wp: { type: 'string', default: null },
 		php: { type: 'string', default: null },
@@ -24,36 +22,35 @@ async function main() {
 				value === '',
 		},
 		mappings: { type: 'string', default: '' },
-		dir: { type: 'string', default: './' },
 		config: { type: 'string', default: '' },
-		'wp-debug': { type: 'string', default: 'false' },
 	});
 
 	const content = {
 		core: wp ? `WordPress/Wordpress#${wp}` : null,
 		phpVersion: php ? php : null,
 		themes: arrayFromString(themes),
-		mappings: mapFromString(mappings),
-		plugins: arrayFromString(plugins),
-		config: {
-			WP_DEBUG: wpDebug === 'true',
-			SCRIPT_DEBUG: wpDebug === 'true',
-			...mapFromString(config),
+		mappings: {
+			...mapFromString(mappings),
+			'.action-config': './actions/setup-wp-env/config',
 		},
+		plugins: arrayFromString(plugins),
+		config: mapFromString(config),
 		lifecycleScripts: {
 			afterStart: prepareCommands(
 				['cli', 'tests-cli'],
 				[
 					activeTheme &&
 						`INPUT_ACTIVE_THEME="${activeTheme}" && wp theme activate "$INPUT_ACTIVE_THEME"`,
-					`wp rewrite structure '/%postname%' --hard`,
+					`WP_CLI_CONFIG_PATH=.action-config/wp-cli.yml wp rewrite structure '/%postname%/' --hard`,
+					'wp rewrite flush --hard',
 				],
 			),
 		},
 	};
 
-	await fs.ensureDir(dir);
-	await fs.writeJSON(`${dir}/.wp-env.json`, content, { spaces: 2 });
+	await fs.writeJSON(path.resolve(process.cwd(), '.wp-env.json'), content, {
+		spaces: 2,
+	});
 }
 
 function getOptions(
@@ -113,4 +110,4 @@ function prepareCommands(envs: Array<'cli' | 'tests-cli'>, commands: string[]) {
 }
 
 // Run the main function
-await main();
+main();

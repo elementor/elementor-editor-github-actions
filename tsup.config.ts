@@ -1,13 +1,19 @@
 import { defineConfig } from 'tsup';
 import removeZxImportsTsupPlugin from './scripts/remove-zx-imports-tsup-plugin.js';
 
-export default [defineActionConfig('setup-wp-env')];
-
-function defineActionConfig(action: string) {
-	return defineConfig({
-		entry: [`actions/${action}/*.ts`],
-		outDir: `actions/${action}/dist`,
+export default [
+	defineConfig({
+		entry: ['actions/setup-wp-env/*.ts'],
+		outDir: 'actions/setup-wp-env/dist',
 		format: 'esm',
 		plugins: [removeZxImportsTsupPlugin()],
-	});
-}
+		platform: 'node',
+	}),
+	defineConfig({
+		entry: ['actions/setup-elementor-env/index.ts'],
+		outDir: 'actions/setup-elementor-env/dist',
+		format: 'cjs',
+		noExternal: [/.+/],
+		platform: 'node',
+	}),
+];

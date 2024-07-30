@@ -1,0 +1,89 @@
+{
+	"version": "0.4",
+	"title": "React Query Under the Hood",
+	"type": "wp-page",
+	"content": [
+		{
+			"id": "35fac760",
+			"settings": [],
+			"elements": [
+				{
+					"id": "46d599cc",
+					"settings": {
+						"content_width": "full",
+						"title": "React Query Under the Hood",
+						"align": "center",
+						"title_color": "#FF0074",
+						"typography_typography": "custom",
+						"typography_font_family": "Poppins",
+						"typography_font_size": {
+							"unit": "px",
+							"size": 55,
+							"sizes": []
+						},
+						"typography_font_weight": "600",
+						"typography_letter_spacing": {
+							"unit": "px",
+							"size": -2,
+							"sizes": []
+						},
+						"typography_word_spacing": {
+							"unit": "px",
+							"size": 3,
+							"sizes": []
+						},
+						"_margin": {
+							"unit": "px",
+							"top": "30",
+							"right": "30",
+							"bottom": "30",
+							"left": "30",
+							"isLinked": true
+						}
+					},
+					"elements": [],
+					"isInner": false,
+					"widgetType": "heading",
+					"elType": "widget"
+				}
+			],
+			"isInner": false,
+			"elType": "container"
+		},
+		{
+			"id": "db025ae",
+			"settings": [],
+			"elements": [
+				{
+					"id": "40b0a1db",
+					"settings": {
+						"content_width": "full",
+						"youtube_url": "https://www.youtube.com/watch?v=rq2igcuSvEY",
+						"_padding": {
+							"unit": "px",
+							"top": "20",
+							"right": "20",
+							"bottom": "20",
+							"left": "20",
+							"isLinked": true
+						},
+						"image_overlay": {
+							"id": "",
+							"url": "http://localhost:8888/wp-content/plugins/elementor/assets/images/placeholder.png"
+						},
+						"vimeo_url": "https://vimeo.com/235215203",
+						"dailymotion_url": "https://www.dailymotion.com/video/x6tqhqb",
+						"videopress_url": "https://videopress.com/v/ZCAOzTNk"
+					},
+					"elements": [],
+					"isInner": false,
+					"widgetType": "video",
+					"elType": "widget"
+				}
+			],
+			"isInner": false,
+			"elType": "container"
+		}
+	],
+	"settings": { "template": "elementor_canvas" }
+}

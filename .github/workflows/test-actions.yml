@@ -8,8 +8,8 @@ concurrency:
     cancel-in-progress: true
 
 jobs:
-    test-wp-env:
-        name: Setup WP Env
+    setup-wp-and-elementor-env:
+        name: Setup WP and Elementor env
         runs-on: ubuntu-latest
         if: startsWith( github.repository, 'elementor/' )
         steps:
@@ -21,8 +21,37 @@ jobs:
               with:
                   php: '8.0'
                   wp: '6.6'
-                  themes: 'https://downloads.wordpress.org/theme/hello-elementor.zip'
                   active-theme: 'hello-elementor'
-                  debug: false
+                  themes: |-
+                      https://downloads.wordpress.org/theme/hello-elementor.zip
+                  plugins: |-
+                      https://downloads.wordpress.org/plugin/elementor.zip
+                  mappings: |-
+                      elementor-templates:./stubs/elementor-templates
                   config: |-
                       ELEMENTOR_SHOW_HIDDEN_EXPERIMENTS:1
+
+            - name: Setup Elementor Env
+              uses: ./actions/setup-elementor-env
+              with:
+                  env: 'development'
+                  experiments: |-
+                      pages_panel:true
+                      editor_v2:false
+                      e_nested_atomic_repeaters:false
+                  templates: |-
+                      elementor-templates
+
+            - name: Ping to check if the site is up and import successful
+              uses: actions/github-script@v7
+              env:
+                  URL_TO_CHECK: 'http://localhost:8888/react-query-under-the-hood/'
+              with:
+                  script: |
+                      const { URL_TO_CHECK } = process.env;
+
+                      const response = await fetch(URL_TO_CHECK)
+
+                      if (!response.ok) {
+                        core.setFailed(`Failed to ping ${URL_TO_CHECK}, status: ${response.status}.`);
+                      }

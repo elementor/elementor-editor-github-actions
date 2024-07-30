@@ -7,10 +7,8 @@ async function main() {
     plugins,
     themes,
     mappings,
-    dir,
     "active-theme": activeTheme,
-    config,
-    "wp-debug": wpDebug
+    config
   } = getOptions({
     wp: { type: "string", default: null },
     php: { type: "string", default: null },
@@ -22,33 +20,32 @@ async function main() {
       validate: (value) => typeof value === "string" && /^[a-z0-9-]+$/.test(value) || value === ""
     },
     mappings: { type: "string", default: "" },
-    dir: { type: "string", default: "./" },
-    config: { type: "string", default: "" },
-    "wp-debug": { type: "string", default: "false" }
+    config: { type: "string", default: "" }
   });
   const content = {
     core: wp ? `WordPress/Wordpress#${wp}` : null,
     phpVersion: php ? php : null,
     themes: arrayFromString(themes),
-    mappings: mapFromString(mappings),
-    plugins: arrayFromString(plugins),
-    config: {
-      WP_DEBUG: wpDebug === "true",
-      SCRIPT_DEBUG: wpDebug === "true",
-      ...mapFromString(config)
+    mappings: {
+      ...mapFromString(mappings),
+      ".action-config": "./actions/setup-wp-env/config"
     },
+    plugins: arrayFromString(plugins),
+    config: mapFromString(config),
     lifecycleScripts: {
       afterStart: prepareCommands(
         ["cli", "tests-cli"],
         [
           activeTheme && `INPUT_ACTIVE_THEME="${activeTheme}" && wp theme activate "$INPUT_ACTIVE_THEME"`,
-          `wp rewrite structure '/%postname%' --hard`
+          `WP_CLI_CONFIG_PATH=.action-config/wp-cli.yml wp rewrite structure '/%postname%/' --hard`,
+          "wp rewrite flush --hard"
         ]
       )
     }
   };
-  await fs.ensureDir(dir);
-  await fs.writeJSON(`${dir}/.wp-env.json`, content, { spaces: 2 });
+  await fs.writeJSON(path.resolve(process.cwd(), ".wp-env.json"), content, {
+    spaces: 2
+  });
 }
 function getOptions(args) {
   const entries = Object.entries(args);
@@ -77,4 +74,4 @@ function prepareCommands(envs, commands) {
   const mergedCommands = commands.filter(Boolean).join(" && ");
   return envs.map((env) => `npx wp-env run ${env} bash -c '${mergedCommands}'`).join(" && ");
 }
-await main();
+main();
