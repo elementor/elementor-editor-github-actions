@@ -50,7 +50,9 @@ jobs:
                   script: |
                       const { URL_TO_CHECK } = process.env;
 
-                      const response = await fetch(URL_TO_CHECK)
+                      const response = await fetch('http://localhost:8888/wp-json/wp/v2/posts')
+
+                        console.log(await response.json())
 
                       if (!response.ok) {
                         core.setFailed(`Failed to ping ${URL_TO_CHECK}, status: ${response.status}.`);
