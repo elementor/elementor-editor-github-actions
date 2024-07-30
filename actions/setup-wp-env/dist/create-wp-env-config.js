@@ -26,7 +26,10 @@ async function main() {
     core: wp ? `WordPress/Wordpress#${wp}` : null,
     phpVersion: php ? php : null,
     themes: arrayFromString(themes),
-    mappings: mapFromString(mappings),
+    mappings: {
+      ...mapFromString(mappings),
+      ".action-config": "./actions/setup-wp-env/config"
+    },
     plugins: arrayFromString(plugins),
     config: mapFromString(config),
     lifecycleScripts: {
@@ -34,7 +37,8 @@ async function main() {
         ["cli", "tests-cli"],
         [
           activeTheme && `INPUT_ACTIVE_THEME="${activeTheme}" && wp theme activate "$INPUT_ACTIVE_THEME"`,
-          `wp rewrite structure '/%postname%/' --hard`
+          `WP_CLI_CONFIG_PATH=.action-config/wp-cli.yml wp rewrite structure '/%postname%/' --hard`,
+          "wp rewrite flush --hard"
         ]
       )
     }

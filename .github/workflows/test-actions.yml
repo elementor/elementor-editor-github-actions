@@ -50,7 +50,7 @@ jobs:
                   script: |
                       const { URL_TO_CHECK } = process.env;
 
-                      const response = await fetch('http://localhost:8888/wp-json?route=/wp/v2/pages/')
+                      const response = await fetch('http://localhost:8888/wp-json/wp/v2/posts')
 
                         console.log(await response.json())
 
