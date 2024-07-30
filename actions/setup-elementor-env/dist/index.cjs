@@ -23970,7 +23970,7 @@ async function run() {
             "deactivate",
             experiments.off.join(",")
           ],
-          error: `Failed to deactivate experiments: : ${experiments.on.join(", ")}`
+          error: `Failed to deactivate experiments: ${experiments.on.join(", ")}`
         });
       });
     }
