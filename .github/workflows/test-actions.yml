@@ -45,7 +45,7 @@ jobs:
             - name: Ping to check if the site is up and import successful
               uses: actions/github-script@v7
               env:
-                  URL_TO_CHECK: 'http://localhost:8888/react-query-under-the-hood/'
+                  URL_TO_CHECK: 'http://localhost:8888/react-query-under-the-hoodaa/'
               with:
                   script: |
                       const { URL_TO_CHECK } = process.env;
