@@ -16,8 +16,14 @@ export function getMapInput(name: string): Record<string, string> {
 	return Object.fromEntries(
 		core
 			.getMultilineInput(name, { trimWhitespace: true })
-			.map((assigment) => assigment.split(':'))
-			.map(([key, value]) => [key?.trim(), value?.trim()])
-			.filter(([key, value]) => key && value),
+			.reduce<Array<[string, string]>>((acc, line) => {
+				const [key, value] = line.split(':');
+
+				if (key && value) {
+					acc.push([key.trim(), value.trim()]);
+				}
+
+				return acc;
+			}, []),
 	);
 }
