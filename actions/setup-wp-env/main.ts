@@ -79,7 +79,6 @@ async function parseInputs() {
 				mappings: z.record(z.string(), z.string()),
 				config: z.record(z.string(), z.string()),
 				activeTheme: z.string().regex(/^[a-z0-9-]+$/),
-				actionPath: z.string(),
 				skipWpEnvInstall: z.boolean(),
 			})
 			.parse({
@@ -90,7 +89,6 @@ async function parseInputs() {
 				mappings: getMapInput('mappings'),
 				config: getMapInput('config'),
 				activeTheme: getStringInput('active-theme'),
-				actionPath: process.env.GITHUB_ACTION_PATH,
 				skipWpEnvInstall: getBooleanInput('skip-wp-env-install'),
 			});
 	} catch (error) {
