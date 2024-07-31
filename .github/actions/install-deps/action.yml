@@ -10,4 +10,5 @@ runs:
               node-version: 20.x
 
         - name: Install Deps
+          shell: bash
           run: npm ci
