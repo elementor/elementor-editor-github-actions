@@ -34,9 +34,8 @@ export async function run() {
 			];
 
 			if (inputs.activeTheme) {
-				afterStartCommands.unshift(
-					`INPUT_ACTIVE_THEME="${inputs.activeTheme}"`,
-					'wp theme activate "$INPUT_ACTIVE_THEME"',
+				afterStartCommands.push(
+					`wp theme activate "${inputs.activeTheme}"`,
 				);
 			}
 
