@@ -1,7 +1,6 @@
 import * as core from '@actions/core';
 import * as exec from '@actions/exec';
 import * as fs from 'fs-extra';
-import * as path from 'node:path';
 import { z } from 'zod';
 import {
 	getArrayInput,
@@ -10,9 +9,13 @@ import {
 	getStringInput,
 } from '../inputs';
 
+const wpCLIYml = `
+apache_modules:
+    - mod_rewrite
+`;
+
 export async function run() {
 	try {
-		console.log(process.env);
 		const inputs = await core.group('Parsing inputs', parseInputs);
 
 		if (!inputs.skipWpEnvInstall) {
@@ -22,10 +25,11 @@ export async function run() {
 		}
 
 		await core.group('Creating wp-env.json config', async () => {
-			const configDir = '.action-config';
+			const wpCLIPath = '.action-config/wp-cli.yml';
 
 			const afterStartCommands = [
-				`WP_CLI_CONFIG_PATH=${configDir}/wp-cli.yml wp rewrite structure '/%postname%/' --hard`,
+				`echo "${wpCLIYml}" > ${wpCLIPath}`,
+				`WP_CLI_CONFIG_PATH=${wpCLIPath} wp rewrite structure '/%postname%/' --hard`,
 				'wp rewrite flush --hard',
 			];
 
@@ -42,10 +46,7 @@ export async function run() {
 				themes: inputs.themes,
 				plugins: inputs.plugins,
 				config: inputs.config,
-				mappings: {
-					...inputs.mappings,
-					[configDir]: path.resolve(inputs.actionPath, './config'),
-				},
+				mappings: inputs.mappings,
 				lifecycleScripts: {
 					afterStart: prepareCommands(
 						['cli', 'tests-cli'],
