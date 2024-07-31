@@ -16,7 +16,7 @@ jobs:
               uses: actions/checkout@v4
 
             - name: Install Dependencies
-              uses: .github/workflows/actions/install-deps
+              uses: ./.github/actions/install-deps
 
             - name: Run Lint
               run: npm run lint
@@ -29,7 +29,7 @@ jobs:
               uses: actions/checkout@v4
 
             - name: Install Dependencies
-              uses: .github/workflows/actions/install-deps
+              uses: ./.github/actions/install-deps
 
             - name: Run Build
               run: npm run build
