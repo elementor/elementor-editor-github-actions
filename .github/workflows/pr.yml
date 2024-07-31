@@ -26,3 +26,13 @@ jobs:
 
             - name: Run Lint
               run: npm run lint
+
+            - name: Run Build
+              run: npm run build
+
+            - name: Require Build in PR
+              run: |
+                  if [ ! -z "$(git status --porcelain)" ]; then
+                    echo "Please build your changes locally before submitting a PR."
+                    exit 1
+                  fi
