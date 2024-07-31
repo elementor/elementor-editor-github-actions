@@ -32,7 +32,11 @@ jobs:
 
             - name: Require Build in PR
               run: |
-                  if [ ! -z "$(git status --porcelain)" ]; then
+                  STATUS=$(git status --porcelain)
+
+                  if [ ! -z "$STATUS" ]; then
                     echo "Please build your changes locally before submitting a PR."
+                    echo "Uncommitted changes:"
+                    echo "$STATUS"
                     exit 1
                   fi

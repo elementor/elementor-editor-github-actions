@@ -1,7 +1,5 @@
 import { minimist, fs, path } from 'zx';
 
-const a = 1;
-
 async function main() {
 	const {
 		wp,
