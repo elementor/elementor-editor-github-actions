@@ -12,6 +12,7 @@ import {
 
 export async function run() {
 	try {
+		console.log(process.env);
 		const inputs = await core.group('Parsing inputs', parseInputs);
 
 		if (!inputs.skipWpEnvInstall) {
