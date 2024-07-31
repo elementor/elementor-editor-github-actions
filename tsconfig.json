@@ -1,19 +1,20 @@
 {
 	"compilerOptions": {
-		"module": "NodeNext",
-		"target": "ESNext",
-		"lib": ["ESNext"],
+		"target": "ES2022",
+		"module": "ESNext",
+		"moduleResolution": "Node",
+		"sourceMap": true,
+		"noEmit": true,
 		"esModuleInterop": true,
+		"forceConsistentCasingInFileNames": true,
 		"skipLibCheck": true,
 		"allowJs": true,
 		"resolveJsonModule": true,
 		"moduleDetection": "force",
 		"isolatedModules": true,
 		"verbatimModuleSyntax": true,
-		"moduleResolution": "NodeNext",
 		"strict": true,
 		"noUncheckedIndexedAccess": true,
-		"noImplicitOverride": true,
-		"noEmit": true
+		"noImplicitOverride": true
 	}
 }
