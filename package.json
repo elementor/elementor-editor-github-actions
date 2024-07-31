@@ -18,6 +18,7 @@
 	"devDependencies": {
 		"@eslint/js": "^9.7.0",
 		"@github/local-action": "^1.5.1",
+		"@types/eslint__js": "^8.42.3",
 		"@types/fs-extra": "^11.0.4",
 		"concurrently": "^8.2.2",
 		"eslint": "^8.57.0",

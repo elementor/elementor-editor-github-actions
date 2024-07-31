@@ -99,6 +99,7 @@ export async function run() {
 	}
 }
 
+// eslint-disable-next-line @typescript-eslint/require-await -- `core.group` requires a promise.
 async function parseInputs() {
 	try {
 		const parsed = z
@@ -138,7 +139,7 @@ async function parseInputs() {
 
 		if (error instanceof z.ZodError) {
 			message = `${message}: ${error.errors
-				.map((error) => `${error.path} - ${error.message}`)
+				.map((e) => `${e.path.join(', ')} - ${e.message}`)
 				.join('\n')}`;
 		}
 
