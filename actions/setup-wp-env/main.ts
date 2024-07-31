@@ -98,7 +98,7 @@ async function parseInputs() {
 
 		if (error instanceof z.ZodError) {
 			message = `${message}: ${error.errors
-				.map((e) => `${e.path.join( ', ')} - ${e.message}`)
+				.map((e) => `${e.path.join(', ')} - ${e.message}`)
 				.join('\n')}`;
 		}
 
