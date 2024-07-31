@@ -21,7 +21,7 @@ jobs:
             - name: Run Lint
               run: npm run lint
 
-      require_build:
+    require-build:
         name: Require Build in PR
         runs-on: ubuntu-latest
         steps:
