@@ -25,9 +25,11 @@ export async function run() {
 		}
 
 		await core.group('Creating wp-env.json config', async () => {
-			const wpCLIPath = '.action-config/wp-cli.yml';
+			const wpCLIConfigDir = './.action-config';
+			const wpCLIPath = `${wpCLIConfigDir}/wp-cli.yml`;
 
 			const afterStartCommands = [
+				`mkdir -p ${wpCLIConfigDir}`,
 				`echo "${wpCLIYml}" > ${wpCLIPath}`,
 				`WP_CLI_CONFIG_PATH=${wpCLIPath} wp rewrite structure '/%postname%/' --hard`,
 				'wp rewrite flush --hard',
