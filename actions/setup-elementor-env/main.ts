@@ -1,6 +1,7 @@
 import * as core from '@actions/core';
 import * as exec from '@actions/exec';
 import { z } from 'zod';
+import { getArrayInput, getMapInput, getStringInput } from '../inputs';
 
 export async function run() {
 	try {
@@ -104,26 +105,18 @@ async function parseInputs() {
 			.object({
 				env: z.union([z.literal('development'), z.literal('testing')]),
 				templates: z.array(z.string().regex(/^[a-z0-9-_./]+$/)),
-				experiments: z.array(
-					z.tuple([
-						z.string().regex(/^[a-z0-9-_]+$/),
-						z.union([z.literal('true'), z.literal('false')]),
-					]),
+				experiments: z.record(
+					z.string().regex(/^[a-z0-9-_]+$/),
+					z.union([z.literal('true'), z.literal('false')]),
 				),
 			})
 			.parse({
-				env: core.getInput('env', { trimWhitespace: true }),
-				templates: core.getMultilineInput('templates', {
-					trimWhitespace: true,
-				}),
-				experiments: core
-					.getMultilineInput('experiments', { trimWhitespace: true })
-					.map((experiment) => experiment.split(':'))
-					.map(([key, value]) => [
-						key?.trim(),
-						value?.toLowerCase().trim(),
-					]),
+				env: getStringInput('env'),
+				templates: getArrayInput('templates'),
+				experiments: getMapInput('experiments'),
 			});
+
+		const experimentsEntries = Object.entries(parsed.experiments);
 
 		return {
 			container:
@@ -132,10 +125,10 @@ async function parseInputs() {
 					: ('tests-cli' as const),
 			templates: parsed.templates,
 			experiments: {
-				on: parsed.experiments
+				on: experimentsEntries
 					.filter(([, value]) => value === 'true')
 					.map(([key]) => key),
-				off: parsed.experiments
+				off: experimentsEntries
 					.filter(([, value]) => value === 'false')
 					.map(([key]) => key),
 			},
@@ -163,9 +156,7 @@ async function runOnContainer({
 	error: string;
 }) {
 	try {
-		await exec.exec(`npx`, ['wp-env', 'run', container, ...command], {
-			cwd: process.cwd(),
-		});
+		await exec.exec(`npx`, ['wp-env', 'run', container, ...command]);
 	} catch (e) {
 		throw new Error(error, { cause: e });
 	}
