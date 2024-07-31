@@ -41,7 +41,7 @@ jobs:
                   # Check if the status is not empty
                   if [ ! -z "$STATUS" ]; then
                     echo "Please build and commit your changes locally before submitting a PR."
-                    echo ""
+                    echo -e "\n"
                     echo "Uncommitted changes:"
                     echo "$STATUS"
                     exit 1
