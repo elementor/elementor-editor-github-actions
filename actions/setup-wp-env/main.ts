@@ -9,6 +9,8 @@ import {
 	getStringInput,
 } from '../inputs';
 
+const WP_ENV_VERSION = '10.4.0';
+
 const wpCLIYml = `
 apache_modules:
     - mod_rewrite
@@ -20,7 +22,11 @@ export async function run() {
 
 		if (!inputs.skipWpEnvInstall) {
 			await core.group('Installing wp-env', async () => {
-				await exec.exec('npm', ['install', '-g', '@wordpress/env@10']);
+				await exec.exec('npm', [
+					'install',
+					'-g',
+					`@wordpress/env@${WP_ENV_VERSION}`,
+				]);
 			});
 		}
 
