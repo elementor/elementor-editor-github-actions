@@ -94,10 +94,17 @@ export async function run() {
 				)?.summary;
 
 				for (const [category, value] of Object.entries(summary || [])) {
-					core.setOutput(`${key}-${category}-score`, value);
+					const scoreKey = `${key}-${category}-score`;
+
+					core.info(`${scoreKey}=${JSON.stringify(value)}`);
+
+					core.setOutput(scoreKey, value);
 				}
 
-				core.setOutput(`${key}-path`, output);
+				const pathKey = `${key}-path`;
+
+				core.info(`${pathKey}=${output}`);
+				core.setOutput(pathKey, output);
 			});
 		}
 	} catch (e) {
