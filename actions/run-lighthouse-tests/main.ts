@@ -1,6 +1,7 @@
 import * as core from '@actions/core';
 import * as exec from '@actions/exec';
 import * as fs from 'fs-extra';
+import * as path from 'node:path';
 import { z } from 'zod';
 import {
 	getArrayInput,
@@ -8,7 +9,7 @@ import {
 	getMapInput,
 	getNumberInput,
 } from '../inputs';
-import * as path from 'node:path';
+import { setOutput } from '../outputs';
 
 const LHCI_VERSION = '0.14.x';
 const OUTPUT_DIR = path.resolve(process.cwd(), './.lhci');
@@ -79,10 +80,9 @@ export async function run() {
 						},
 					} satisfies typeof lhciConfig;
 
-					// TODO: Need to define base line for all pages
-					// TODO: Need to allow pages to define their own base line and override the default
-
 					await fs.writeJSON('.lighthouserc.json', config);
+
+					setOutput(`${urlAlias}-path`, outputPath);
 				},
 			);
 
@@ -92,7 +92,6 @@ export async function run() {
 					await exec.exec('rm', ['-rf', OUTPUT_DIR]);
 					await exec.exec('rm', ['-rf', './.lighthouseci']);
 
-					// TODO: Make sure that if failed the path is still declared
 					await exec.exec('npx', [
 						'lhci',
 						'autorun',
@@ -101,31 +100,25 @@ export async function run() {
 				},
 			);
 
-			// TODO upload artifacts to github
+			await core.group(
+				`Declare score outputs for "${urlAlias}"`,
+				async () => {
+					const manifest = await parseManifest(
+						path.resolve(outputPath, 'manifest.json'),
+						inputs.categories,
+					);
 
-			await core.group(`Declare output for "${urlAlias}"`, async () => {
-				const manifest = await parseManifest(
-					path.resolve(outputPath, 'manifest.json'),
-					inputs.categories,
-				);
+					const summary = manifest.find(
+						(run) => run.isRepresentativeRun,
+					)?.summary;
 
-				const summary = manifest.find(
-					(run) => run.isRepresentativeRun,
-				)?.summary;
-
-				for (const [category, value] of Object.entries(summary || [])) {
-					const scoreKey = `${urlAlias}-${category}-score`;
-
-					// TODO: Need to define how to calculate the score
-					core.info(`${scoreKey}=${value.toString()}`);
-					core.setOutput(scoreKey, value);
-				}
-
-				const pathKey = `${urlAlias}-path`;
-
-				core.info(`${pathKey}=${outputPath}`);
-				core.setOutput(pathKey, outputPath);
-			});
+					for (const [category, value] of Object.entries(
+						summary || [],
+					)) {
+						setOutput(`${urlAlias}-${category}-score`, value);
+					}
+				},
+			);
 		}
 	} catch (e) {
 		const error = e instanceof Error ? e : new Error('An error occurred');
