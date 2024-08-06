@@ -2,7 +2,12 @@ import * as core from '@actions/core';
 import * as exec from '@actions/exec';
 import * as fs from 'fs-extra';
 import { z } from 'zod';
-import { getArrayInput, getBooleanInput, getMapInput } from '../inputs';
+import {
+	getArrayInput,
+	getBooleanInput,
+	getMapInput,
+	getNumberInput,
+} from '../inputs';
 import * as path from 'node:path';
 
 const LHCI_VERSION = '0.14.x';
@@ -19,7 +24,7 @@ const lhciConfig = {
 	ci: {
 		collect: {
 			headful: false,
-			numberOfRuns: 3,
+			numberOfRuns: 1,
 			url: [] as string[], // Will be filled in later.
 			settings: {
 				maxWaitForLoad: 90000,
@@ -54,13 +59,25 @@ export async function run() {
 			await core.group(
 				`Creating Lighthouse CI configuration file for "${urlAlias}"`,
 				async () => {
-					const config = structuredClone(lhciConfig);
-
-					config.ci.collect.url = [url];
-					config.ci.upload.outputDir = outputPath;
-
-					config.ci.collect.settings.onlyCategories =
-						inputs.categories;
+					const config = {
+						...lhciConfig,
+						ci: {
+							...lhciConfig.ci,
+							collect: {
+								...lhciConfig.ci.collect,
+								numberOfRuns: inputs.numberOfRuns,
+								url: [url],
+								settings: {
+									...lhciConfig.ci.collect.settings,
+									onlyCategories: inputs.categories,
+								},
+							},
+							upload: {
+								...lhciConfig.ci.upload,
+								outputDir: outputPath,
+							},
+						},
+					} satisfies typeof lhciConfig;
 
 					// TODO: Need to define base line for all pages
 					// TODO: Need to allow pages to define their own base line and override the default
@@ -126,11 +143,13 @@ async function parseInputs() {
 				),
 				categories: z.array(z.enum(AVAILABLE_CATEGORIES)),
 				skipLHCIInstall: z.boolean(),
+				numberOfRuns: z.number().int().min(1),
 			})
 			.parse({
 				urls: getMapInput('urls'),
 				categories: getArrayInput('categories'),
 				skipLHCIInstall: getBooleanInput('skip-lhci-install'),
+				numberOfRuns: getNumberInput('number-of-runs'),
 			});
 	} catch (error) {
 		let message = 'Failed to parse inputs';

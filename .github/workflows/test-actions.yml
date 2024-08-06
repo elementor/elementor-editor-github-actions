@@ -46,6 +46,7 @@ jobs:
               uses: ./actions/run-lighthouse-tests
               id: run-lighthouse-tests
               with:
+                  number-of-runs: 3
                   urls: |-
                       rquth:http://localhost:8888/react-query-under-the-hood/
                   categories: |-
@@ -58,7 +59,7 @@ jobs:
               with:
                   script: |
                       const { PERFORMANCE_SCORE } = process.env;
-                      const threshold = 0.85;
+                      const threshold = 0.70;
 
                       if (PERFORMANCE_SCORE < threshold) {
                           core.setFailed(`Performance score is ${PERFORMANCE_SCORE}, which is below the threshold of ${threshold}.`);

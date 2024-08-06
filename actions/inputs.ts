@@ -4,6 +4,12 @@ export function getStringInput(name: string) {
 	return core.getInput(name, { trimWhitespace: true }) || null;
 }
 
+export function getNumberInput(name: string) {
+	const value = getStringInput(name);
+
+	return value ? parseFloat(value) : null;
+}
+
 export function getBooleanInput(name: string) {
 	return core.getBooleanInput(name, { trimWhitespace: true });
 }

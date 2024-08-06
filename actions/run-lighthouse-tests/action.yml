@@ -8,6 +8,10 @@ inputs:
     categories:
         description: A list of categories to test, separated by new lines (e.g. `performance \n accessibility` \n `best-practices` \n `seo`)
         required: true
+    number-of-runs:
+        description: The number of times to run the Lighthouse test on each URL
+        required: false
+        default: '3'
     skip-lhci-install:
         description: Skip installing the LHCI package (for debugging purposes or using custom LHCI version)
         required: false
