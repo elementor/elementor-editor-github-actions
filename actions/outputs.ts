@@ -1,7 +1,9 @@
 import * as core from '@actions/core';
-import chalk from 'chalk';
+import styles from 'ansi-styles';
 
 export function setOutput(name: string, value: unknown) {
-	core.info(` -> ${chalk.cyan(`[${name}]`)} ${JSON.stringify(value)}`);
+	core.info(
+		` -> ${styles.cyan.open}[${name}]${styles.cyan.close} ${JSON.stringify(value)}`,
+	);
 	core.setOutput(name, value);
 }
