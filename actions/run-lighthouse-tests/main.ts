@@ -48,16 +48,16 @@ export async function run() {
 			});
 		}
 
-		for (const [key, url] of Object.entries(inputs.urls)) {
-			const output = path.resolve(OUTPUT_DIR, key);
+		for (const [urlAlias, url] of Object.entries(inputs.urls)) {
+			const outputPath = path.resolve(OUTPUT_DIR, urlAlias);
 
 			await core.group(
-				`Creating Lighthouse CI configuration file for "${key}"`,
+				`Creating Lighthouse CI configuration file for "${urlAlias}"`,
 				async () => {
 					const config = structuredClone(lhciConfig);
 
 					config.ci.collect.url = [url];
-					config.ci.upload.outputDir = output;
+					config.ci.upload.outputDir = outputPath;
 
 					config.ci.collect.settings.onlyCategories =
 						inputs.categories;
@@ -70,7 +70,7 @@ export async function run() {
 			);
 
 			await core.group(
-				`Running lighthouse-ci test on "${key}"`,
+				`Running lighthouse-ci test on "${urlAlias}"`,
 				async () => {
 					await exec.exec('rm', ['-rf', OUTPUT_DIR]);
 					await exec.exec('rm', ['-rf', './.lighthouseci']);
@@ -83,9 +83,11 @@ export async function run() {
 				},
 			);
 
-			await core.group(`Declare output for "${key}"`, async () => {
+			// TODO upload artifacts to github
+
+			await core.group(`Declare output for "${urlAlias}"`, async () => {
 				const manifest = await parseManifest(
-					path.resolve(output, 'manifest.json'),
+					path.resolve(outputPath, 'manifest.json'),
 					inputs.categories,
 				);
 
@@ -94,17 +96,16 @@ export async function run() {
 				)?.summary;
 
 				for (const [category, value] of Object.entries(summary || [])) {
-					const scoreKey = `${key}-${category}-score`;
+					const scoreKey = `${urlAlias}-${category}-score`;
 
 					core.info(`${scoreKey}=${JSON.stringify(value)}`);
-
 					core.setOutput(scoreKey, value);
 				}
 
-				const pathKey = `${key}-path`;
+				const pathKey = `${urlAlias}-path`;
 
-				core.info(`${pathKey}=${output}`);
-				core.setOutput(pathKey, output);
+				core.info(`${pathKey}=${outputPath}`);
+				core.setOutput(pathKey, outputPath);
 			});
 		}
 	} catch (e) {
