@@ -1,7 +1,7 @@
 import * as core from '@actions/core';
 
 export function getStringInput(name: string) {
-	return core.getInput(name, { trimWhitespace: true });
+	return core.getInput(name, { trimWhitespace: true }) || null;
 }
 
 export function getBooleanInput(name: string) {
@@ -17,7 +17,7 @@ export function getMapInput(name: string): Record<string, string> {
 		core
 			.getMultilineInput(name, { trimWhitespace: true })
 			.reduce<Array<[string, string]>>((acc, line) => {
-				const [key, value] = line.split(':');
+				const [, key, value] = line.match(/^(.+?):(.+)$/) || [];
 
 				if (key && value) {
 					acc.push([key.trim(), value.trim()]);

@@ -49,7 +49,7 @@ export async function run() {
 
 			const config = {
 				core: inputs.wp ? `WordPress/Wordpress#${inputs.wp}` : null,
-				phpVersion: inputs.php ? inputs.php : null,
+				phpVersion: inputs.php,
 				themes: inputs.themes,
 				plugins: inputs.plugins,
 				config: inputs.config,
@@ -80,8 +80,11 @@ async function parseInputs() {
 	try {
 		return z
 			.object({
-				wp: z.string(),
-				php: z.string().regex(/^(\d+\.)?(\d+\.)?(\d+)$/),
+				wp: z.string().nullable(),
+				php: z
+					.string()
+					.regex(/^(\d+\.)?(\d+\.)?(\d+)$/)
+					.nullable(),
 				plugins: z.array(z.string()),
 				themes: z.array(z.string()),
 				mappings: z.record(z.string(), z.string()),
