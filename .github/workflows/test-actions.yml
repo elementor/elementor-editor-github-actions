@@ -34,7 +34,7 @@ jobs:
             - name: Setup Elementor Env
               uses: ./actions/setup-elementor-env
               with:
-                  env: 'development'
+                  env: 'testing'
                   experiments: |-
                       pages_panel:true
                       editor_v2:false
@@ -48,7 +48,7 @@ jobs:
               with:
                   number-of-runs: 3
                   urls: |-
-                      rquth:http://localhost:8888/react-query-under-the-hood/
+                      rquth:http://localhost:8889/react-query-under-the-hood/
                   categories: |-
                       performance
 

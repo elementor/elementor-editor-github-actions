@@ -92,6 +92,7 @@ export async function run() {
 					await exec.exec('rm', ['-rf', OUTPUT_DIR]);
 					await exec.exec('rm', ['-rf', './.lighthouseci']);
 
+					// TODO: Make sure that if failed the path is still declared
 					await exec.exec('npx', [
 						'lhci',
 						'autorun',
@@ -115,7 +116,8 @@ export async function run() {
 				for (const [category, value] of Object.entries(summary || [])) {
 					const scoreKey = `${urlAlias}-${category}-score`;
 
-					core.info(`${scoreKey}=${JSON.stringify(value)}`);
+					// TODO: Need to define how to calculate the score
+					core.info(`${scoreKey}=${value.toString()}`);
 					core.setOutput(scoreKey, value);
 				}
 
@@ -167,10 +169,9 @@ async function parseInputs() {
 async function parseManifest(path: string, categories: string[]) {
 	const content = (await fs.readJSON(path)) as unknown;
 
-	const categoriesEntries = categories.map((category) => [
-		category,
-		z.number(),
-	]);
+	const categoriesEntries = categories.map(
+		(category) => [category, z.number()] as const,
+	);
 
 	return z
 		.array(
