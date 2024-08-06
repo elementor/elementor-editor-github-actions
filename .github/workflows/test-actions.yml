@@ -59,8 +59,14 @@ jobs:
               with:
                   script: |
                       const { PERFORMANCE_SCORE } = process.env;
-                      const threshold = 0.70;
+                      const threshold = 0.90;
 
                       if (PERFORMANCE_SCORE < threshold) {
                           core.setFailed(`Performance score is ${PERFORMANCE_SCORE}, which is below the threshold of ${threshold}.`);
                       }
+            - name: Upload reports
+              if: failure() && steps.run-lighthouse-tests.outputs.reports-path
+              uses: actions/upload-artifact@v4
+              with:
+                  name: performance-reports
+                  path: ${{ steps.run-lighthouse-tests.outputs.reports-path }}

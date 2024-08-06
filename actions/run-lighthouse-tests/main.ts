@@ -54,8 +54,21 @@ export async function run() {
 			});
 		}
 
+		// eslint-disable-next-line @typescript-eslint/require-await
+		await core.group('Declare reports path', async () => {
+			setOutput(`reports-path`, OUTPUT_DIR);
+		});
+
 		for (const [urlAlias, url] of Object.entries(inputs.urls)) {
 			const outputPath = path.resolve(OUTPUT_DIR, urlAlias);
+
+			await core.group(
+				`Declare reports path for "${urlAlias}`,
+				// eslint-disable-next-line @typescript-eslint/require-await
+				async () => {
+					setOutput(`${urlAlias}-reports-path`, outputPath);
+				},
+			);
 
 			await core.group(
 				`Creating Lighthouse CI configuration file for "${urlAlias}"`,
@@ -81,8 +94,6 @@ export async function run() {
 					} satisfies typeof lhciConfig;
 
 					await fs.writeJSON('.lighthouserc.json', config);
-
-					setOutput(`${urlAlias}-path`, outputPath);
 				},
 			);
 
