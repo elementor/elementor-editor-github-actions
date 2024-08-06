@@ -31,9 +31,6 @@ const lhciConfig = {
 			target: 'filesystem',
 			outputDir: '', // Will be filled in later.
 		},
-		assert: {
-			assertions: {}, // Will be filled in later.
-		},
 	},
 };
 
