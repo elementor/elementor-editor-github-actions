@@ -94,10 +94,10 @@ export async function run() {
 				)?.summary;
 
 				for (const [category, value] of Object.entries(summary || [])) {
-					core.setOutput(`${key}_${category}_score`, value);
+					core.setOutput(`${key}-${category}-score`, value);
 				}
 
-				core.setOutput(`${key}_path`, output);
+				core.setOutput(`${key}-path`, output);
 			});
 		}
 	} catch (e) {
