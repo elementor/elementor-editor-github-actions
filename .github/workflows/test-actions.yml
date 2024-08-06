@@ -46,7 +46,7 @@ jobs:
               uses: ./actions/run-lighthouse-tests
               with:
                   urls: |-
-                      rquth:http://localhost:8889/react-query-under-the-hood/
+                      rquth:http://localhost:8888/react-query-under-the-hood/
                   categories: |-
                       performance
 
