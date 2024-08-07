@@ -70,3 +70,4 @@ jobs:
               with:
                   name: performance-reports
                   path: ${{ steps.run-lighthouse-tests.outputs.reports-path }}
+                  retention-days: 3
