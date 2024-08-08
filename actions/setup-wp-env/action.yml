@@ -11,23 +11,18 @@ inputs:
     plugins:
         description: A comma separated list of plugins to install (e.g. `./path/to/plugin, elementor/elementor#main, https://localhost/path/to/plugin.zip`)
         required: false
-        default: ''
     themes:
         description: A comma separated list of themes to install (e.g. `./path/to/theme, elementor/hello-elementor#main, https://localhost/path/to/theme.zip`)
         required: false
-        default: ''
     active-theme:
         description: The slug of a theme to activate (e.g. `hello-elementor`)
         required: false
-        default: ''
     mappings:
         description: A list of directory mapping between your machine and the WordPress container, separated by commas or new lines (e.g. `templates:/path/to/local/templates, plugins:/path/to/local/plugins`)
         required: false
-        default: ''
     config:
         description: A list of PHP constants that'll be passed to the WordPress container, separated by commas or new lines (e.g. `WP_MEMORY_LIMIT:64M, WPLANG:en_US`)
         required: false
-        default: ''
     skip-wp-env-install:
         description: Skip installing the @wordpress/env package (for debugging purposes or using custom wp-env version)
         required: false

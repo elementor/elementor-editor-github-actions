@@ -1,0 +1,22 @@
+name: Run Lighthouse tests
+description: Run Lighthouse tests on given URLs
+
+inputs:
+    urls:
+        description: A map of URLs to test, with aliases as keys, separated by new lines (e.g. `moshe:http://localhost:8889/moshe \n haim:http://localhost:8889/haim`)
+        required: true
+    categories:
+        description: A list of categories to test, separated by new lines (e.g. `performance \n accessibility` \n `best-practices` \n `seo`)
+        required: true
+    number-of-runs:
+        description: The number of times to run the Lighthouse test on each URL
+        required: false
+        default: '3'
+    skip-lhci-install:
+        description: Skip installing the LHCI package (for debugging purposes or using custom LHCI version)
+        required: false
+        default: 'false'
+
+runs:
+    using: node20
+    main: ./dist/index.cjs
