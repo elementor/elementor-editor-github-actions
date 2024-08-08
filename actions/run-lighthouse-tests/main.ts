@@ -30,7 +30,9 @@ const lhciConfig = {
 			settings: {
 				maxWaitForLoad: 90000,
 				throttlingMethod: 'devtools',
-				onlyCategories: [] as string[], // Will be filled in later.
+				onlyCategories: [] as Array<
+					(typeof AVAILABLE_CATEGORIES)[number]
+				>, // Will be filled in later.
 			},
 		},
 		upload: {
@@ -56,7 +58,7 @@ export async function run() {
 
 		// eslint-disable-next-line @typescript-eslint/require-await
 		await core.group('Declare reports path', async () => {
-			setOutput(`reports-path`, OUTPUT_DIR);
+			setOutput('reports-path', OUTPUT_DIR);
 		});
 
 		for (const [urlAlias, url] of Object.entries(inputs.urls)) {
@@ -100,8 +102,11 @@ export async function run() {
 			await core.group(
 				`Running lighthouse-ci test on "${urlAlias}"`,
 				async () => {
-					await exec.exec('rm', ['-rf', OUTPUT_DIR]);
-					await exec.exec('rm', ['-rf', './.lighthouseci']);
+					await exec.exec('rm', [
+						'-rf',
+						OUTPUT_DIR,
+						'./.lighthouseci',
+					]);
 
 					await exec.exec('npx', [
 						'lhci',
