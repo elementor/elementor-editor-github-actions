@@ -3,7 +3,7 @@ description: Run Lighthouse tests on given URLs
 
 inputs:
     urls:
-        description: A map of URLs to test, separated by new lines (e.g. `moshe:http://localhost:8889/moshe \n haim:http://localhost:8889/haim`)
+        description: A map of URLs to test, with aliases as keys, separated by new lines (e.g. `moshe:http://localhost:8889/moshe \n haim:http://localhost:8889/haim`)
         required: true
     categories:
         description: A list of categories to test, separated by new lines (e.g. `performance \n accessibility` \n `best-practices` \n `seo`)
