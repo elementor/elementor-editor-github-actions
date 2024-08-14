@@ -65,7 +65,7 @@ export async function run() {
 			const outputPath = path.resolve(OUTPUT_DIR, urlAlias);
 
 			await core.group(
-				`Declare reports path for "${urlAlias}`,
+				`Declare reports path for "${urlAlias}"`,
 				// eslint-disable-next-line @typescript-eslint/require-await
 				async () => {
 					setOutput(`${urlAlias}-reports-path`, outputPath);
