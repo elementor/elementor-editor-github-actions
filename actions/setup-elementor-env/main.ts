@@ -85,11 +85,9 @@ export async function run() {
 					await runOnContainer({
 						container,
 						command: [
-							'wp',
-							'--user=admin',
-							'media',
-							'import',
-							`${mediaDir}/*`,
+							'bash',
+							'-c',
+							`for mediafile in \\$(ls -1 elementor-media); do wp media import ${mediaDir}/\\"\\$mediafile\\"; done`,
 						],
 						error: `Failed to import media: ${mediaDir}`,
 					});
