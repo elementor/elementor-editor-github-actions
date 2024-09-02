@@ -89,7 +89,7 @@ export async function run() {
 							'--user=admin',
 							'media',
 							'import',
-							`--path=${mediaDir}`,
+							mediaDir,
 						],
 						error: `Failed to import media: ${mediaDir}`,
 					});
