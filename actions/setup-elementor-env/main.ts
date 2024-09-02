@@ -87,7 +87,7 @@ export async function run() {
 						command: [
 							'bash',
 							'-c',
-							`for mediafile in \\$\\(ls -1 ${mediaDir}\\); do wp media import ${mediaDir}/"$mediafile"; done`,
+							`for mediafile in $(ls -1 ${mediaDir}); do wp media import ${mediaDir}/"$mediafile"; done`,
 						],
 						error: `Failed to import media: ${mediaDir}`,
 					});
