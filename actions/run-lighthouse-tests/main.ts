@@ -124,14 +124,37 @@ export async function run() {
 						inputs.categories,
 					);
 
-					const summary = manifest.find(
-						(run) => run.isRepresentativeRun,
-					)?.summary;
+					const output = Object.fromEntries(
+						inputs.categories.map((category) => [
+							category,
+							{
+								median: null as number | null,
+								all: [] as number[],
+							},
+						]),
+					);
 
-					for (const [category, value] of Object.entries(
-						summary || [],
+					manifest.forEach((run) => {
+						for (const [category, score] of Object.entries(
+							run.summary,
+						)) {
+							output[category]?.all.push(score);
+
+							if (run.isRepresentativeRun && output[category]) {
+								output[category].median = score;
+							}
+						}
+					});
+
+					for (const [category, { median, all }] of Object.entries(
+						output,
 					)) {
-						setOutput(`${urlAlias}-${category}-score`, value);
+						setOutput(`${urlAlias}-${category}-scores`, all);
+
+						setOutput(
+							`${urlAlias}-${category}-median-score`,
+							median,
+						);
 					}
 				},
 			);
