@@ -55,7 +55,7 @@ jobs:
             - name: Check if score meets the threshold
               uses: actions/github-script@v7
               env:
-                  PERFORMANCE_SCORE: ${{ steps.run-lighthouse-tests.outputs.rquth-performance-score }}
+                  PERFORMANCE_SCORE: ${{ steps.run-lighthouse-tests.outputs.rquth-performance-median-score }}
                   THRESHOLD: 0.70
               with:
                   script: |

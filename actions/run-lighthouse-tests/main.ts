@@ -124,15 +124,21 @@ export async function run() {
 						inputs.categories,
 					);
 
-					const summary = manifest.find(
-						(run) => run.isRepresentativeRun,
-					)?.summary;
+					const outputs = collectManifestOutputs(
+						manifest,
+						inputs.categories,
+					);
 
-					for (const [category, value] of Object.entries(
-						summary || [],
-					)) {
-						setOutput(`${urlAlias}-${category}-score`, value);
-					}
+					Object.entries(outputs).forEach(
+						([category, { all, median }]) => {
+							setOutput(`${urlAlias}-${category}-scores`, all);
+
+							setOutput(
+								`${urlAlias}-${category}-median-score`,
+								median,
+							);
+						},
+					);
 				},
 			);
 		}
@@ -190,4 +196,33 @@ async function parseManifest(path: string, categories: string[]) {
 			}),
 		)
 		.parse(content);
+}
+
+function collectManifestOutputs(
+	manifest: Awaited<ReturnType<typeof parseManifest>>,
+	categories: Awaited<ReturnType<typeof parseInputs>>['categories'],
+) {
+	const outputs = Object.fromEntries(
+		categories.map<[string, { median: number | null; all: number[] }]>(
+			(category) => [
+				category,
+				{
+					median: null,
+					all: [],
+				},
+			],
+		),
+	);
+
+	manifest.forEach((run) => {
+		Object.entries(run.summary).forEach(([category, score]) => {
+			outputs[category]?.all.push(score);
+
+			if (run.isRepresentativeRun && outputs[category]) {
+				outputs[category].median = score;
+			}
+		});
+	});
+
+	return outputs;
 }
