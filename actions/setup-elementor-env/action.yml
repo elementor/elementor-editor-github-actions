@@ -9,6 +9,9 @@ inputs:
     templates:
         required: false
         description: Paths to the Elementor templates directory, separated by new lines (e.g. `./path/to/elementor-templates \n ./another/path/to/elementor-templates`)
+    media:
+        required: false
+        description: Paths to the Elementor media directory, separated by new lines (e.g. `./path/to/elementor-media \n ./another/path/to/elementor-media`)
     experiments:
         required: false
         description: Elementor experiments to enable or disable, separated by new lines (e.g. `pages_panel:true \n editor_v2:false \n e_nested_atomic_repeaters:false`)

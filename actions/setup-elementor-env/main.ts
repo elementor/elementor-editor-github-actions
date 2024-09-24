@@ -5,7 +5,7 @@ import { getArrayInput, getMapInput, getStringInput } from '../inputs';
 
 export async function run() {
 	try {
-		const { container, experiments, templates } = await core.group(
+		const { container, experiments, templates, media } = await core.group(
 			'Parsing inputs',
 			parseInputs,
 		);
@@ -79,6 +79,22 @@ export async function run() {
 			});
 		}
 
+		if (media.length > 0) {
+			await core.group('Importing media', async () => {
+				for (const mediaDir of media) {
+					await runOnContainer({
+						container,
+						command: [
+							'bash',
+							'-c',
+							`for mediafile in $(ls -1 ${mediaDir}); do wp media import ${mediaDir}/"$mediafile"; done`,
+						],
+						error: `Failed to import media: ${mediaDir}`,
+					});
+				}
+			});
+		}
+
 		await core.group('Clearing Elementor and WP Cache', async () => {
 			await runOnContainer({
 				container,
@@ -106,6 +122,7 @@ async function parseInputs() {
 			.object({
 				env: z.union([z.literal('development'), z.literal('testing')]),
 				templates: z.array(z.string().regex(/^[a-z0-9-_./]+$/)),
+				media: z.array(z.string().regex(/^[a-z0-9-_./]+$/)),
 				experiments: z.record(
 					z.string().regex(/^[a-z0-9-_]+$/),
 					z.union([z.literal('true'), z.literal('false')]),
@@ -114,6 +131,7 @@ async function parseInputs() {
 			.parse({
 				env: getStringInput('env'),
 				templates: getArrayInput('templates'),
+				media: getArrayInput('media'),
 				experiments: getMapInput('experiments'),
 			});
 
@@ -125,6 +143,7 @@ async function parseInputs() {
 					? ('cli' as const)
 					: ('tests-cli' as const),
 			templates: parsed.templates,
+			media: parsed.media,
 			experiments: {
 				on: experimentsEntries
 					.filter(([, value]) => value === 'true')
