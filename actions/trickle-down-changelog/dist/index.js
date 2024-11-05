@@ -30,7 +30,7 @@ async function main() {
 	const currentRef = _actions_github__WEBPACK_IMPORTED_MODULE_1__.context.ref.replace("refs/heads/", "");
 
 	// we only care about merges to beta/ga branches
-	if (!semver__WEBPACK_IMPORTED_MODULE_2__.parse(currentRef) && !semver__WEBPACK_IMPORTED_MODULE_2__.parse(currentRef))
+	if (!semver__WEBPACK_IMPORTED_MODULE_2__.parse(currentRef) && !semver__WEBPACK_IMPORTED_MODULE_2__.parse(currentRef + ".0"))
 		return;
 
 	const commitInfo = await octokit.request("GET /repos/{owner}/{repo}/commits/{sha}", {
