@@ -1,0 +1,10 @@
+name: 'Trickle down changelog action'
+description: 'Create PRs for changelog changes'
+inputs:
+  token:
+    description: 'GitHub token'
+    required: true
+
+runs:
+  using: 'node20'
+  main: 'dist/index.js'
