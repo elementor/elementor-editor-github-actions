@@ -42,8 +42,7 @@ async function main() {
 
 	const gitBranches = branches.data.filter((branch) => {
 		const toSemver = semver.parse(branch.name + ".0");
-		if (toSemver)
-			return semver.gt(toSemver.version, oldest);
+		return toSemver && semver.gt(toSemver.version, oldest);
 	});
 	const branchesToPRTo = gitBranches.map((branch) => branch.name);
 
@@ -116,4 +115,3 @@ function getVersions(diff) {
 }
 
 await main();
-
