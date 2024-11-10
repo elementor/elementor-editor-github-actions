@@ -1,17 +1,17 @@
 {
-  "name": "trickle-down-changelog",
-  "version": "1.0.0",
-  "main": "index.js",
-  "scripts": {
-    "build": "ncc build --target es6 index.js"
-  },
-  "author": "github.com/asafdl",
-  "license": "ISC",
-  "description": "",
-  "dependencies": {
-    "@actions/core": "^1.11.1",
-    "@actions/exec": "^1.1.1",
-    "@actions/github": "^6.0.0",
-    "semver": "^7.6.3"
-  }
+	"name": "trickle-down-changelog",
+	"version": "1.0.0",
+	"main": "index.js",
+	"scripts": {
+		"build": "ncc build --target es6 index.js"
+	},
+	"author": "github.com/asafdl",
+	"license": "ISC",
+	"description": "",
+	"dependencies": {
+		"@actions/core": "^1.11.1",
+		"@actions/exec": "^1.1.1",
+		"@actions/github": "^6.0.0",
+		"semver": "^7.6.3"
+	}
 }

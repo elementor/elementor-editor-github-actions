@@ -23,76 +23,93 @@ __nccwpck_require__.r(__webpack_exports__);
 
 
 
-const octokit = _actions_github__WEBPACK_IMPORTED_MODULE_1__.getOctokit(_actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput("token"));
+const octokit = _actions_github__WEBPACK_IMPORTED_MODULE_1__.getOctokit(_actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('token'));
 const simpleSemverRegex = /\d+\.\d+\.\d+(-.*)?/;
-const internalBotEmail = "internal@elementor.com";
+const internalBotEmail = 'internal@elementor.com';
 async function main() {
-	const currentRef = _actions_github__WEBPACK_IMPORTED_MODULE_1__.context.ref.replace("refs/heads/", "");
+	const currentRef = _actions_github__WEBPACK_IMPORTED_MODULE_1__.context.ref.replace('refs/heads/', '');
 
 	// we only care about merges to beta/ga branches
-	if (!semver__WEBPACK_IMPORTED_MODULE_2__.parse(currentRef) && !semver__WEBPACK_IMPORTED_MODULE_2__.parse(currentRef + ".0"))
-		return;
+	if (!semver__WEBPACK_IMPORTED_MODULE_2__.parse(currentRef) && !semver__WEBPACK_IMPORTED_MODULE_2__.parse(currentRef + '.0')) return;
 
-	const commitInfo = await octokit.request("GET /repos/{owner}/{repo}/commits/{sha}", {
-		owner: _actions_github__WEBPACK_IMPORTED_MODULE_1__.context.repo.owner,
-		repo: _actions_github__WEBPACK_IMPORTED_MODULE_1__.context.repo.repo,
-		sha: _actions_github__WEBPACK_IMPORTED_MODULE_1__.context.sha,
-	});
+	const commitInfo = await octokit.request(
+		'GET /repos/{owner}/{repo}/commits/{sha}',
+		{
+			owner: _actions_github__WEBPACK_IMPORTED_MODULE_1__.context.repo.owner,
+			repo: _actions_github__WEBPACK_IMPORTED_MODULE_1__.context.repo.repo,
+			sha: _actions_github__WEBPACK_IMPORTED_MODULE_1__.context.sha,
+		},
+	);
 
 	// if pr opened with the internal bot, no need to continue
-	if (commitInfo.data.commit.author.email === internalBotEmail)
-		return;
+	if (commitInfo.data.commit.author.email === internalBotEmail) return;
 
-	const diff = await octokit.request("GET /repos/{owner}/{repo}/commits/{sha}", {
-		owner: _actions_github__WEBPACK_IMPORTED_MODULE_1__.context.repo.owner,
-		repo: _actions_github__WEBPACK_IMPORTED_MODULE_1__.context.repo.repo,
-		sha: _actions_github__WEBPACK_IMPORTED_MODULE_1__.context.sha,
-		headers: {
-			accept: "application/vnd.github.diff"
-		}
-	});
+	const diff = await octokit.request(
+		'GET /repos/{owner}/{repo}/commits/{sha}',
+		{
+			owner: _actions_github__WEBPACK_IMPORTED_MODULE_1__.context.repo.owner,
+			repo: _actions_github__WEBPACK_IMPORTED_MODULE_1__.context.repo.repo,
+			sha: _actions_github__WEBPACK_IMPORTED_MODULE_1__.context.sha,
+			headers: {
+				accept: 'application/vnd.github.diff',
+			},
+		},
+	);
 	const changedVersions = getVersions(diff);
 	const oldest = getOldestVersionFromChanged(changedVersions);
 
-	const branches = await octokit.request("GET /repos/{owner}/{repo}/branches", {
-		owner: _actions_github__WEBPACK_IMPORTED_MODULE_1__.context.repo.owner,
-		repo: _actions_github__WEBPACK_IMPORTED_MODULE_1__.context.repo.repo,
-	});
+	const branches = await octokit.request(
+		'GET /repos/{owner}/{repo}/branches',
+		{
+			owner: _actions_github__WEBPACK_IMPORTED_MODULE_1__.context.repo.owner,
+			repo: _actions_github__WEBPACK_IMPORTED_MODULE_1__.context.repo.repo,
+		},
+	);
 
 	const gitBranches = branches.data.filter((branch) => {
-		const toSemver = semver__WEBPACK_IMPORTED_MODULE_2__.parse(branch.name + ".0");
+		const toSemver = semver__WEBPACK_IMPORTED_MODULE_2__.parse(branch.name + '.0');
 		return toSemver && semver__WEBPACK_IMPORTED_MODULE_2__.gt(toSemver.version, oldest);
 	});
 	const branchesToPRTo = gitBranches.map((branch) => branch.name);
 
 	// always need to pr to main
-	branchesToPRTo.push("main");
+	branchesToPRTo.push('main');
 
-	console.log(`branches to pr: ${branchesToPRTo}`)
-	const changelog = await fs_promises__WEBPACK_IMPORTED_MODULE_4__.readFile("changelog.txt");
+	console.log(`branches to pr: ${branchesToPRTo}`);
+	const changelog = await fs_promises__WEBPACK_IMPORTED_MODULE_4__.readFile('changelog.txt');
 	let readmeContent = undefined;
-	if (_actions_github__WEBPACK_IMPORTED_MODULE_1__.context.repo.repo === "elementor") {
-		readmeContent = await fs_promises__WEBPACK_IMPORTED_MODULE_4__.readFile("readme.txt");
+	if (_actions_github__WEBPACK_IMPORTED_MODULE_1__.context.repo.repo === 'elementor') {
+		readmeContent = await fs_promises__WEBPACK_IMPORTED_MODULE_4__.readFile('readme.txt');
 	}
 
-	for (const branch of branchesToPRTo){
-		await createPRWithChangesOnChangelog(currentRef, branch, changelog, readmeContent);
+	for (const branch of branchesToPRTo) {
+		await createPRWithChangesOnChangelog(
+			currentRef,
+			branch,
+			changelog,
+			readmeContent,
+		);
 	}
 }
 
-async function createPRWithChangesOnChangelog(sourceBranch, targetBranch, changelogContent, readmeContent = undefined) {
+async function createPRWithChangesOnChangelog(
+	sourceBranch,
+	targetBranch,
+	changelogContent,
+	readmeContent = undefined,
+) {
 	const PRBranchName = `changelog-${sourceBranch}-to-${targetBranch}`;
 	const PRMessage = `Internal: Changelog v${sourceBranch} to ${targetBranch} (automatic)`;
-	await _actions_exec__WEBPACK_IMPORTED_MODULE_3__.exec(`git fetch --all`)
+	await _actions_exec__WEBPACK_IMPORTED_MODULE_3__.exec(`git fetch --all`);
 	await _actions_exec__WEBPACK_IMPORTED_MODULE_3__.exec(`git checkout ${targetBranch}`);
 	await _actions_exec__WEBPACK_IMPORTED_MODULE_3__.exec(`git pull`);
 	await _actions_exec__WEBPACK_IMPORTED_MODULE_3__.exec(`git config user.name "elementor internal"`);
 	await _actions_exec__WEBPACK_IMPORTED_MODULE_3__.exec(`git config user.email ${internalBotEmail}`);
 	await _actions_exec__WEBPACK_IMPORTED_MODULE_3__.exec(`git reset --hard origin/${targetBranch}`);
 	if (readmeContent) {
-		await fs_promises__WEBPACK_IMPORTED_MODULE_4__.writeFile("readme.txt", readmeContent)
+		await fs_promises__WEBPACK_IMPORTED_MODULE_4__.writeFile('readme.txt', readmeContent);
 	}
-	await fs_promises__WEBPACK_IMPORTED_MODULE_4__.writeFile("changelog.txt", changelogContent);
+	await fs_promises__WEBPACK_IMPORTED_MODULE_4__.writeFile('changelog.txt', changelogContent);
 	await _actions_exec__WEBPACK_IMPORTED_MODULE_3__.exec(`git checkout -b ${PRBranchName}`);
 	await _actions_exec__WEBPACK_IMPORTED_MODULE_3__.exec(`git add changelog.txt readme.txt`);
 	await _actions_exec__WEBPACK_IMPORTED_MODULE_3__.exec(`git commit -m "${PRMessage}"`);
@@ -103,12 +120,12 @@ async function createPRWithChangesOnChangelog(sourceBranch, targetBranch, change
 		title: PRMessage,
 		head: PRBranchName,
 		base: targetBranch,
-	})
+	});
 }
 
 function getOldestVersionFromChanged(changedVersions) {
 	let min = changedVersions[0];
-	for (const version of changedVersions){
+	for (const version of changedVersions) {
 		if (semver__WEBPACK_IMPORTED_MODULE_2__.lt(version, min)) {
 			min = version;
 		}
@@ -116,18 +133,15 @@ function getOldestVersionFromChanged(changedVersions) {
 	return min;
 }
 
-
 function getVersions(diff) {
-	const parsedDiff = diff.data.split("\n");
+	const parsedDiff = diff.data.split('\n');
 	const changedVersions = [];
 	let match;
 	for (const line of parsedDiff) {
-		if (!line.startsWith("+"))
-			continue;
-		if (line.startsWith("+#")) {
+		if (!line.startsWith('+')) continue;
+		if (line.startsWith('+#')) {
 			match = simpleSemverRegex.exec(line);
-			if (match.length > 0)
-				changedVersions.push(match[0]);
+			if (match.length > 0) changedVersions.push(match[0]);
 		}
 	}
 	return changedVersions;
