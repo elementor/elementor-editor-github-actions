@@ -121,11 +121,17 @@ function getVersions(diff) {
 	for (const line of parsedDiff) {
 		if (!line.startsWith('+')) continue;
 		if (line.startsWith('+#')) {
-			match = simpleSemverRegex.exec(line);
-			if (match.length > 0) changedVersions.push(match[0]);
+			match = getVersionFromLine(line);
+			if (match) changedVersions.push(match[0]);
 		}
 	}
 	return changedVersions;
+}
+
+function getVersionFromLine(line) {
+	const match = simpleSemverRegex.exec(line);
+	if (match.length > 0) return match[0];
+	return undefined;
 }
 
 await main();
