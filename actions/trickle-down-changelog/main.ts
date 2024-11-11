@@ -7,7 +7,7 @@ import * as fs from 'fs/promises';
 const octokit = github.getOctokit(core.getInput('token'));
 const simpleSemverRegex = /\d+\.\d+\.\d+(-.*)?/;
 const internalBotEmail = 'internal@elementor.com';
-async function main() {
+export async function run() {
 	const currentRef = github.context.ref.replace('refs/heads/', '');
 
 	// we only care about merges to beta/ga branches
@@ -23,6 +23,7 @@ async function main() {
 	);
 
 	// if pr opened with the internal bot, no need to continue
+	// eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
 	if (commitInfo.data.commit.author.email === internalBotEmail) return;
 
 	const diff = await octokit.request(
@@ -36,8 +37,12 @@ async function main() {
 			},
 		},
 	);
-	const changedVersions = getVersions(diff);
+
+	if (!diff.data) return;
+
+	const changedVersions = getVersions(diff.data as string);
 	const oldest = getOldestVersionFromChanged(changedVersions);
+	if (!oldest) return;
 
 	const branches = await octokit.request(
 		'GET /repos/{owner}/{repo}/branches',
@@ -56,7 +61,6 @@ async function main() {
 	// always need to pr to main
 	branchesToPRTo.push('main');
 
-	console.log(`branches to pr: ${branchesToPRTo}`);
 	const changelog = await fs.readFile('changelog.txt');
 	let readmeContent = undefined;
 	if (github.context.repo.repo === 'elementor') {
@@ -74,10 +78,10 @@ async function main() {
 }
 
 async function createPRWithChangesOnChangelog(
-	sourceBranch,
-	targetBranch,
-	changelogContent,
-	readmeContent = undefined,
+	sourceBranch: string,
+	targetBranch: string,
+	changelogContent: Buffer,
+	readmeContent?: Buffer,
 ) {
 	const PRBranchName = `changelog-${sourceBranch}-to-${targetBranch}`;
 	const PRMessage = `Internal: Changelog v${sourceBranch} to ${targetBranch} (automatic)`;
@@ -104,34 +108,33 @@ async function createPRWithChangesOnChangelog(
 	});
 }
 
-function getOldestVersionFromChanged(changedVersions) {
+function getOldestVersionFromChanged(changedVersions: string[]) {
+	if (changedVersions.length === 0) return;
 	let min = changedVersions[0];
 	for (const version of changedVersions) {
-		if (semver.lt(version, min)) {
+		if (semver.lt(version, min as string)) {
 			min = version;
 		}
 	}
 	return min;
 }
 
-function getVersions(diff) {
-	const parsedDiff = diff.data.split('\n');
-	const changedVersions = [];
+function getVersions(diff: string): string[] {
+	const parsedDiff = diff.split('\n');
+	const changedVersions: string[] = [];
 	let match;
 	for (const line of parsedDiff) {
 		if (!line.startsWith('+')) continue;
 		if (line.startsWith('+#')) {
 			match = getVersionFromLine(line);
-			if (match) changedVersions.push(match[0]);
+			if (match) changedVersions.push(match);
 		}
 	}
 	return changedVersions;
 }
 
-function getVersionFromLine(line) {
+function getVersionFromLine(line: string): string|undefined {
 	const match = simpleSemverRegex.exec(line);
-	if (match.length > 0) return match[0];
+	if (match && match.length > 0) return match[0];
 	return undefined;
 }
-
-await main();

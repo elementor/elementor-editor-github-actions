@@ -3,7 +3,7 @@
 	"version": "1.0.0",
 	"main": "index.js",
 	"scripts": {
-		"build": "ncc build --target es6 index.js"
+		"build": "tsup"
 	},
 	"author": "github.com/asafdl",
 	"license": "ISC",
@@ -13,5 +13,14 @@
 		"@actions/exec": "^1.1.1",
 		"@actions/github": "^6.0.0",
 		"semver": "^7.6.3"
+	},
+	"devDependencies": {
+		"@types/semver": "^7.5.8"
+	},
+	"tsup": {
+		"format": ["cjs"],
+		"minify": true,
+		"entryPoints": ["index.ts"],
+		"platform": "node"
 	}
 }

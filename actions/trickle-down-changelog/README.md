@@ -29,6 +29,6 @@ jobs:
 
 ## Build
 
-This action uses `ncc` to build the modules inside the javascript file, so no need to install any dependencies, **make sure to build before merging**.
+This action uses `tsup` to build the modules inside the javascript file, so no need to install any dependencies, **make sure to build before merging**.
 
 run `npm run build` to build the action. The build artifacts will be stored in the `dist/` directory.
