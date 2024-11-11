@@ -3,7 +3,7 @@
 	"version": "1.0.0",
 	"main": "index.js",
 	"scripts": {
-		"build": "tsup index.ts --config ./tsup.config.ts"
+		"build": "ncc build --target es6 index.ts"
 	},
 	"author": "github.com/asafdl",
 	"license": "ISC",
