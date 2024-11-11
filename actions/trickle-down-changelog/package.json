@@ -3,7 +3,7 @@
 	"version": "1.0.0",
 	"main": "index.js",
 	"scripts": {
-		"build": "tsup"
+		"build": "tsup index.ts --config ./tsup.config.ts"
 	},
 	"author": "github.com/asafdl",
 	"license": "ISC",
@@ -16,11 +16,5 @@
 	},
 	"devDependencies": {
 		"@types/semver": "^7.5.8"
-	},
-	"tsup": {
-		"format": ["cjs"],
-		"minify": true,
-		"entryPoints": ["index.ts"],
-		"platform": "node"
 	}
 }

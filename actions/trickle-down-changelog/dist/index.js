@@ -1,2 +1,142 @@
-"use strict";var $=Object.create;var x=Object.defineProperty;var F=Object.getOwnPropertyDescriptor;var R=Object.getOwnPropertyNames;var T=Object.getPrototypeOf,k=Object.prototype.hasOwnProperty;var P=(t,e,o,i)=>{if(e&&typeof e=="object"||typeof e=="function")for(let r of R(e))!k.call(t,r)&&r!==o&&x(t,r,{get:()=>e[r],enumerable:!(i=F(e,r))||i.enumerable});return t};var f=(t,e,o)=>(o=t!=null?$(T(t)):{},P(e||!t||!t.__esModule?x(o,"default",{value:t,enumerable:!0}):o,t));var w=f(require("@actions/core")),n=f(require("@actions/github")),c=f(require("semver")),a=f(require("@actions/exec")),s=f(require("fs/promises")),m=n.getOctokit(w.getInput("token")),q=/\d+\.\d+\.\d+(-.*)?/,d="internal@elementor.com";async function b(){let t=n.context.ref.replace("refs/heads/","");if((await m.request("GET /repos/{owner}/{repo}/commits/{sha}",{owner:n.context.repo.owner,repo:n.context.repo.repo,sha:n.context.sha})).data.commit.author.email===d)return;let o=await m.request("GET /repos/{owner}/{repo}/commits/{sha}",{owner:n.context.repo.owner,repo:n.context.repo.repo,sha:n.context.sha,headers:{accept:"application/vnd.github.diff"}});if(!o.data)return;let i=I(o.data),r=E(i);if(!r)return;let h=(await m.request("GET /repos/{owner}/{repo}/branches",{owner:n.context.repo.owner,repo:n.context.repo.repo})).data.filter(g=>{let l=c.parse(g.name+".0");return l&&c.gt(l.version,r)}).map(g=>g.name);h.push("main");let v=await s.readFile("changelog.txt"),p;n.context.repo.repo==="elementor"&&(p=await s.readFile("readme.txt"));for(let g of h)await C(t,g,v,p)}async function C(t,e,o,i){let r=`changelog-${t}-to-${e}`,u=`Internal: Changelog v${t} to ${e} (automatic)`;await a.exec("git fetch --all"),await a.exec(`git checkout ${e}`),await a.exec("git pull"),await a.exec('git config user.name "elementor internal"'),await a.exec(`git config user.email ${d}`),await a.exec(`git reset --hard origin/${e}`),i&&await s.writeFile("readme.txt",i),await s.writeFile("changelog.txt",o),await a.exec(`git checkout -b ${r}`),await a.exec("git add changelog.txt readme.txt"),await a.exec(`git commit -m "${u}"`),await a.exec(`git push --set-upstream origin ${r}`),await m.request("POST /repos/{owner}/{repo}/pulls",{owner:n.context.repo.owner,repo:n.context.repo.repo,title:u,head:r,base:e})}function E(t){if(t.length===0)return;let e=t[0];for(let o of t)c.lt(o,e)&&(e=o);return e}function I(t){let e=t.split(`
-`),o=[],i;for(let r of e)r.startsWith("+")&&r.startsWith("+#")&&(i=O(r),i&&o.push(i));return o}function O(t){let e=q.exec(t);if(e&&e.length>0)return e[0]}b();
+"use strict";
+var __create = Object.create;
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __getProtoOf = Object.getPrototypeOf;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+  // If the importer is in node compatibility mode or this is not an ESM
+  // file that has been converted to a CommonJS file using a Babel-
+  // compatible transform (i.e. "__esModule" has not been set), then set
+  // "default" to the CommonJS "module.exports" for node compatibility.
+  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+  mod
+));
+
+// main.ts
+var core = __toESM(require("@actions/core"));
+var github = __toESM(require("@actions/github"));
+var semver = __toESM(require("semver"));
+var exec = __toESM(require("@actions/exec"));
+var fs = __toESM(require("fs/promises"));
+var octokit = github.getOctokit(core.getInput("token"));
+var simpleSemverRegex = /\d+\.\d+\.\d+(-.*)?/;
+var internalBotEmail = "internal@elementor.com";
+async function run() {
+  const currentRef = github.context.ref.replace("refs/heads/", "");
+  const commitInfo = await octokit.request(
+    "GET /repos/{owner}/{repo}/commits/{sha}",
+    {
+      owner: github.context.repo.owner,
+      repo: github.context.repo.repo,
+      sha: github.context.sha
+    }
+  );
+  if (commitInfo.data.commit.author.email === internalBotEmail) return;
+  const diff = await octokit.request(
+    "GET /repos/{owner}/{repo}/commits/{sha}",
+    {
+      owner: github.context.repo.owner,
+      repo: github.context.repo.repo,
+      sha: github.context.sha,
+      headers: {
+        accept: "application/vnd.github.diff"
+      }
+    }
+  );
+  if (!diff.data) return;
+  const changedVersions = getVersions(diff.data);
+  const oldest = getOldestVersionFromChanged(changedVersions);
+  if (!oldest) return;
+  const branches = await octokit.request(
+    "GET /repos/{owner}/{repo}/branches",
+    {
+      owner: github.context.repo.owner,
+      repo: github.context.repo.repo
+    }
+  );
+  const gitBranches = branches.data.filter((branch) => {
+    const toSemver = semver.parse(branch.name + ".0");
+    return toSemver && semver.gt(toSemver.version, oldest);
+  });
+  const branchesToPRTo = gitBranches.map((branch) => branch.name);
+  branchesToPRTo.push("main");
+  const changelog = await fs.readFile("changelog.txt");
+  let readmeContent = void 0;
+  if (github.context.repo.repo === "elementor") {
+    readmeContent = await fs.readFile("readme.txt");
+  }
+  for (const branch of branchesToPRTo) {
+    await createPRWithChangesOnChangelog(
+      currentRef,
+      branch,
+      changelog,
+      readmeContent
+    );
+  }
+}
+async function createPRWithChangesOnChangelog(sourceBranch, targetBranch, changelogContent, readmeContent) {
+  const PRBranchName = `changelog-${sourceBranch}-to-${targetBranch}`;
+  const PRMessage = `Internal: Changelog v${sourceBranch} to ${targetBranch} (automatic)`;
+  await exec.exec(`git fetch --all`);
+  await exec.exec(`git checkout ${targetBranch}`);
+  await exec.exec(`git pull`);
+  await exec.exec(`git config user.name "elementor internal"`);
+  await exec.exec(`git config user.email ${internalBotEmail}`);
+  await exec.exec(`git reset --hard origin/${targetBranch}`);
+  if (readmeContent) {
+    await fs.writeFile("readme.txt", readmeContent);
+  }
+  await fs.writeFile("changelog.txt", changelogContent);
+  await exec.exec(`git checkout -b ${PRBranchName}`);
+  await exec.exec(`git add changelog.txt readme.txt`);
+  await exec.exec(`git commit -m "${PRMessage}"`);
+  await exec.exec(`git push --set-upstream origin ${PRBranchName}`);
+  await octokit.request("POST /repos/{owner}/{repo}/pulls", {
+    owner: github.context.repo.owner,
+    repo: github.context.repo.repo,
+    title: PRMessage,
+    head: PRBranchName,
+    base: targetBranch
+  });
+}
+function getOldestVersionFromChanged(changedVersions) {
+  if (changedVersions.length === 0) return;
+  let min = changedVersions[0];
+  for (const version of changedVersions) {
+    if (semver.lt(version, min)) {
+      min = version;
+    }
+  }
+  return min;
+}
+function getVersions(diff) {
+  const parsedDiff = diff.split("\n");
+  const changedVersions = [];
+  let match;
+  for (const line of parsedDiff) {
+    if (!line.startsWith("+")) continue;
+    if (line.startsWith("+#") || line.startsWith("+=")) {
+      match = getVersionFromLine(line);
+      if (match) changedVersions.push(match);
+    }
+  }
+  return changedVersions;
+}
+function getVersionFromLine(line) {
+  const match = simpleSemverRegex.exec(line);
+  if (match && match.length > 0) return match[0];
+  return void 0;
+}
+
+// index.ts
+void run();
