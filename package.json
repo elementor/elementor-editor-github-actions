@@ -6,7 +6,8 @@
 		"build": "tsup --config ./tsup.config.ts",
 		"dev": "npm run build -- --watch",
 		"lint": "concurrently -n eslint,tsc,prettier -c magenta,blue,red \"eslint .\" \"tsc\" \"prettier . --check\"",
-		"local-action": "bash ./scripts/local-action.sh $1"
+		"local-action": "bash ./scripts/local-action.sh $1",
+		"build:ws": "npm run build --workspaces"
 	},
 	"engines": {
 		"node": ">=20.0.0",
