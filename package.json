@@ -12,6 +12,9 @@
 		"node": ">=20.0.0",
 		"npm": ">=10.0.0"
 	},
+	"workspaces": [
+		"actions/*"
+	],
 	"author": "Elementor Team",
 	"license": "GPL-3.0-or-later",
 	"private": true,
