@@ -11,7 +11,7 @@ export async function run() {
 	const currentRef = github.context.ref.replace('refs/heads/', '');
 
 	// we only care about merges to beta/ga branches
-	// if (!semver.parse(currentRef) && !semver.parse(currentRef + '.0')) return;
+	if (!semver.parse(currentRef) && !semver.parse(currentRef + '.0')) return;
 
 	const commitInfo = await octokit.request(
 		'GET /repos/{owner}/{repo}/commits/{sha}',

@@ -4,7 +4,7 @@
 	"main": "index.js",
 	"scripts": {
 		"build": "ncc build --target es6 index.ts",
-		"dev": "npx @github/local-action run . index.ts .env.example"
+		"dev": "npx @github/local-action run . index.ts .env.example",
 	},
 	"author": "github.com/asafdl",
 	"license": "ISC",
