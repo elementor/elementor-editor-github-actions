@@ -125,7 +125,7 @@ function getVersions(diff: string): string[] {
 	let match;
 	for (const line of parsedDiff) {
 		if (!line.startsWith('+')) continue;
-		if (line.startsWith('+#') || line.startsWith(('+='))) {
+		if (line.startsWith('+#') || line.startsWith('+=')) {
 			match = getVersionFromLine(line);
 			if (match) changedVersions.push(match);
 		}
@@ -133,7 +133,7 @@ function getVersions(diff: string): string[] {
 	return changedVersions;
 }
 
-function getVersionFromLine(line: string): string|undefined {
+function getVersionFromLine(line: string): string | undefined {
 	const match = simpleSemverRegex.exec(line);
 	if (match && match.length > 0) return match[0];
 	return undefined;

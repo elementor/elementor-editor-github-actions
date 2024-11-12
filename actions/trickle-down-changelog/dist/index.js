@@ -34483,7 +34483,7 @@ function getVersions(diff) {
     for (const line of parsedDiff) {
         if (!line.startsWith('+'))
             continue;
-        if (line.startsWith('+#') || line.startsWith(('+='))) {
+        if (line.startsWith('+#') || line.startsWith('+=')) {
             match = getVersionFromLine(line);
             if (match)
                 changedVersions.push(match);

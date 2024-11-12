@@ -20,7 +20,6 @@ export default tseslint.config(
 			'**/dist/**',
 			'**/node_modules/**',
 			'**/__snapshots__/**',
-			'**/*.js',
 		],
 	},
 );
