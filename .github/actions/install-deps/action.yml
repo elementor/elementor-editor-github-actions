@@ -11,6 +11,5 @@ runs:
 
         - name: Install Deps
           shell: bash
-          run: | 
-            npm ci
-#            npm ci --workspaces
+          run: |
+              npm ci
