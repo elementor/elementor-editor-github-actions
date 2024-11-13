@@ -34,13 +34,6 @@ jobs:
             - name: Run Build
               run: npm run build
 
-            - name: install deps
-              run: npm install --workspaces
-
-            - name: Run Build workspaces
-              run: |
-                  npm run build:ws
-
             - name: Require Build in PR
               run: |
                   STATUS=$(git status --porcelain)
@@ -55,7 +48,7 @@ jobs:
                   fi
 
     require-build-workspaces:
-        name: Require Build in PR
+        name: Require Build in PR - Workspaces
         runs-on: ubuntu-latest
         steps:
             - name: Checkout source code
