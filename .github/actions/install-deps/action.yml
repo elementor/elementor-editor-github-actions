@@ -13,4 +13,4 @@ runs:
           shell: bash
           run: | 
             npm ci
-            npm ci --workspaces
+#            npm ci --workspaces
