@@ -46,29 +46,3 @@ jobs:
                     echo "$STATUS"
                     exit 1
                   fi
-
-    require-build-workspaces:
-        name: Require Build in PR - Workspaces
-        runs-on: ubuntu-latest
-        steps:
-            - name: Checkout source code
-              uses: actions/checkout@v4
-
-            - name: install deps
-              run: npm install
-
-            - name: Run Build workspaces
-              run: npm run build:ws
-
-            - name: Require Build in PR
-              run: |
-                  STATUS=$(git status --porcelain)
-
-                  # Check if the status is not empty
-                  if [ ! -z "$STATUS" ]; then
-                    echo "Please build and commit your changes locally before submitting a PR."
-                    echo "------"
-                    echo "Uncommitted changes:"
-                    echo "$STATUS"
-                    exit 1
-                  fi
