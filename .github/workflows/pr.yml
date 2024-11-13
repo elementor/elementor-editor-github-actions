@@ -36,7 +36,7 @@ jobs:
 
             - name: Run Build workspaces
               run: |
-                npm ci --workspaces
+                npm i -w actions/trickle-down-changelog
                 npm run build:ws
 
             - name: Require Build in PR
