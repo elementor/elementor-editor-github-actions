@@ -34,9 +34,12 @@ jobs:
             - name: Run Build
               run: npm run build
 
+            - name: install deps
+              run: npm install --workspaces
+
             - name: Run Build workspaces
               run: |
-                npm i -w actions/trickle-down-changelog
+#                npm i -w actions/trickle-down-changelog
                 npm run build:ws
 
             - name: Require Build in PR
