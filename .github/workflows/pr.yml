@@ -35,7 +35,9 @@ jobs:
               run: npm run build
 
             - name: Run Build workspaces
-              run: npm run build:ws
+              run: |
+                npm ci --workspaces
+                npm run build:ws
 
             - name: Require Build in PR
               run: |
