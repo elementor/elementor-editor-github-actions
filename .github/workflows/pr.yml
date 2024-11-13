@@ -55,7 +55,7 @@ jobs:
               uses: actions/checkout@v4
 
             - name: install deps
-              run: npm install --workspaces
+              run: npm install
 
             - name: Run Build workspaces
               run: npm run build:ws
