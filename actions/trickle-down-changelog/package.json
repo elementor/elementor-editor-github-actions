@@ -3,7 +3,7 @@
 	"version": "1.0.0",
 	"main": "index.js",
 	"scripts": {
-		"build": "ncc build --target es6 index.ts",
+		"build": "npx ncc build --target es6 index.ts",
 		"dev": "npx @github/local-action run . index.ts .env.example"
 	},
 	"author": "github.com/asafdl",
