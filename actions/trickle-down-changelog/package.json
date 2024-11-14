@@ -1,0 +1,22 @@
+{
+	"name": "trickle-down-changelog",
+	"version": "1.0.0",
+	"main": "index.js",
+	"scripts": {
+		"build": "npx ncc build --target es6 index.ts",
+		"dev": "npx @github/local-action run . index.ts .env.example"
+	},
+	"author": "github.com/asafdl",
+	"license": "ISC",
+	"description": "",
+	"dependencies": {
+		"@actions/core": "^1.11.1",
+		"@actions/exec": "^1.1.1",
+		"@actions/github": "^6.0.0",
+		"semver": "^7.6.3"
+	},
+	"devDependencies": {
+		"@types/semver": "^7.5.8",
+		"ncc": "^0.3.6"
+	}
+}

@@ -6,12 +6,16 @@
 		"build": "tsup --config ./tsup.config.ts",
 		"dev": "npm run build -- --watch",
 		"lint": "concurrently -n eslint,tsc,prettier -c magenta,blue,red \"eslint .\" \"tsc\" \"prettier . --check\"",
-		"local-action": "bash ./scripts/local-action.sh $1"
+		"local-action": "bash ./scripts/local-action.sh $1",
+		"build:ws": "npm run build --workspaces"
 	},
 	"engines": {
 		"node": ">=20.0.0",
 		"npm": ">=10.0.0"
 	},
+	"workspaces": [
+		"actions/*"
+	],
 	"author": "Elementor Team",
 	"license": "GPL-3.0-or-later",
 	"private": true,
