@@ -34409,6 +34409,11 @@ async function run() {
     const branchesToPRTo = gitBranches.map((branch) => branch.name);
     // always need to pr to main
     branchesToPRTo.push('main');
+    // make sure we don't pr to the current branch
+    const index = branchesToPRTo.indexOf(currentRef);
+    if (index > -1) {
+        branchesToPRTo.splice(index, 1);
+    }
     const changelog = await promises_namespaceObject.readFile('changelog.txt');
     let readmeContent = undefined;
     if (github.context.repo.repo === 'elementor') {
@@ -34433,6 +34438,10 @@ async function createPRWithChangesOnChangelog(sourceBranch, targetBranch, change
     await promises_namespaceObject.writeFile('changelog.txt', changelogContent);
     await exec.exec(`git checkout -b ${PRBranchName}`);
     await exec.exec(`git add changelog.txt readme.txt`);
+    // verify that there are changes to commit
+    const status = await exec.getExecOutput('git status --porcelain');
+    if (!status.stdout)
+        return;
     await exec.exec(`git commit -m "${PRMessage}"`);
     await exec.exec(`git push --set-upstream origin ${PRBranchName}`);
     await octokit.request('POST /repos/{owner}/{repo}/pulls', {
