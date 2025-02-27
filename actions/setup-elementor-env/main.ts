@@ -1,7 +1,11 @@
 import * as core from '@actions/core';
 import * as exec from '@actions/exec';
 import { z } from 'zod';
-import { getArrayInput, getMapInput, getStringInput } from '../inputs';
+import {
+	getArrayInput,
+	getMapInput,
+	getStringInput,
+} from '@elementor-editor-github-actions/utils';
 
 export async function run() {
 	try {
@@ -55,7 +59,7 @@ export async function run() {
 						'deactivate',
 						experiments.off.join(','),
 					],
-					error: `Failed to deactivate experiments: ${experiments.on.join(', ')}`,
+					error: `Failed to deactivate experiments: ${experiments.off.join(', ')}`,
 				});
 			});
 		}

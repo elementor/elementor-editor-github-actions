@@ -18,6 +18,9 @@ jobs:
             - name: Install Dependencies
               uses: ./.github/actions/install-deps
 
+            - name: Run Build
+              run: npm run build
+
             - name: Run Lint
               run: npm run lint
 

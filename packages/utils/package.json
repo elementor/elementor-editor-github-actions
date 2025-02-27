@@ -1,0 +1,19 @@
+{
+	"name": "@elementor-editor-github-actions/utils",
+	"author": "Elementor Team",
+	"license": "GPL-3.0-or-later",
+	"main": "dist/index.js",
+	"module": "dist/index.mjs",
+	"private": true,
+	"scripts": {
+		"build": "tsup --config ./tsup.config.ts",
+		"dev": "npm run build -- --watch"
+	},
+	"dependencies": {
+		"ansi-styles": "^6.2.1",
+		"@actions/core": "^1.11.1"
+	},
+	"devDependencies": {
+		"tsup": "^8.4.0"
+	}
+}
