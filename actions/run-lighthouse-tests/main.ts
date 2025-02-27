@@ -8,8 +8,8 @@ import {
 	getBooleanInput,
 	getMapInput,
 	getNumberInput,
-} from '../inputs';
-import { setOutput } from '../outputs';
+	setOutput,
+} from '@elementor-editor-github-actions/utils';
 
 const LHCI_VERSION = '0.14.x';
 const OUTPUT_DIR = path.resolve(process.cwd(), './.lhci');

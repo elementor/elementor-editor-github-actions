@@ -1,22 +1,22 @@
 {
-	"name": "trickle-down-changelog",
+	"name": "@elementor-editor-github-actions/trickle-down-changelog",
 	"version": "1.0.0",
 	"main": "index.js",
+	"author": "Elementor Team",
+	"license": "GPL-3.0-or-later",
+	"private": true,
 	"scripts": {
-		"build": "npx ncc build --target es6 index.ts",
-		"dev": "npx @github/local-action run . index.ts .env.example"
+		"build": "tsup --config ./tsup.config.ts",
+		"dev": "npm run build -- --watch"
 	},
-	"author": "github.com/asafdl",
-	"license": "ISC",
-	"description": "",
 	"dependencies": {
 		"@actions/core": "^1.11.1",
 		"@actions/exec": "^1.1.1",
 		"@actions/github": "^6.0.0",
-		"semver": "^7.6.3"
+		"semver": "^7.7.1"
 	},
 	"devDependencies": {
 		"@types/semver": "^7.5.8",
-		"ncc": "^0.3.6"
+		"tsup": "^8.4.0"
 	}
 }

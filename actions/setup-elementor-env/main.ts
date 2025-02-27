@@ -1,7 +1,11 @@
 import * as core from '@actions/core';
 import * as exec from '@actions/exec';
 import { z } from 'zod';
-import { getArrayInput, getMapInput, getStringInput } from '../inputs';
+import {
+	getArrayInput,
+	getMapInput,
+	getStringInput,
+} from '@elementor-editor-github-actions/utils';
 
 export async function run() {
 	try {
