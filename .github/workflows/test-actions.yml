@@ -36,9 +36,8 @@ jobs:
               with:
                   env: 'testing'
                   experiments: |-
-                      editor_events:true
+                      pages_panel:true
                       editor_v2:false
-                      e_nested_atomic_repeaters:false
                   templates: |-
                       elementor-templates
 
