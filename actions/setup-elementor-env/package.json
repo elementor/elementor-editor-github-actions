@@ -1,0 +1,18 @@
+{
+	"name": "@elementor-editor-github-actions/setup-elementor-env",
+	"author": "Elementor Team",
+	"license": "GPL-3.0-or-later",
+	"private": true,
+	"scripts": {
+		"build": "tsup --config ./tsup.config.ts",
+		"dev": "npm run build -- --watch"
+	},
+	"dependencies": {
+		"@actions/core": "^1.11.1",
+		"@actions/exec": "^1.1.1",
+		"zod": "^3.24.2"
+	},
+	"devDependencies": {
+		"tsup": "^8.4.0"
+	}
+}

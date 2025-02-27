@@ -1,0 +1,19 @@
+{
+	"name": "@elementor-editor-github-actions/run-lighthouse-tests",
+	"author": "Elementor Team",
+	"license": "GPL-3.0-or-later",
+	"private": true,
+	"scripts": {
+		"build": "tsup --config ./tsup.config.ts",
+		"dev": "npm run build -- --watch"
+	},
+	"dependencies": {
+		"@actions/core": "^1.11.1",
+		"@actions/exec": "^1.1.1",
+		"fs-extra": "^11.3.0",
+		"zod": "^3.24.2"
+	},
+	"devDependencies": {
+		"tsup": "^8.4.0"
+	}
+}

@@ -14,4 +14,4 @@ inputs:
         description: Elementor experiments to enable or disable, separated by new lines (e.g. `pages_panel:true \n editor_v2:false \n e_nested_atomic_repeaters:false`)
 runs:
     using: node20
-    main: ./dist/index.cjs
+    main: ./dist/index.js
