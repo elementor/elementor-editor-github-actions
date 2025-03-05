@@ -9,6 +9,7 @@ tmp/
 .lighthouserc.json
 .turbo
 packages/**/dist
+.DS_Store
 
 *.log
 *.map
