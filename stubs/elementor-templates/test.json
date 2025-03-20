@@ -85,5 +85,5 @@
 			"elType": "container"
 		}
 	],
-	"settings": { "template": "elementor_canvas" }
+	"page_settings": { "template": "elementor_canvas" }
 }

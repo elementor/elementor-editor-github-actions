@@ -35,6 +35,7 @@ jobs:
               uses: ./actions/setup-elementor-env
               with:
                   env: 'testing'
+                  enable-svg-upload: true
                   experiments: |-
                       pages_panel:true
                       editor_v2:false

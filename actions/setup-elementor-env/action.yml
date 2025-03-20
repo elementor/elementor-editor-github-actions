@@ -6,6 +6,10 @@ inputs:
         description: Which wp-env environment to use (allowed values are `development` or `testing`)
         required: false
         default: 'testing'
+    enable-svg-upload:
+        required: false
+        description: Whether to enable SVG and JSON uploads or not
+        default: 'false'
     templates:
         required: false
         description: Paths to the Elementor templates directory, separated by new lines (e.g. `./path/to/elementor-templates \n ./another/path/to/elementor-templates`)
