@@ -56,11 +56,6 @@ export async function run() {
 			});
 		}
 
-		// eslint-disable-next-line @typescript-eslint/require-await
-		await core.group('Declare reports path', async () => {
-			setOutput('reports-path', OUTPUT_DIR);
-		});
-
 		for (const [urlAlias, url] of Object.entries(inputs.urls)) {
 			const outputPath = path.resolve(OUTPUT_DIR, urlAlias);
 
@@ -104,7 +99,7 @@ export async function run() {
 				async () => {
 					await exec.exec('rm', [
 						'-rf',
-						OUTPUT_DIR,
+						outputPath,
 						'./.lighthouseci',
 					]);
 
