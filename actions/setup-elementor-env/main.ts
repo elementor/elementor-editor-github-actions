@@ -5,14 +5,13 @@ import {
 	getArrayInput,
 	getMapInput,
 	getStringInput,
+	getBooleanInput,
 } from '@elementor-editor-github-actions/utils';
 
 export async function run() {
 	try {
-		const { container, experiments, templates } = await core.group(
-			'Parsing inputs',
-			parseInputs,
-		);
+		const { container, experiments, templates, wpOptions } =
+			await core.group('Parsing inputs', parseInputs);
 
 		await core.group('Validating wp-env installation', async () => {
 			await runOnContainer({
@@ -28,6 +27,16 @@ export async function run() {
 				command: ['wp', 'plugin', 'is-active', 'elementor'],
 				error: "Can't find an active Elementor installation. Please make sure it's installed and activated.",
 			});
+		});
+
+		await core.group('Setting WP Options', async () => {
+			for (const { key, value } of wpOptions) {
+				await runOnContainer({
+					container,
+					command: ['wp', 'option', 'update', key, value],
+					error: `Failed to set option: ${key} to ${value}`,
+				});
+			}
 		});
 
 		if (experiments.on.length > 0) {
@@ -114,11 +123,13 @@ async function parseInputs() {
 					z.string().regex(/^[a-z0-9-_]+$/),
 					z.union([z.literal('true'), z.literal('false')]),
 				),
+				enableSvgUpload: z.boolean(),
 			})
 			.parse({
 				env: getStringInput('env'),
 				templates: getArrayInput('templates'),
 				experiments: getMapInput('experiments'),
+				enableSvgUpload: getBooleanInput('enable-svg-upload'),
 			});
 
 		const experimentsEntries = Object.entries(parsed.experiments);
@@ -129,6 +140,9 @@ async function parseInputs() {
 					? ('cli' as const)
 					: ('tests-cli' as const),
 			templates: parsed.templates,
+			wpOptions: normalizeWpOptions({
+				enableSvgUpload: parsed.enableSvgUpload,
+			}),
 			experiments: {
 				on: experimentsEntries
 					.filter(([, value]) => value === 'true')
@@ -149,6 +163,22 @@ async function parseInputs() {
 
 		throw new Error(message, { cause: error });
 	}
+}
+
+function normalizeWpOptions({ enableSvgUpload }: { enableSvgUpload: boolean }) {
+	const wpOptions: {
+		key: string;
+		value: string;
+	}[] = [];
+
+	if (enableSvgUpload) {
+		wpOptions.push({
+			key: 'elementor_unfiltered_files_upload',
+			value: '1',
+		});
+	}
+
+	return wpOptions;
 }
 
 async function runOnContainer({
