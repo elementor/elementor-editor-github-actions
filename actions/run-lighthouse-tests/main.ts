@@ -104,7 +104,7 @@ export async function run() {
 				async () => {
 					await exec.exec('rm', [
 						'-rf',
-						OUTPUT_DIR,
+						outputPath,
 						'./.lighthouseci',
 					]);
 
