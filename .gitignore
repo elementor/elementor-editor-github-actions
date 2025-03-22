@@ -3,7 +3,7 @@ node_modules/
 .idea/
 .DS_Store/
 tmp/
-.lhci/
+lhci/
 .lighthouseci/
 .wp-env.json
 .lighthouserc.json
