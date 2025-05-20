@@ -1,0 +1,22 @@
+{
+	"name": "@elementor-editor-github-actions/bump-all-packages",
+	"author": "Elementor Team",
+	"license": "GPL-3.0-or-later",
+	"private": true,
+	"scripts": {
+		"build": "tsup --config ./tsup.config.ts",
+		"dev": "npm run build -- --watch"
+	},
+	"dependencies": {
+		"@elementor-editor-github-actions/utils": "*",
+		"@actions/core": "^1.11.1",
+		"@actions/exec": "^1.1.1",
+		"@actions/github": "^6.0.0",
+		"glob": "^10.3.10",
+		"zod": "^3.24.2"
+	},
+	"devDependencies": {
+		"@types/semver": "^7.5.8",
+		"tsup": "^8.4.0"
+	}
+} 
