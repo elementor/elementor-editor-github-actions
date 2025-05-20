@@ -123,7 +123,6 @@ function parseInputs() {
         const parsed = z.object({
             targetBranch: z.string(),
             targetDirectories: z.array(z.string()),
-            token: z.string(),
         }).parse({
             targetBranch: getStringInput('target-branch'),
             targetDirectories: getArrayInput('target-directories'),
