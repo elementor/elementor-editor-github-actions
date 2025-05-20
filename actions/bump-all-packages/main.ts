@@ -5,6 +5,7 @@ import { getArrayInput, getStringInput } from '@elementor-editor-github-actions/
 import * as fs from 'fs';
 import { glob } from 'glob';
 
+const packagesDir = 'packages';
 export async function run() {
     try {
         const inputs = parseInputs();
@@ -49,7 +50,7 @@ export async function run() {
 
                     for (const dir of targetDirectories) {
                         try {
-                            const packageJsonFiles = await glob(`${dir}/**/package.json`, {
+                            const packageJsonFiles = await glob(`${packagesDir}/${dir}/**/package.json`, {
                                 ignore: ['**/node_modules/**']
                             });
 
