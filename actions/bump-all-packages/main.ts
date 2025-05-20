@@ -49,7 +49,7 @@ export async function run() {
 
                     for (const dir of targetDirectories) {
                         try {
-                            const packageJsonFiles = await glob(`packages/${dir}/**/package.json`, {
+                            const packageJsonFiles = await glob(`${dir}/**/package.json`, {
                                 ignore: ['**/node_modules/**']
                             });
 
