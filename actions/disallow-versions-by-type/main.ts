@@ -13,6 +13,11 @@ export async function run() {
 
             const files = _files.split( ' ' ).filter( Boolean );
 
+            if (files.length === 0) {
+                core.setFailed('No files provided');
+                return;
+            }
+
             files.forEach( ( filePath ) => {
                 const content = fs.readFileSync( filePath, 'utf-8' );
                 
