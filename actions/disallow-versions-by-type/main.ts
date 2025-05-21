@@ -20,7 +20,7 @@ export async function run() {
                 const content = fs.readFileSync( filePath, 'utf-8' );
                 
                 for (const versionType of disallowedVersions) {
-                    const versionRegex = new RegExp(`"omerisra6-[^"]+":\\s*${versionType}`);
+                    const versionRegex = new RegExp(`"omerisra6-[^"]+"\s*:\s*"?${versionType}"?`);
                     
                     if (versionRegex.test(content)) {
                         core.info(`${versionType} version is not allowed. Found in '${filePath}'`);
