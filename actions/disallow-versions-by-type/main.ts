@@ -42,9 +42,7 @@ export async function run() {
 function parseInputs() {
     try {
         const parsed = z.object({
-            disallowedVersions: z.array(z.string().refine(val => ['minor', 'major', 'patch'].includes(val), {
-                message: "Version type must be one of: 'minor', 'major', 'patch'"
-            })),
+            disallowedVersions: z.array(z.string()),
         }).parse({
             disallowedVersions: getArrayInput('disallowed-versions'),
         });
