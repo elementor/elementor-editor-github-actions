@@ -18,6 +18,8 @@ export async function run() {
 
             filesArray.forEach( ( filePath ) => {
                 const content = fs.readFileSync( filePath, 'utf-8' );
+                core.info(`Checking '${filePath}' for disallowed versions`);
+                core.info(content);
                 
                 for (const versionType of disallowedVersions) {
                     const versionRegex = new RegExp(`"omerisra6-[^"]+"\s*:\s*"?${versionType}"?`);
