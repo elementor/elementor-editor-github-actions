@@ -12,6 +12,7 @@ export async function run() {
         const {
             targetBranch,
             targetDirectories,
+            changeType
         } = inputs;
 
         await core.group('Checking out target branch', async () => {
@@ -99,7 +100,7 @@ export async function run() {
         await core.group('Committing version changes', async () => {
             try {
                 await exec.exec('git', ['add', '.']);
-                await exec.exec('git', ['commit', '-m', 'chore: bump major version using changesets']);
+                await exec.exec('git', ['commit', '-m', `chore: bump ${changeType} version using changesets`]);
 
                 await exec.exec('git', ['push', 'origin', targetBranch]);
 
@@ -124,9 +125,11 @@ function parseInputs() {
         const parsed = z.object({
             targetBranch: z.string(),
             targetDirectories: z.array(z.string()),
+            changeType: z.enum(['major', 'minor', 'patch']),
         }).parse({
             targetBranch: getStringInput('target-branch'),
             targetDirectories: getArrayInput('target-directories'),
+            changeType: getStringInput('change-type'),
         });
 
         return parsed;

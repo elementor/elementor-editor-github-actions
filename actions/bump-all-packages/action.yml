@@ -8,6 +8,9 @@ inputs:
   target-directories:
     description: 'List of directories containing packages to bump'
     required: true
+  change-type:
+    description: 'Type of version bump to apply'
+    required: true
 runs:
   using: node20
   main: 'dist/index.js' 
