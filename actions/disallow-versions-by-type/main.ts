@@ -20,7 +20,7 @@ export async function run() {
                         if (line.includes('"@elementor/') && line.includes(':') && line.includes('major')) {
                             core.info(`${versionType} version is not allowed. Found in '${filePath}'`);
                             core.setFailed(`${versionType} version is not allowed. Found in '${filePath}'`);
-                            break;
+                            process.exit(1);
                         }
                     }
                 }
