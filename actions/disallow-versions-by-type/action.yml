@@ -1,0 +1,10 @@
+name: 'Disallow Versions by Type'
+description: 'Checks for disallowed version types in changesets'
+
+inputs:
+  disallowed-versions:
+    description: 'List of version types to disallow (major, minor, patch)'
+    required: true
+runs:
+  using: node20
+  main: 'dist/index.js'
