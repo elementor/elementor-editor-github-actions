@@ -6,19 +6,17 @@ import * as fs from 'fs';
 export async function run() {
     try {
         const inputs = parseInputs();
-        const { disallowedVersions } = inputs;
+        const { disallowedVersions, files } = inputs;
 
         await core.group('Check for disallowed versions', async () => {
-            const _files = core.getInput('files') || '';
+            const filesArray = files.split( ' ' ).filter( Boolean );
 
-            const files = _files.split( ' ' ).filter( Boolean );
-
-            if (files.length === 0) {
+            if (filesArray.length === 0) {
                 core.setFailed('No files provided');
                 return;
             }
 
-            files.forEach( ( filePath ) => {
+            filesArray.forEach( ( filePath ) => {
                 const content = fs.readFileSync( filePath, 'utf-8' );
                 
                 for (const versionType of disallowedVersions) {
@@ -48,8 +46,10 @@ function parseInputs() {
     try {
         const parsed = z.object({
             disallowedVersions: z.array(z.string()),
+            files: z.string(),
         }).parse({
             disallowedVersions: getArrayInput('disallowed-versions'),
+            files: core.getInput('files'),
         });
 
         return parsed;

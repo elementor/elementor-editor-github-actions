@@ -5,6 +5,9 @@ inputs:
   disallowed-versions:
     description: 'List of version types to disallow (major, minor, patch)'
     required: true
+  files:
+    description: 'List of files to check'
+    required: true
 runs:
   using: node20
   main: 'dist/index.js'
