@@ -6,36 +6,22 @@ import * as fs from 'fs';
 export async function run() {
     try {
         const inputs = parseInputs();
-        const { disallowedVersions, files, packagesPrefix } = inputs;
-        core.info(`Disallowed versions: ${disallowedVersions[0]} ${disallowedVersions[1]}}`);
-        core.info(`Files: ${files}`);
-        core.info(`Packages prefix: ${packagesPrefix}`);
+        const { disallowedVersions, files } = inputs;
 
         await core.group('Check for disallowed versions', async () => {
             const filesArray = files.split( ' ' ).filter( Boolean );
 
-            if (filesArray.length === 0) {
-                core.setFailed('No files provided');
-                return;
-            }
-
             filesArray.forEach( ( filePath ) => {
                 const content = fs.readFileSync( filePath, 'utf-8' );
-                core.info(`Checking '${filePath}' for disallowed versions`);
                 
-                disallowedVersions.forEach((versionType) => {
-                    const lines = content.split('\n');
-                    lines.forEach((line, index) => {
-                        core.info(line);
-                        core.info(line.includes(packagesPrefix).toString());
-                        core.info(line.includes(versionType).toString());
-                        if (line.includes(packagesPrefix) && line.includes(versionType)) {
-                            const message = `${versionType} version is not allowed. Found in '${filePath}' on line ${index + 1}`;
-                            core.info(message);
-                            core.setFailed(message);
-                        }
-                    });
-                });
+                for (const versionType of disallowedVersions) {
+                    const versionRegex = new RegExp(`"@elementor\\/.+":\\s*${versionType}`);
+                    
+                    if (versionRegex.test(content)) {
+                        core.info(`${versionType} version is not allowed. Found in '${filePath}'`);
+                        core.setFailed(`${versionType} version is not allowed. Found in '${filePath}'`);
+                    }
+                }
             });
             
             core.info('No disallowed versions found in changesets');
@@ -56,11 +42,9 @@ function parseInputs() {
         const parsed = z.object({
             disallowedVersions: z.array(z.string()),
             files: z.string(),
-            packagesPrefix: z.string(),
         }).parse({
             disallowedVersions: getArrayInput('disallowed-versions'),
             files: getStringInput('files'),
-            packagesPrefix: getStringInput('packages-prefix'),
         });
 
         return parsed;

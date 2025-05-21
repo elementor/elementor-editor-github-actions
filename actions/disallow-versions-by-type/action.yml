@@ -8,9 +8,6 @@ inputs:
   files:
     description: 'List of files to check'
     required: true
-  packages-prefix:
-    description: 'Prefix of the packages to check'
-    required: true
 runs:
   using: node20
   main: 'dist/index.js'
