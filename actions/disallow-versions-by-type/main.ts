@@ -22,12 +22,14 @@ export async function run() {
             filesArray.forEach( ( filePath ) => {
                 const content = fs.readFileSync( filePath, 'utf-8' );
                 core.info(`Checking '${filePath}' for disallowed versions`);
-                core.info(content);
                 
                 disallowedVersions.forEach((versionType) => {
                     const lines = content.split('\n');
                     lines.forEach((line, index) => {
-                        if (line.includes(`${packagesPrefix}`) && line.includes(`"${versionType}"`)) {
+                        core.info(line);
+                        core.info(line.includes(packagesPrefix).toString());
+                        core.info(line.includes(versionType).toString());
+                        if (line.includes(packagesPrefix) && line.includes(versionType)) {
                             const message = `${versionType} version is not allowed. Found in '${filePath}' on line ${index + 1}`;
                             core.info(message);
                             core.setFailed(message);
