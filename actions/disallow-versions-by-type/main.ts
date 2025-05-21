@@ -1,12 +1,12 @@
 import * as core from '@actions/core';
 import { z } from 'zod';
-import { getArrayInput } from '@elementor-editor-github-actions/utils';
+import { getArrayInput, getStringInput } from '@elementor-editor-github-actions/utils';
 import * as fs from 'fs';
 
 export async function run() {
     try {
         const inputs = parseInputs();
-        const { disallowedVersions, files } = inputs;
+        const { disallowedVersions, files, packagesPerfix } = inputs;
 
         await core.group('Check for disallowed versions', async () => {
             const filesArray = files.split( ' ' ).filter( Boolean );
@@ -21,14 +21,16 @@ export async function run() {
                 core.info(`Checking '${filePath}' for disallowed versions`);
                 core.info(content);
                 
-                for (const versionType of disallowedVersions) {
-                    const versionRegex = new RegExp(`"omerisra6-[^"]+"\s*:\s*"?${versionType}"?`);
-                    
-                    if (versionRegex.test(content)) {
-                        core.info(`${versionType} version is not allowed. Found in '${filePath}'`);
-                        core.setFailed(`${versionType} version is not allowed. Found in '${filePath}'`);
-                    }
-                }
+                disallowedVersions.forEach((versionType) => {
+                    const lines = content.split('\n');
+                    lines.forEach((line, index) => {
+                        if (line.includes(`${packagesPerfix}`) && line.includes(`"${versionType}"`)) {
+                            const message = `${versionType} version is not allowed. Found in '${filePath}' on line ${index + 1}`;
+                            core.info(message);
+                            core.setFailed(message);
+                        }
+                    });
+                });
             });
             
             core.info('No disallowed versions found in changesets');
@@ -49,9 +51,11 @@ function parseInputs() {
         const parsed = z.object({
             disallowedVersions: z.array(z.string()),
             files: z.string(),
+            packagesPerfix: z.string(),
         }).parse({
             disallowedVersions: getArrayInput('disallowed-versions'),
-            files: core.getInput('files'),
+            files: getStringInput('files'),
+            packagesPerfix: getStringInput('packages-prefix'),
         });
 
         return parsed;
