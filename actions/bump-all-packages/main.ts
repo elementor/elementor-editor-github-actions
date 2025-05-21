@@ -76,16 +76,16 @@ export async function run() {
                         }
 
                         const changesetContent = packageNames
-                            .map(name => `"${name}": major`)
+                            .map(name => `"${name}": ${changeType}`)
                             .join('\n');
 
                         const changesetFilePath = `${changesetDir}/${changesetId}.md`;
-                        const fileContent = `---\n${changesetContent}\n---\n\nBump packages major version\n`;
+                        const fileContent = `---\n${changesetContent}\n---\n\nBump packages ${changeType} version\n`;
 
                         fs.writeFileSync(changesetFilePath, fileContent);
                         core.info(`Created changeset file: ${changesetFilePath}`);
 
-                        core.info('Successfully bumped versions using changesets with major strategy');
+                        core.info(`Successfully bumped versions using changesets with ${changeType} strategy`);
                     } else {
                         core.warning('No packages found in target directories');
                     }
@@ -110,7 +110,7 @@ export async function run() {
             }
         });
 
-        core.info('✅ Successfully completed major version bump process with changesets');
+        core.info(`✅ Successfully completed ${changeType} version bump process with changesets`);
     } catch (error) {
         if (error instanceof Error) {
             core.setFailed(error.message);
