@@ -15,11 +15,13 @@ export async function run() {
                 const content = fs.readFileSync( filePath, 'utf-8' );
                 
                 for (const versionType of disallowedVersions) {
-                    const versionRegex = new RegExp(`/"@elementor\/.+":\s*major/`);
-                    
-                    if (versionRegex.test(content)) {
-                        core.info(`${versionType} version is not allowed. Found in '${filePath}'`);
-                        core.setFailed(`${versionType} version is not allowed. Found in '${filePath}'`);
+                    const lines = content.split('\n');
+                    for (const line of lines) {
+                        if (line.includes('"@elementor/') && line.includes(':') && line.includes('major')) {
+                            core.info(`${versionType} version is not allowed. Found in '${filePath}'`);
+                            core.setFailed(`${versionType} version is not allowed. Found in '${filePath}'`);
+                            break;
+                        }
                     }
                 }
             });
