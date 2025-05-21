@@ -7,6 +7,9 @@ export async function run() {
     try {
         const inputs = parseInputs();
         const { disallowedVersions, files, packagesPrefix } = inputs;
+        core.info(`Disallowed versions: ${disallowedVersions[0]} ${disallowedVersions[1]}}`);
+        core.info(`Files: ${files}`);
+        core.info(`Packages prefix: ${packagesPrefix}`);
 
         await core.group('Check for disallowed versions', async () => {
             const filesArray = files.split( ' ' ).filter( Boolean );
