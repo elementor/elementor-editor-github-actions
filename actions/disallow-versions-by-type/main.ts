@@ -6,7 +6,7 @@ import * as fs from 'fs';
 export async function run() {
     try {
         const inputs = parseInputs();
-        const { disallowedVersions, files, packagesPerfix } = inputs;
+        const { disallowedVersions, files, packagesPrefix } = inputs;
 
         await core.group('Check for disallowed versions', async () => {
             const filesArray = files.split( ' ' ).filter( Boolean );
@@ -24,7 +24,7 @@ export async function run() {
                 disallowedVersions.forEach((versionType) => {
                     const lines = content.split('\n');
                     lines.forEach((line, index) => {
-                        if (line.includes(`${packagesPerfix}`) && line.includes(`"${versionType}"`)) {
+                        if (line.includes(`${packagesPrefix}`) && line.includes(`"${versionType}"`)) {
                             const message = `${versionType} version is not allowed. Found in '${filePath}' on line ${index + 1}`;
                             core.info(message);
                             core.setFailed(message);
@@ -51,11 +51,11 @@ function parseInputs() {
         const parsed = z.object({
             disallowedVersions: z.array(z.string()),
             files: z.string(),
-            packagesPerfix: z.string(),
+            packagesPrefix: z.string(),
         }).parse({
             disallowedVersions: getArrayInput('disallowed-versions'),
             files: getStringInput('files'),
-            packagesPerfix: getStringInput('packages-prefix'),
+            packagesPrefix: getStringInput('packages-prefix'),
         });
 
         return parsed;
