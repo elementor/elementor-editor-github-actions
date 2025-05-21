@@ -9,7 +9,7 @@ export async function run() {
         const { disallowedVersions } = inputs;
 
         await core.group('Check for disallowed versions', async () => {
-            const [ , , _files ] = process.argv;
+            const _files = core.getInput('files') || '';
 
             const files = _files.split( ' ' ).filter( Boolean );
 
