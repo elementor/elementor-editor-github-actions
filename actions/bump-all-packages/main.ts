@@ -35,15 +35,6 @@ export async function run() {
             }
         });
 
-        await core.group('Installing dependencies', async () => {
-            try {
-                await exec.exec('npm', ['install']);
-                core.info('Successfully installed dependencies');
-            } catch (error) {
-                throw new Error(`Failed to install dependencies: ${error}`);
-            }
-        });
-
         await core.group('Bumping versions with changesets', async () => {
             try {
                 if (targetDirectories.length > 0) {
