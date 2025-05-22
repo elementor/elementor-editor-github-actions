@@ -1,5 +1,5 @@
 {
-	"name": "@elementor-editor-github-actions/bump-all-packages",
+	"name": "@elementor-editor-github-actions/changeset-bump-packages",
 	"author": "Elementor Team",
 	"license": "GPL-3.0-or-later",
 	"private": true,

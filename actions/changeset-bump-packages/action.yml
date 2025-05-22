@@ -1,17 +1,19 @@
-name: 'Bump All Packages'
-description: 'Bumps major version for all packages in target directories using changesets'
+name: 'Changeset Bump Packages'
+description: 'Bump packages in target directories using changesets'
 
 inputs:
   message:
     description: 'Message to commit'
     required: true
+
   target-directories:
     description: 'List of directories containing packages to bump'
     required: true
+
   change-type:
     description: 'Type of version bump to apply'
     required: true
+
 runs:
   using: node20
   main: 'dist/index.js' 
-  

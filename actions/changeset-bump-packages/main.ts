@@ -5,7 +5,6 @@ import { getArrayInput, getStringInput } from '@elementor-editor-github-actions/
 import * as fs from 'fs';
 import { glob } from 'glob';
 
-const packagesDir = 'packages';
 export async function run() {
     try {
         const inputs = parseInputs();
@@ -15,14 +14,18 @@ export async function run() {
             message
         } = inputs;
 
-        await core.group('Configuring git user', async () => {
+        await core.group('Validating git user configuration', async () => {
             try {
-                await exec.exec('git', ['config', 'user.name', 'GitHub Actions']);
-                await exec.exec('git', ['config', 'user.email', 'github-actions@github.com']);
+                const userName = await exec.getExecOutput('git', ['config', 'user.name']);
+                const userEmail = await exec.getExecOutput('git', ['config', 'user.email']);
 
-                core.info('Git user configured');
+                if (!userName.stdout.trim() || !userEmail.stdout.trim()) {
+                    throw new Error('Git user is not configured properly');
+                }
+
+                core.info('Git user is properly configured');
             } catch (error) {
-                throw new Error(`Failed to configure git user: ${error}`);
+                throw new Error(`Failed to validate git user configuration: ${error}`);
             }
         });
 
@@ -33,9 +36,7 @@ export async function run() {
 
                     for (const dir of targetDirectories) {
                         try {
-                            const packageJsonFiles = await glob(`${packagesDir}/${dir}/**/package.json`, {
-                                ignore: ['**/node_modules/**']
-                            });
+                            const packageJsonFiles = await glob(`${dir}/*/package.json`);
 
                             for (const packageJsonPath of packageJsonFiles) {
                                 const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
@@ -50,7 +51,11 @@ export async function run() {
                     if (packageNames.length > 0) {
                         core.info(`Found ${packageNames.length} packages to bump in target directories`);
 
-                        const changesetId = Math.random().toString(36).substring(2, 12);
+                        await exec.exec('npx', ['changeset', 'add', '--empty']);
+
+                        const fileNames = await exec.getExecOutput('ls', ['-t', '.changeset']);
+
+                        const changesetId = fileNames.stdout.trim().split('\n')[0];
                         const changesetDir = '.changeset';
 
                         if (!fs.existsSync(changesetDir)) {
@@ -81,7 +86,7 @@ export async function run() {
 
         await core.group('Committing version changes', async () => {
             try {
-                await exec.exec('git', ['add', '.']);
+                await exec.exec('git', ['add', '.changeset']);
                 await exec.exec('git', ['commit', '-m', message]);
 
                 await exec.exec('git', ['push']);
