@@ -69,6 +69,9 @@ export async function run() {
                         const changesetFilePath = `${changesetDir}/${changesetId}.md`;
                         const fileContent = `---\n${changesetContent}\n---\n\n${message}\n`;
 
+                        core.info(`Writing changeset file: ${changesetFilePath}`);
+                        core.info(fileContent);
+
                         fs.writeFileSync(changesetFilePath, fileContent);
                         core.info(`Created changeset file: ${changesetFilePath}`);
 
