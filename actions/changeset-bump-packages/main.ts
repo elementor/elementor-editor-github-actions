@@ -86,7 +86,7 @@ export async function run() {
 
         await core.group('Committing version changes', async () => {
             try {
-                await exec.exec('git', ['add', '.changeset']);
+                await exec.exec('git', ['add', '.']);
                 await exec.exec('git', ['commit', '-m', message]);
 
                 await exec.exec('git', ['push']);
