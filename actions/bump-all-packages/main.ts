@@ -10,19 +10,10 @@ export async function run() {
     try {
         const inputs = parseInputs();
         const {
-            targetBranch,
             targetDirectories,
-            changeType
+            changeType,
+            message
         } = inputs;
-
-        await core.group('Checking out target branch', async () => {
-            try {
-                await exec.exec('git', ['checkout', targetBranch]);
-                core.info(`Successfully checked out branch: ${targetBranch}`);
-            } catch (error) {
-                throw new Error(`Failed to checkout branch ${targetBranch}: ${error}`);
-            }
-        });
 
         await core.group('Configuring git user', async () => {
             try {
@@ -71,7 +62,7 @@ export async function run() {
                             .join('\n');
 
                         const changesetFilePath = `${changesetDir}/${changesetId}.md`;
-                        const fileContent = `---\n${changesetContent}\n---\n\nBump packages ${changeType} version\n`;
+                        const fileContent = `---\n${changesetContent}\n---\n\n${message}\n`;
 
                         fs.writeFileSync(changesetFilePath, fileContent);
                         core.info(`Created changeset file: ${changesetFilePath}`);
@@ -91,11 +82,11 @@ export async function run() {
         await core.group('Committing version changes', async () => {
             try {
                 await exec.exec('git', ['add', '.']);
-                await exec.exec('git', ['commit', '-m', `chore: bump ${changeType} version using changesets`]);
+                await exec.exec('git', ['commit', '-m', message]);
 
-                await exec.exec('git', ['push', 'origin', targetBranch]);
+                await exec.exec('git', ['push']);
 
-                core.info(`Successfully committed and pushed version changes to ${targetBranch}`);
+                core.info(`Successfully committed and pushed version changes to the current branch`);
             } catch (error) {
                 throw new Error(`Failed to commit version changes: ${error}`);
             }
@@ -114,13 +105,13 @@ export async function run() {
 function parseInputs() {
     try {
         const parsed = z.object({
-            targetBranch: z.string(),
             targetDirectories: z.array(z.string()),
             changeType: z.enum(['major', 'minor', 'patch']),
+            message: z.string(),
         }).parse({
-            targetBranch: getStringInput('target-branch'),
             targetDirectories: getArrayInput('target-directories'),
             changeType: getStringInput('change-type'),
+            message: getStringInput('message'),
         });
 
         return parsed;
