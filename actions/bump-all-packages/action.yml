@@ -2,8 +2,8 @@ name: 'Bump All Packages'
 description: 'Bumps major version for all packages in target directories using changesets'
 
 inputs:
-  target-branch:
-    description: 'Branch to apply version bumps to'
+  message:
+    description: 'Message to commit'
     required: true
   target-directories:
     description: 'List of directories containing packages to bump'
@@ -14,3 +14,4 @@ inputs:
 runs:
   using: node20
   main: 'dist/index.js' 
+  
