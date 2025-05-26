@@ -2,6 +2,10 @@ name: 'Disallow Versions by Type'
 description: 'Checks for disallowed version types in changesets'
 
 inputs:
+  packages-prefix:
+    description: 'Prefix for package names (e.g., "elementor/")'
+    required: true
+    default: 'elementor/'
   disallowed-versions:
     description: 'List of version types to disallow (major, minor, patch)'
     required: true

@@ -6,18 +6,18 @@ import * as fs from 'fs';
 export async function run() {
     try {
         const inputs = parseInputs();
-        const { disallowedVersions, files } = inputs;
+        const { disallowedVersions, files, packagesPrefix } = inputs;
 
         await core.group('Check for disallowed versions', async () => {
             const filesArray = files.split( ' ' ).filter( Boolean );
 
             filesArray.forEach( ( filePath ) => {
                 const content = fs.readFileSync( filePath, 'utf-8' );
-                
+
                 for (const versionType of disallowedVersions) {
                     const lines = content.split('\n');
                     for (const line of lines) {
-                        if (line.includes('"@elementor/') && line.includes(':') && line.includes('major')) {
+                        if (line.includes(`"${packagesPrefix}`) && line.includes(':') && line.includes('major')) {
                             core.info(`${versionType} version is not allowed. Found in '${filePath}'`);
                             core.setFailed(`${versionType} version is not allowed. Found in '${filePath}'`);
                             process.exit(1);
@@ -25,7 +25,7 @@ export async function run() {
                     }
                 }
             });
-            
+
             core.info('No disallowed versions found in changesets');
         });
 
@@ -42,9 +42,11 @@ export async function run() {
 function parseInputs() {
     try {
         const parsed = z.object({
+			packagesPrefix: z.string(),
             disallowedVersions: z.array(z.string()),
             files: z.string(),
         }).parse({
+			packagesPrefix: getStringInput('packages-prefix'),
             disallowedVersions: getArrayInput('disallowed-versions'),
             files: getStringInput('files'),
         });
