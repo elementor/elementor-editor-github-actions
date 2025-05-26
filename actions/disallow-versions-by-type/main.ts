@@ -17,7 +17,9 @@ export async function run() {
                 for (const versionType of disallowedVersions) {
                     const lines = content.split('\n');
                     for (const line of lines) {
-						core.info( line.includes(`"${packagesPrefix}`).toString() );
+						core.info( "includes prefix:" + line.includes(`"${packagesPrefix}`).toString() );
+                        core.info( "includes version type:" + line.includes(versionType).toString() );
+                        core.info( "includes :"  + line.includes(':').toString() );
 						core.info(`Checking line: ${line}`);
 						core.info(`Looking for version type: ${versionType}`);
 
