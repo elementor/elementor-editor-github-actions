@@ -23,7 +23,7 @@ export async function run() {
 						core.info(`Checking line: ${line}`);
 						core.info(`Looking for version type: ${versionType}`);
 
-                        if (line.includes(`"${packagesPrefix}`) && line.includes(':') && line.includes('major')) {
+                        if (line.includes(`"${packagesPrefix}`) && line.includes(':') && line.includes(versionType)) {
                             core.info(`${versionType} version is not allowed. Found in '${filePath}'`);
                             core.setFailed(`${versionType} version is not allowed. Found in '${filePath}'`);
                             process.exit(1);
