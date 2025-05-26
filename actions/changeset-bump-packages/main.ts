@@ -64,9 +64,9 @@ export async function run() {
 
 				const fileNames = await exec.getExecOutput('ls', ['-t', '.changeset']);
 
-				const changesetId = fileNames.stdout.trim().split('\n')[0];
+				const changesetFileName = fileNames.stdout.trim().split('\n')[0];
 
-				if ( ! changesetId ) {
+				if ( ! changesetFileName ) {
 					throw new Error('No changeset file found after running changeset add');
 				}
 
@@ -80,7 +80,7 @@ export async function run() {
 					.map(name => `"${name}": ${changeType}`)
 					.join('\n');
 
-				const changesetFilePath = `${changesetDir}/${changesetId}.md`;
+				const changesetFilePath = `${changesetDir}/${changesetFileName}`;
 				const fileContent = `---\n${changesetContent}\n---\n\n${message}\n`;
 
 				core.info(`Writing changeset file: ${changesetFilePath}`);
