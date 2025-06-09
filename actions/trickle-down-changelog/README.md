@@ -1,5 +1,8 @@
 # Trickle Down Changelog GH Action
 
+> [!WARNING]
+> This action should be used only in the context of the elementor plugin.
+
 This action will open PRs in downstream release branches with changes from the changelog.
 For example:
 

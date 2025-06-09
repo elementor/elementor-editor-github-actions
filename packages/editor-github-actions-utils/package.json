@@ -1,6 +1,7 @@
 {
-	"name": "@elementor-editor-github-actions/utils",
+	"name": "@elementor/editor-github-actions-utils",
 	"author": "Elementor Team",
+	"version": "1.0.0",
 	"license": "GPL-3.0-or-later",
 	"main": "dist/index.js",
 	"module": "dist/index.mjs",
@@ -14,6 +15,6 @@
 		"@actions/core": "^1.11.1"
 	},
 	"devDependencies": {
-		"tsup": "^8.4.0"
+		"tsup": "^8.5.0"
 	}
 }

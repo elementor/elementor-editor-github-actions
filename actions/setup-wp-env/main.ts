@@ -7,7 +7,7 @@ import {
 	getBooleanInput,
 	getMapInput,
 	getStringInput,
-} from '@elementor-editor-github-actions/utils';
+} from '@elementor/editor-github-actions-utils';
 
 const WP_ENV_VERSION = '10.4.0';
 
