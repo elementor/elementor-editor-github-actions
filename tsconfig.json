@@ -15,9 +15,6 @@
 		"verbatimModuleSyntax": true,
 		"strict": true,
 		"noUncheckedIndexedAccess": true,
-		"noImplicitOverride": true,
-		"paths": {
-			"@elementor/*": ["./packages/*/src"]
-		}
+		"noImplicitOverride": true
 	}
 }
