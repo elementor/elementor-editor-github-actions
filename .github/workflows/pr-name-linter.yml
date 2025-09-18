@@ -27,5 +27,5 @@ jobs:
 
             - name: Run PR name linter
               run: echo "$TITLE" | npx commitlint
-              env: 
+              env:
                 TITLE: ${{ github.event.pull_request.title }}
