@@ -38,7 +38,6 @@ jobs:
                   enable-svg-upload: true
                   experiments: |-
                       pages_panel:true
-                      editor_v2:false
                   templates: |-
                       elementor-templates
 

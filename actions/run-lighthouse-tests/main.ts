@@ -9,9 +9,9 @@ import {
 	getMapInput,
 	getNumberInput,
 	setOutput,
-} from '@elementor-editor-github-actions/utils';
+} from '@elementor/editor-github-actions-utils';
 
-const LHCI_VERSION = '0.14.x';
+const LHCI_VERSION = '0.14.0';
 const OUTPUT_DIR = path.resolve(process.cwd(), './lhci');
 
 const AVAILABLE_CATEGORIES = [

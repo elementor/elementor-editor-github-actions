@@ -1,5 +1,5 @@
 {
-	"name": "@elementor-editor-github-actions/trickle-down-changelog",
+	"name": "@elementor/trickle-down-changelog",
 	"version": "1.0.0",
 	"main": "index.js",
 	"author": "Elementor Team",
@@ -12,11 +12,11 @@
 	"dependencies": {
 		"@actions/core": "^1.11.1",
 		"@actions/exec": "^1.1.1",
-		"@actions/github": "^6.0.0",
-		"semver": "^7.7.1"
+		"@actions/github": "^6.0.1",
+		"semver": "^7.7.2"
 	},
 	"devDependencies": {
-		"@types/semver": "^7.5.8",
-		"tsup": "^8.4.0"
+		"@types/semver": "^7.7.0",
+		"tsup": "^8.5.0"
 	}
 }
