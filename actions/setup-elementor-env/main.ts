@@ -6,7 +6,7 @@ import {
 	getMapInput,
 	getStringInput,
 	getBooleanInput,
-} from '@elementor-editor-github-actions/utils';
+} from '@elementor/editor-github-actions-utils';
 
 export async function run() {
 	try {
