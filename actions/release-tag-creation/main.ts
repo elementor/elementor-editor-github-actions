@@ -41,24 +41,24 @@ export function validateFormat(version: string): void {
 }
 
 export function checkTagDoesNotExist(version: string): void {
-	let existingTags: string;
+	const tagRef = `refs/tags/${version}`;
+	let output: string;
 
 	try {
-		existingTags = execSync('git tag -l', { encoding: 'utf8' });
+		output = execSync(`git ls-remote origin "${tagRef}"`, { encoding: 'utf8' });
 	} catch (err) {
-		throw new Error(`Failed to list git tags: ${(err as Error).message}`);
+		throw new Error(`Failed to check remote tags: ${(err as Error).message}`);
 	}
 
-	const tagName = `${version}`;
-
-	if (existingTags.split('\n').some((t) => t.trim() === tagName)) {
+	if (output.trim() !== '') {
 		throw new Error(
-			`Version ${version} already exists as a GitHub Release (tag ${tagName} found).`,
+			`Version ${version} already exists as a GitHub Release (tag ${version} found).`,
 		);
 	}
 
 	console.log(`✅ Version ${version} does not exist as a GitHub Release.`);
 }
+
 
 // ─── derivation ───────────────────────────────────────────────────────────────
 
