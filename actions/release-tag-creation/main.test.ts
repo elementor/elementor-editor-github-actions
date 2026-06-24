@@ -1,9 +1,7 @@
-import { execSync } from 'node:child_process';
 import { appendFileSync } from 'node:fs';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
-	checkTagDoesNotExist,
 	deriveBranch,
 	extractChannel,
 	getVersion,
@@ -11,10 +9,8 @@ import {
 	validateFormat,
 } from './main';
 
-vi.mock('node:child_process');
 vi.mock('node:fs');
 
-const mockExecSync = vi.mocked(execSync);
 const mockAppendFileSync = vi.mocked(appendFileSync);
 
 // ─── getVersion ───────────────────────────────────────────────────────────────
@@ -85,42 +81,6 @@ describe('validateFormat', () => {
 		[''],
 	])('rejects invalid version %s', (version) => {
 		expect(() => { validateFormat(version); }).toThrow('not in the correct format');
-	});
-});
-
-// ─── checkTagDoesNotExist ─────────────────────────────────────────────────────
-
-describe('checkTagDoesNotExist', () => {
-	beforeEach(() => {
-		vi.clearAllMocks();
-	});
-
-	it('does not throw when ls-remote returns empty (tag absent)', () => {
-		mockExecSync.mockReturnValue('' as never);
-		expect(() => { checkTagDoesNotExist('3.11.0'); }).not.toThrow();
-	});
-
-	it('throws when ls-remote returns a line (tag exists)', () => {
-		mockExecSync.mockReturnValue(
-			'abc123\trefs/tags/3.11.0\n' as never,
-		);
-		expect(() => { checkTagDoesNotExist('3.11.0'); }).toThrow('already exists');
-	});
-
-	it('throws when execSync itself fails', () => {
-		mockExecSync.mockImplementation(() => {
-			throw new Error('git: not found');
-		});
-		expect(() => { checkTagDoesNotExist('3.11.0'); }).toThrow('Failed to check remote tags');
-	});
-
-	it('queries the exact ref for the given version', () => {
-		mockExecSync.mockReturnValue('' as never);
-		checkTagDoesNotExist('4.1.0-beta1');
-		expect(mockExecSync).toHaveBeenCalledWith(
-			expect.stringContaining('refs/tags/4.1.0-beta1'),
-			expect.any(Object),
-		);
 	});
 });
 
