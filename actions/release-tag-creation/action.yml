@@ -93,3 +93,39 @@ runs:
         echo "Release tag v${{ inputs.version }} pushed successfully (branch unchanged)."
         echo "tag_pushed=true" >> "$GITHUB_OUTPUT"
       fi
+
+  - name: Write job summary
+    shell: bash
+    run: |
+      DRY_RUN="${{ inputs.dry_run }}"
+      TAG_PUSHED="${{ steps.create-release-tag.outputs.tag_pushed }}"
+      CHANNEL="${{ steps.handle-version-input.outputs.channel }}"
+      BRANCH="${{ steps.handle-version-input.outputs.checkout_branch }}"
+      STABLE_TAG="${{ steps.capture-readme.outputs.readme_stable_tag }}"
+      BETA_TAG="${{ steps.capture-readme.outputs.readme_beta_tag }}"
+
+      if [[ "${DRY_RUN}" == "true" ]]; then
+        MODE_BADGE="🔵 Dry Run"
+      else
+        MODE_BADGE="🚀 Live"
+      fi
+
+      if [[ "${TAG_PUSHED}" == "true" ]]; then
+        TAG_STATUS="✅ Pushed"
+      else
+        TAG_STATUS="⏭️ Skipped (dry run)"
+      fi
+
+      {
+        echo "## Release Tag Creation Report"
+        echo ""
+        echo "| Field | Value |"
+        echo "| --- | --- |"
+        echo "| **Mode** | ${MODE_BADGE} |"
+        echo "| **Version** | \`${{ inputs.version }}\` |"
+        echo "| **Channel** | ${CHANNEL} |"
+        echo "| **Branch** | \`${BRANCH}\` |"
+        echo "| **Tag pushed** | ${TAG_STATUS} |"
+        echo "| **readme.txt stable tag** | \`${STABLE_TAG}\` |"
+        echo "| **readme.txt beta tag** | \`${BETA_TAG}\` |"
+      } >> "$GITHUB_STEP_SUMMARY"
