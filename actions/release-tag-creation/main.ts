@@ -40,26 +40,6 @@ export function validateFormat(version: string): void {
 	console.log(`✅ Version format is valid: ${version}`);
 }
 
-export function checkTagDoesNotExist(version: string): void {
-	const tagRef = `refs/tags/${version}`;
-	let output: string;
-
-	try {
-		output = execSync(`git ls-remote origin "${tagRef}"`, { encoding: 'utf8' });
-	} catch (err) {
-		throw new Error(`Failed to check remote tags: ${(err as Error).message}`);
-	}
-
-	if (output.trim() !== '') {
-		throw new Error(
-			`Version ${version} already exists as a GitHub Release (tag ${version} found).`,
-		);
-	}
-
-	console.log(`✅ Version ${version} does not exist as a GitHub Release.`);
-}
-
-
 // ─── derivation ───────────────────────────────────────────────────────────────
 
 export function extractChannel(version: string): 'stable' | 'beta' {
@@ -90,7 +70,7 @@ export function deriveBranch(version: string): string {
 
 	const paddedMinor = String(parsed.minor).padStart(2, '0');
 
-	return `${parsed.major}.${paddedMinor}`;
+	return `${String(parsed.major)}.${paddedMinor}`;
 }
 
 // ─── entry point ──────────────────────────────────────────────────────────────
@@ -100,7 +80,6 @@ export function run(): void {
 		const version = getVersion();
 
 		validateFormat(version);
-		checkTagDoesNotExist(version);
 
 		const channel = extractChannel(version);
 		console.log(`✅ Channel resolved to: ${channel}`);

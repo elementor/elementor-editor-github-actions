@@ -72,7 +72,7 @@ describe('validateFormat', () => {
 		['5.20.0-beta3'],
 		['10.0.0-beta10'],
 	])('accepts valid version %s', (version) => {
-		expect(() => validateFormat(version)).not.toThrow();
+		expect(() => { validateFormat(version); }).not.toThrow();
 	});
 
 	it.each([
@@ -84,7 +84,7 @@ describe('validateFormat', () => {
 		['not-a-version'],
 		[''],
 	])('rejects invalid version %s', (version) => {
-		expect(() => validateFormat(version)).toThrow('not in the correct format');
+		expect(() => { validateFormat(version); }).toThrow('not in the correct format');
 	});
 });
 
@@ -97,21 +97,21 @@ describe('checkTagDoesNotExist', () => {
 
 	it('does not throw when ls-remote returns empty (tag absent)', () => {
 		mockExecSync.mockReturnValue('' as never);
-		expect(() => checkTagDoesNotExist('3.11.0')).not.toThrow();
+		expect(() => { checkTagDoesNotExist('3.11.0'); }).not.toThrow();
 	});
 
 	it('throws when ls-remote returns a line (tag exists)', () => {
 		mockExecSync.mockReturnValue(
 			'abc123\trefs/tags/3.11.0\n' as never,
 		);
-		expect(() => checkTagDoesNotExist('3.11.0')).toThrow('already exists');
+		expect(() => { checkTagDoesNotExist('3.11.0'); }).toThrow('already exists');
 	});
 
 	it('throws when execSync itself fails', () => {
 		mockExecSync.mockImplementation(() => {
 			throw new Error('git: not found');
 		});
-		expect(() => checkTagDoesNotExist('3.11.0')).toThrow('Failed to check remote tags');
+		expect(() => { checkTagDoesNotExist('3.11.0'); }).toThrow('Failed to check remote tags');
 	});
 
 	it('queries the exact ref for the given version', () => {
