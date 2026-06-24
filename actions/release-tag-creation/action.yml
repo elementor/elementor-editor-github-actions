@@ -88,7 +88,7 @@ runs:
         echo "Dry run — skipping tag push."
         echo "tag_pushed=false" >> "$GITHUB_OUTPUT"
       else
-        git tag -a "v${{ inputs.version }}" -m "Release version ${{ inputs.version }}"
+        git tag -a "${{ inputs.version }}" -m "Release version ${{ inputs.version }}"
         git push origin "v${{ inputs.version }}"
         echo "Release tag v${{ inputs.version }} pushed successfully (branch unchanged)."
         echo "tag_pushed=true" >> "$GITHUB_OUTPUT"
