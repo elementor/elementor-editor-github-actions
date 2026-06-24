@@ -24,6 +24,19 @@ jobs:
             - name: Run Lint
               run: npm run lint
 
+    test:
+        name: Test
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout source code
+              uses: actions/checkout@v4
+
+            - name: Install Dependencies
+              uses: ./.github/actions/install-deps
+
+            - name: Run Tests
+              run: npm test
+
     require-build:
         name: Require Build in PR
         runs-on: ubuntu-latest
