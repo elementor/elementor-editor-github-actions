@@ -1,0 +1,136 @@
+name: Release Tag Creation
+description: Validates the version, bumps version files, creates and pushes a git release tag.
+
+inputs:
+  version:
+    required: true
+    description: 'Version to release (e.g. 4.1.0-beta1 or 4.0.11).'
+  dry_run:
+    required: false
+    default: 'true'
+    description: 'Dry run — validate everything but do not push commits or create tag.'
+  maintain_username:
+    required: true
+    description: 'Git user.name for the version-bump commit.'
+  maintain_email:
+    required: true
+    description: 'Git user.email for the version-bump commit.'
+
+outputs:
+  channel:
+    description: 'The release channel: stable or beta.'
+    value: ${{ steps.handle-version-input.outputs.channel }}
+  checkout_branch:
+    description: 'The branch the version bump was applied to.'
+    value: ${{ steps.handle-version-input.outputs.checkout_branch }}
+  tag_pushed:
+    description: 'Whether the tag was pushed (true/false).'
+    value: ${{ steps.create-release-tag.outputs.tag_pushed }}
+  readme_stable_tag:
+    description: 'The Stable tag value written to readme.txt.'
+    value: ${{ steps.update-version-in-tag-files.outputs.readme_stable_tag }}
+  readme_beta_tag:
+    description: 'The Beta tag value written to readme.txt.'
+    value: ${{ steps.update-version-in-tag-files.outputs.readme_beta_tag }}
+
+runs:
+  using: composite
+  steps:
+  - name: Handle version input
+    id: handle-version-input
+    shell: bash
+    env:
+      INPUT_VERSION: ${{ inputs.version }}
+    run: node "${{ github.action_path }}/dist/index.js"
+
+  - name: Switch to release branch
+    shell: bash
+    run: |
+      git checkout ${{ steps.handle-version-input.outputs.checkout_branch }}
+      git checkout ${{ github.sha }} -- .github/
+
+  - name: Config git user
+    shell: bash
+    run: |
+      git config --global user.name "${{ inputs.maintain_username }}"
+      git config --global user.email "${{ inputs.maintain_email }}"
+
+  - name: Update version in elementor.php
+    id: capture-php
+    shell: bash
+    run: |
+      VERSION="${{ inputs.version }}"
+      sed -i -E "s/( \* Version: ).*/\1${VERSION}/" elementor.php
+      sed -i -E "s/(define\( 'ELEMENTOR_VERSION', ')[^']*'/\1${VERSION}'/" elementor.php
+      echo "elementor.php after version update:"
+      grep -E "Version:|ELEMENTOR_VERSION" elementor.php
+      echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+  - name: Update Stable tag in readme.txt
+    shell: bash
+    if: ${{ steps.handle-version-input.outputs.channel == 'stable' }}
+    run: |
+      VERSION="${{ inputs.version }}"
+      LAST_BETA_TAG=$(git ls-remote --tags | awk '{print $2}' | sed 's/^refs\/tags\/v//' | sed 's/^refs\/tags\///' | grep -E '^[0-9]+\.[0-9]+\.[0-9]-beta[1-9]$' | sort -V | tail -n 1)
+      sed -i -E "s/Stable tag: .*/Stable tag: ${VERSION}/" readme.txt
+      sed -i -E "s/Beta tag: .*/Beta tag: ${LAST_BETA_TAG}/" readme.txt
+      echo "readme.txt stable tag updated:"
+      grep -E "Stable tag:|Beta tag:" readme.txt
+
+  - name: Update Beta tag in readme.txt
+    shell: bash
+    if: ${{ steps.handle-version-input.outputs.channel == 'beta' }}
+    run: |
+      VERSION="${{ inputs.version }}"
+      LAST_STABLE_TAG=$(git ls-remote --tags | awk '{print $2}' | sed 's/^refs\/tags\/v//' | sed 's/^refs\/tags\///' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
+      sed -i -E "s/Stable tag: .*/Stable tag: ${LAST_STABLE_TAG}/" readme.txt
+      sed -i -E "s/Beta tag: .*/Beta tag: ${VERSION}/" readme.txt
+      echo "readme.txt beta tag updated:"
+      grep -E "Stable tag:|Beta tag:" readme.txt
+
+  - name: Capture readme.txt values
+    id: capture-readme
+    shell: bash
+    run: |
+      STABLE_TAG=$(grep -E "^Stable tag:" readme.txt | sed 's/Stable tag: //')
+      BETA_TAG=$(grep -E "^Beta tag:" readme.txt | sed 's/Beta tag: //')
+      echo "stable_tag=${STABLE_TAG}" >> "$GITHUB_OUTPUT"
+      echo "beta_tag=${BETA_TAG}" >> "$GITHUB_OUTPUT"
+
+  - name: Commit version bump
+    shell: bash
+    run: |
+      VERSION="${{ inputs.version }}"
+      DRY_RUN="${{ inputs.dry_run }}"
+      if [[ "${DRY_RUN}" == "true" ]]; then
+        echo "Dry run — skipping commit."
+        exit 0
+      fi
+      git add elementor.php readme.txt
+      if git diff --cached --quiet; then
+        echo "No changes to commit — version files already at ${VERSION}."
+        exit 0
+      fi
+      git commit -m "Bump version to ${VERSION}"
+      echo "Committed version bump to ${VERSION}."
+
+  - name: Set update-version-in-tag-files outputs
+    id: update-version-in-tag-files
+    shell: bash
+    run: |
+      echo "readme_stable_tag=${{ steps.capture-readme.outputs.stable_tag }}" >> "$GITHUB_OUTPUT"
+      echo "readme_beta_tag=${{ steps.capture-readme.outputs.beta_tag }}" >> "$GITHUB_OUTPUT"
+
+  - name: Create release tag
+    id: create-release-tag
+    shell: bash
+    run: |
+      if [[ "${{ inputs.dry_run }}" == "true" ]]; then
+        echo "Dry run — skipping tag push."
+        echo "tag_pushed=false" >> "$GITHUB_OUTPUT"
+      else
+        git tag -a "v${{ inputs.version }}" -m "Release version ${{ inputs.version }}"
+        git push origin "v${{ inputs.version }}"
+        echo "Release tag v${{ inputs.version }} pushed successfully (branch unchanged)."
+        echo "tag_pushed=true" >> "$GITHUB_OUTPUT"
+      fi

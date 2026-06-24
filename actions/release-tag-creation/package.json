@@ -1,0 +1,18 @@
+{
+	"name": "@elementor/release-tag-creation",
+	"author": "Elementor Team",
+	"license": "GPL-3.0-or-later",
+	"private": true,
+	"scripts": {
+		"build": "tsup --config ./tsup.config.ts",
+		"dev": "npm run build -- --watch"
+	},
+	"dependencies": {
+		"@actions/core": "^1.11.1",
+		"semver": "^7.7.2"
+	},
+	"devDependencies": {
+		"@types/semver": "^7.5.8",
+		"tsup": "^8.5.0"
+	}
+}
