@@ -118,7 +118,7 @@ describe('checkTagDoesNotExist', () => {
 		mockExecSync.mockReturnValue('' as never);
 		checkTagDoesNotExist('4.1.0-beta1');
 		expect(mockExecSync).toHaveBeenCalledWith(
-			expect.stringContaining('refs/tags/v4.1.0-beta1'),
+			expect.stringContaining('refs/tags/4.1.0-beta1'),
 			expect.any(Object),
 		);
 	});
