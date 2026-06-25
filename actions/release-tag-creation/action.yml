@@ -89,8 +89,8 @@ runs:
         echo "tag_pushed=false" >> "$GITHUB_OUTPUT"
       else
         git tag -a "${{ inputs.version }}" -m "Release version ${{ inputs.version }}"
-        git push origin "v${{ inputs.version }}"
-        echo "Release tag v${{ inputs.version }} pushed successfully (branch unchanged)."
+        git push origin "${{ inputs.version }}"
+        echo "Release tag ${{ inputs.version }} pushed successfully (branch unchanged)."
         echo "tag_pushed=true" >> "$GITHUB_OUTPUT"
       fi
 
