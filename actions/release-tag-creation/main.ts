@@ -81,15 +81,8 @@ export function extractChannel(version: string): 'stable' | 'beta' {
 }
 
 export function deriveBranch(version: string): string {
-	const parsed = semver.parse(version);
-
-	if (!parsed) {
-		throw new Error(`Failed to parse version: ${version}`);
-	}
-
-	const paddedMinor = String(parsed.minor).padStart(2, '0');
-
-	return `${String(parsed.major)}.${paddedMinor}`;
+	const channel = extractChannel(version);
+	return channel === 'beta' ? 'release/beta' : 'release/stable';
 }
 
 // ─── entry point ──────────────────────────────────────────────────────────────

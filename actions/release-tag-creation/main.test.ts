@@ -148,10 +148,13 @@ describe('extractChannel', () => {
 
 describe('deriveBranch', () => {
 	it.each([
-		['4.1.0', '4.01'],
-		['5.20.15', '5.20'],
-		['10.0.0', '10.00'],
-		['4.1.0-beta1', '4.01'],
+		['4.1.0',       'release/stable'],
+		['5.20.15',     'release/stable'],
+		['10.0.0',      'release/stable'],
+		['4.4.0',       'release/stable'],
+		['4.0.4-beta1', 'release/beta'],
+		['4.1.0-beta1', 'release/beta'],
+		['4.1.0-beta3', 'release/beta'],
 	])('derives branch %s → %s', (version, expected) => {
 		expect(deriveBranch(version)).toBe(expected);
 	});
