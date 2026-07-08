@@ -36,7 +36,6 @@ jobs:
 
             - name: Run Tests
               run: npm test
-
     require-build:
         name: Require Build in PR
         runs-on: ubuntu-latest
@@ -62,3 +61,4 @@ jobs:
                     echo "$STATUS"
                     exit 1
                   fi
+
