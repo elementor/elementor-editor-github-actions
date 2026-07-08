@@ -51,7 +51,7 @@ export function run(): void {
 	try {
 		const version = getEnv('INPUT_VERSION');
 		const channel = getEnv('INPUT_CHANNEL');
-		const counterpartTag = getEnv('INPUT_COMPANION_TAG');
+		const companionTag = getEnv('INPUT_COMPANION_TAG');
 
 		// ── elementor.php ────────────────────────────────────────────────────────
 		const phpPath = 'elementor.php';
@@ -61,7 +61,7 @@ export function run(): void {
 
 		// ── readme.txt ───────────────────────────────────────────────────────────
 		const readmePath = 'readme.txt';
-		const readmeTags = resolveReadmeTags(version, channel, counterpartTag);
+		const readmeTags = resolveReadmeTags(version, channel, companionTag);
 
 		const patchedReadme = patchReadmeTxt(readFileSync(readmePath, 'utf8'), readmeTags);
 		writeFileSync(readmePath, patchedReadme, 'utf8');
