@@ -40,7 +40,7 @@ export function validateFormat(version: string): void {
 	console.log(`✅ Version format is valid: ${version}`);
 }
 
-export function checkTagDoesNotExist(version: string): void {
+export function checkCurrentTagDoesNotExist(version: string): void {
 	const tagRef = `refs/tags/${version}`;
 	let output: string;
 
@@ -57,6 +57,68 @@ export function checkTagDoesNotExist(version: string): void {
 	}
 
 	console.log(`✅ Version ${version} does not exist as a GitHub Release.`);
+}
+
+export function fetchTagsByChannel(channel: 'stable' | 'beta'): string[] {
+	let tagsOutput: string;
+	try {
+		tagsOutput = execSync('git ls-remote --tags origin', { encoding: 'utf8' });
+	} catch (err) {
+		throw new Error(`Failed to fetch remote tags: ${(err as Error).message}`);
+	}
+
+	return tagsOutput
+		.split('\n')
+		.map((line) => line.split('\t')[1]?.replace('refs/tags/', '').trim())
+		.filter((tag): tag is string => {
+			if (!tag || !ALLOWED_PATTERN.test(tag)) return false;
+			const isBeta = tag.includes('-beta');
+			return channel === 'beta' ? isBeta : !isBeta;
+		});
+}
+
+function validateNextStable(version: string, n: semver.SemVer, l: semver.SemVer): void {
+	const isNewMinor = n.patch === 0;
+	const expected = isNewMinor
+		? `${l.major}.${l.minor + 1}.0`
+		: `${l.major}.${l.minor}.${l.patch + 1}`;
+	if (version !== expected) {
+		const kind = isNewMinor ? 'minor' : 'patch';
+		throw new Error(
+			`Expected next ${kind} release to be ${expected}, got ${version} (latest: ${l}).`,
+		);
+	}
+}
+
+function validateNextBeta(version: string, n: semver.SemVer, l: semver.SemVer, latest: string): void {
+	const latestBetaNum = Number(String(l.prerelease[0]).replace('beta', ''));
+	const newBetaNum = Number(String(n.prerelease[0]).replace('beta', ''));
+	const sameLine = n.major === l.major && n.minor === l.minor && n.patch === l.patch;
+	if (sameLine && newBetaNum !== latestBetaNum + 1) {
+		throw new Error(
+			`Expected next beta to be ${latest.replace(`beta${latestBetaNum}`, `beta${latestBetaNum + 1}`)}, got ${version}.`,
+		);
+	}
+	if (!sameLine && newBetaNum !== 1) {
+		throw new Error(`First beta of a new version line must be beta1, got ${version}.`);
+	}
+}
+
+export function checkVersionIsNext(version: string, channel: 'stable' | 'beta'): void {
+	const channelTags = fetchTagsByChannel(channel);
+	if (channelTags.length === 0) {
+		console.log(`✅ No existing ${channel} tags — treating as first release.`);
+		return;
+	}
+	const latest = channelTags.sort(semver.rcompare)[0];
+	const l = semver.parse(latest)!;
+	const n = semver.parse(version)!;
+	if (channel === 'stable') {
+		validateNextStable(version, n, l);
+	} else {
+		validateNextBeta(version, n, l, latest);
+	}
+	console.log(`✅ Version ${version} is the correct next version after ${latest}.`);
 }
 
 // ─── derivation ───────────────────────────────────────────────────────────────
@@ -80,8 +142,7 @@ export function extractChannel(version: string): 'stable' | 'beta' {
 	);
 }
 
-export function deriveBranch(version: string): string {
-	const channel = extractChannel(version);
+export function deriveBranch(channel: 'stable' | 'beta'): string {
 	return channel === 'beta' ? 'release/beta' : 'release/stable';
 }
 
@@ -92,13 +153,15 @@ export function run(): void {
 		const version = getVersion();
 
 		validateFormat(version);
-		checkTagDoesNotExist(version);
+		checkCurrentTagDoesNotExist(version);
 
 		const channel = extractChannel(version);
 		console.log(`✅ Channel resolved to: ${channel}`);
 
-		const branch = deriveBranch(version);
+		const branch = deriveBranch(channel);
 		console.log(`✅ Checkout branch: ${branch}`);
+
+		checkVersionIsNext(version, channel);
 
 		setOutput('channel', channel);
 		setOutput('checkout_branch', branch);
