@@ -36,16 +36,12 @@ outputs:
 runs:
   using: composite
   steps:
-  - name: Install dependencies
-    shell: bash
-    run: npm ci --prefix "${{ github.action_path }}"
-
   - name: Handle version input
     id: handle-version-input
     shell: bash
     env:
       INPUT_VERSION: ${{ inputs.version }}
-    run: node "${{ github.action_path }}/main.ts"
+    run: node "${{ github.action_path }}/dist/index.js"
 
   - name: Switch to release branch
     shell: bash
@@ -65,7 +61,7 @@ runs:
     env:
       INPUT_VERSION: ${{ inputs.version }}
       INPUT_CHANNEL: ${{ steps.handle-version-input.outputs.channel }}
-    run: node "${{ github.action_path }}/update-version-files.ts"
+    run: node "${{ github.action_path }}/dist/update-version-files.js"
 
   - name: Commit version bump
     shell: bash

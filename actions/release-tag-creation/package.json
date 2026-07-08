@@ -4,6 +4,8 @@
 	"license": "GPL-3.0-or-later",
 	"private": true,
 	"scripts": {
+		"build": "tsup --config ./tsup.config.ts",
+		"dev": "npm run build -- --watch",
 		"test": "vitest run",
 		"test:watch": "vitest"
 	},
@@ -14,6 +16,7 @@
 	},
 	"devDependencies": {
 		"@types/semver": "^7.5.8",
+		"tsup": "^8.5.0",
 		"vitest": "^4.1.9"
 	}
 }
