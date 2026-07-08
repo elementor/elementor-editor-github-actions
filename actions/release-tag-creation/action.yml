@@ -65,6 +65,7 @@ runs:
     env:
       INPUT_VERSION: ${{ inputs.version }}
       INPUT_CHANNEL: ${{ steps.handle-version-input.outputs.channel }}
+      INPUT_COMPANION_TAG: ${{ steps.handle-version-input.outputs.companion_tag }}
     run: node "${{ github.action_path }}/update-version-files.ts"
 
   - name: Commit version bump
