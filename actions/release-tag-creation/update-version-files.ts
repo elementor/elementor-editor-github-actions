@@ -22,12 +22,12 @@ function patchReadmeTxt(content: string, tags: { stable: string; beta: string })
 export function resolveReadmeTags(
 	version: string,
 	channel: string,
-	counterpartTag: string,
+	companionTag: string,
 ): { stable: string; beta: string } {
 	if (channel === 'stable') {
-		return { stable: version, beta: counterpartTag };
+		return { stable: version, beta: companionTag };
 	}
-	return { stable: counterpartTag, beta: version };
+	return { stable: companionTag, beta: version };
 }
 
 function getEnv(name: string): string {
