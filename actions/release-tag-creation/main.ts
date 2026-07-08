@@ -1,7 +1,7 @@
 	import { execSync } from 'node:child_process';
 	import { appendFileSync } from 'node:fs';
 	import semver from 'semver';
-	import { checkVersionIsNext, fetchCompanionTag } from './current-version-validation';
+	import { checkVersionIsNext, fetchCompanionTag } from './current-version-validation.ts';
 
 // X.Y.Z or X.Y.Z-betaN — no dot between "beta" and the number
 export const ALLOWED_PATTERN = /^\d+\.\d+\.\d+(-beta\d+)?$/;

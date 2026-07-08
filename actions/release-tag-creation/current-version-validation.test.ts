@@ -2,7 +2,7 @@ import { execSync } from 'node:child_process';
 import { appendFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { checkVersionIsNext } from './current-version-validation';
+import { checkVersionIsNext } from './current-version-validation.ts';
 
 vi.mock('node:child_process');
 vi.mock('node:fs');
