@@ -3,6 +3,7 @@
 	"author": "Elementor Team",
 	"license": "GPL-3.0-or-later",
 	"private": true,
+	"type": "module",
 	"scripts": {
 		"test": "vitest run",
 		"test:watch": "vitest"

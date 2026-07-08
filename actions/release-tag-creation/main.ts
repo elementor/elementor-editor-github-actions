@@ -170,3 +170,5 @@ export function run(): void {
 		process.exit(1);
 	}
 }
+
+run();
