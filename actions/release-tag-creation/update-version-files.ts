@@ -1,11 +1,45 @@
 import { execSync } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
-import { appendFileSync } from 'node:fs';
-import {
-	parseLatestTagFromLsRemote,
-	patchPhpVersion,
-	patchReadmeTxt,
-} from '@elementor/editor-github-actions-utils';
+import { readFileSync, writeFileSync, appendFileSync } from 'node:fs';
+
+function patchPhpVersion(content: string, version: string): string {
+	return content
+		.replace(/( \* Version: ).*/g, `$1${version}`)
+		.replace(/(define\( 'ELEMENTOR_VERSION', ')[^']*'/, `$1${version}'`);
+}
+
+function patchReadmeTxt(content: string, tags: { stable: string; beta: string }): string {
+	if (!content.match(/^Stable tag: /m)) {
+		throw new Error('patchReadmeTxt: "Stable tag:" line not found in readme.txt');
+	}
+	if (!content.match(/^Beta tag: /m)) {
+		throw new Error('patchReadmeTxt: "Beta tag:" line not found in readme.txt');
+	}
+	return content
+		.replace(/^Stable tag: .*/m, `Stable tag: ${tags.stable}`)
+		.replace(/^Beta tag: .*/m, `Beta tag: ${tags.beta}`);
+}
+
+function parseLatestTagFromLsRemote(lsRemoteOutput: string, pattern: RegExp): string | null {
+	const tags = lsRemoteOutput
+		.split('\n')
+		.map((line) => line.split('\t')[1] ?? '')
+		.map((ref) => ref.replace(/^refs\/tags\/v?/, ''))
+		.filter((tag) => pattern.test(tag))
+		.sort((a, b) => {
+			const toparts = (v: string) =>
+				v.split(/[.\-]/).map((p) => (isNaN(Number(p)) ? p : Number(p)));
+			const ap = toparts(a);
+			const bp = toparts(b);
+			for (let i = 0; i < Math.max(ap.length, bp.length); i++) {
+				const ai = ap[i] ?? 0;
+				const bi = bp[i] ?? 0;
+				if (ai < bi) return -1;
+				if (ai > bi) return 1;
+			}
+			return 0;
+		});
+	return tags[tags.length - 1] ?? null;
+}
 
 const STABLE_TAG_PATTERN = /^\d+\.\d+\.\d+$/;
 const BETA_TAG_PATTERN = /^\d+\.\d+\.\d+-beta\d+$/;
