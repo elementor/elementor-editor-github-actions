@@ -3,9 +3,11 @@ import { appendFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
-	checkTagDoesNotExist,
+	checkCurrentTagDoesNotExist,
+	checkVersionIsNext,
 	deriveBranch,
 	extractChannel,
+	fetchTagsByChannel,
 	getVersion,
 	setOutput,
 	validateFormat,
@@ -88,35 +90,35 @@ describe('validateFormat', () => {
 	});
 });
 
-// ─── checkTagDoesNotExist ─────────────────────────────────────────────────────
+// ─── checkCurrentTagDoesNotExist ─────────────────────────────────────────────
 
-describe('checkTagDoesNotExist', () => {
+describe('checkCurrentTagDoesNotExist', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 	});
 
 	it('does not throw when ls-remote returns empty (tag absent)', () => {
 		mockExecSync.mockReturnValue('' as never);
-		expect(() => checkTagDoesNotExist('3.11.0')).not.toThrow();
+		expect(() => checkCurrentTagDoesNotExist('3.11.0')).not.toThrow();
 	});
 
 	it('throws when ls-remote returns a line (tag exists)', () => {
 		mockExecSync.mockReturnValue(
 			'abc123\trefs/tags/3.11.0\n' as never,
 		);
-		expect(() => checkTagDoesNotExist('3.11.0')).toThrow('already exists');
+		expect(() => checkCurrentTagDoesNotExist('3.11.0')).toThrow('already exists');
 	});
 
 	it('throws when execSync itself fails', () => {
 		mockExecSync.mockImplementation(() => {
 			throw new Error('git: not found');
 		});
-		expect(() => checkTagDoesNotExist('3.11.0')).toThrow('Failed to check remote tags');
+		expect(() => checkCurrentTagDoesNotExist('3.11.0')).toThrow('Failed to check remote tags');
 	});
 
 	it('queries the exact ref for the given version', () => {
 		mockExecSync.mockReturnValue('' as never);
-		checkTagDoesNotExist('4.1.0-beta1');
+		checkCurrentTagDoesNotExist('4.1.0-beta1');
 		expect(mockExecSync).toHaveBeenCalledWith(
 			expect.stringContaining('refs/tags/4.1.0-beta1'),
 			expect.any(Object),
@@ -148,14 +150,74 @@ describe('extractChannel', () => {
 
 describe('deriveBranch', () => {
 	it.each([
-		['4.1.0',       'release/stable'],
-		['5.20.15',     'release/stable'],
-		['10.0.0',      'release/stable'],
-		['4.4.0',       'release/stable'],
-		['4.0.4-beta1', 'release/beta'],
-		['4.1.0-beta1', 'release/beta'],
-		['4.1.0-beta3', 'release/beta'],
-	])('derives branch %s → %s', (version, expected) => {
-		expect(deriveBranch(version)).toBe(expected);
+		['stable', 'release/stable'],
+		['beta',   'release/beta'],
+	] as const)('derives branch for channel=%s → %s', (channel, expected) => {
+		expect(deriveBranch(channel)).toBe(expected);
+	});
+});
+
+// ─── fetchTagsByChannel ───────────────────────────────────────────────────────
+
+function makeLsRemoteTags(tags: string[]): string {
+	return tags.map((t) => `abc123\trefs/tags/${t}`).join('\n');
+}
+
+describe('fetchTagsByChannel', () => {
+	beforeEach(() => vi.clearAllMocks());
+
+	it('throws when execSync fails', () => {
+		mockExecSync.mockImplementation(() => { throw new Error('network error'); });
+		expect(() => fetchTagsByChannel('stable')).toThrow('Failed to fetch remote tags');
+	});
+
+	it.each([
+		['stable', ['4.1.0', '4.2.0', '4.2.0-beta1', '4.2.0-beta2'], ['4.1.0', '4.2.0']],
+		['beta',   ['4.1.0', '4.2.0-beta1', '4.2.0-beta2'],           ['4.2.0-beta1', '4.2.0-beta2']],
+		['stable', ['4.1.0', 'v4.2.0', '4.2.0-rc1', 'not-a-version'], ['4.1.0']],
+		['stable', ['4.1.0-beta1'],                                     []],
+	] as const)('filters channel=%s correctly', (channel, tags, expected) => {
+		mockExecSync.mockReturnValue(makeLsRemoteTags([...tags]) as never);
+		expect(fetchTagsByChannel(channel)).toEqual(expected);
+	});
+});
+
+// ─── checkVersionIsNext ───────────────────────────────────────────────────────
+
+describe('checkVersionIsNext', () => {
+	beforeEach(() => vi.clearAllMocks());
+
+	it.each([
+		// stable — patch
+		['stable', ['4.2.0', '4.2.1', '4.2.2'], '4.2.3', true,  null],
+		['stable', ['4.2.0', '4.2.1', '4.2.2'], '4.2.4', false, 'Expected next patch release to be 4.2.3'],
+		['stable', ['4.2.0', '4.2.1', '4.2.2'], '4.2.2', false, 'Expected next patch release to be 4.2.3'],
+		// stable — minor
+		['stable', ['4.1.0', '4.2.0', '4.2.5'], '4.3.0', true,  null],
+		['stable', ['4.1.0', '4.2.0', '4.2.5'], '4.4.0', false, 'Expected next minor release to be 4.3.0'],
+		// stable — no existing tags
+		['stable', ['4.1.0-beta1'],              '4.1.0', true,  null],
+		// beta — next in same series
+		['beta',   ['4.2.0-beta1', '4.2.0-beta2'], '4.2.0-beta3', true,  null],
+		['beta',   ['4.2.0-beta1', '4.2.0-beta2'], '4.2.0-beta4', false, 'Expected next beta to be 4.2.0-beta3'],
+		['beta',   ['4.2.0-beta1', '4.2.0-beta2'], '4.2.0-beta2', false, 'Expected next beta to be 4.2.0-beta3'],
+		// beta — new version line
+		['beta',   ['4.2.0-beta1', '4.2.0-beta2'], '4.3.0-beta1', true,  null],
+		['beta',   ['4.2.0-beta1', '4.2.0-beta2'], '4.3.0-beta2', false, 'must be beta1'],
+		// beta — no existing tags
+		['beta',   ['4.1.0', '4.2.0'],             '4.2.0-beta1', true,  null],
+	] as const)('%s %s → %s (valid=%s)', (channel, existingTags, version, valid, errorMsg) => {
+		mockExecSync.mockReturnValue(makeLsRemoteTags([...existingTags]) as never);
+		const fn = () => checkVersionIsNext(version, channel);
+		if (valid) {
+			expect(fn).not.toThrow();
+		} else {
+			expect(fn).toThrow(errorMsg!);
+		}
+	});
+
+	it('throws when git ls-remote fails', () => {
+		mockExecSync.mockImplementation(() => { throw new Error('network error'); });
+		expect(() => checkVersionIsNext('4.2.3', 'stable')).toThrow('Failed to fetch remote tags');
 	});
 });
