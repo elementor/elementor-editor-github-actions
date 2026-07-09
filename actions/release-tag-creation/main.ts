@@ -1,5 +1,5 @@
-	import { execSync } from 'node:child_process';
-	import { appendFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { appendFileSync } from 'node:fs';
 	import semver from 'semver';
 	import { checkVersionIsNext, fetchCompanionTag } from './current-version-validation.ts';
 
@@ -43,15 +43,18 @@ export function validateFormat(version: string): void {
 
 export function checkCurrentTagDoesNotExist(version: string): void {
 	const tagRef = `refs/tags/${version}`;
-	let output: string;
 
-	try {
-		output = execSync(`git ls-remote origin "${tagRef}"`, { encoding: 'utf8' });
-	} catch (err) {
-		throw new Error(`Failed to check remote tags: ${(err as Error).message}`);
+	const result = spawnSync('git', ['ls-remote', 'origin', tagRef], { encoding: 'utf8' });
+
+	if (result.error) {
+		throw new Error(`Failed to check remote tags: ${result.error.message}`);
 	}
 
-	if (output.trim() !== '') {
+	if (result.status !== 0) {
+		throw new Error(`Failed to check remote tags: ${result.stderr}`);
+	}
+
+	if (result.stdout.trim() !== '') {
 		throw new Error(
 			`Version ${version} already exists as a GitHub Release (tag ${version} found).`,
 		);
