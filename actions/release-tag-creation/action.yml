@@ -38,14 +38,17 @@ runs:
   steps:
   - name: Install dependencies
     shell: bash
-    run: npm install --prefix "${{ github.action_path }}"
+    env:
+      ACTION_PATH: ${{ github.action_path }}
+    run: npm install --prefix "$ACTION_PATH"
 
   - name: Handle version input
     id: handle-version-input
     shell: bash
     env:
       INPUT_VERSION: ${{ inputs.version }}
-    run: node "${{ github.action_path }}/main.ts"
+      ACTION_PATH: ${{ github.action_path }}
+    run: node "$ACTION_PATH/main.ts"
 
   - name: Switch to release branch
     shell: bash
@@ -72,7 +75,8 @@ runs:
       INPUT_VERSION: ${{ inputs.version }}
       INPUT_CHANNEL: ${{ steps.handle-version-input.outputs.channel }}
       INPUT_COMPANION_TAG: ${{ steps.handle-version-input.outputs.companion_tag }}
-    run: node "${{ github.action_path }}/update-version-files.ts"
+      ACTION_PATH: ${{ github.action_path }}
+    run: node "$ACTION_PATH/update-version-files.ts"
 
   - name: Commit version bump
     shell: bash

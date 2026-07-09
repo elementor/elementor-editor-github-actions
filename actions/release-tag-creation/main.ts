@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { appendFileSync } from 'node:fs';
-	import semver from 'semver';
-	import { checkVersionIsNext, fetchCompanionTag } from './current-version-validation.ts';
+import semver from 'semver';
+import { checkVersionIsNext, fetchCompanionTag } from './current-version-validation.ts';
 
 // X.Y.Z or X.Y.Z-betaN — no dot between "beta" and the number
 export const ALLOWED_PATTERN = /^\d+\.\d+\.\d+(-beta\d+)?$/;
@@ -62,9 +62,6 @@ export function checkCurrentTagDoesNotExist(version: string): void {
 
 	console.log(`✅ Version ${version} does not exist as a GitHub Release.`);
 }
-
-
-
 
 // ─── derivation ───────────────────────────────────────────────────────────────
 
