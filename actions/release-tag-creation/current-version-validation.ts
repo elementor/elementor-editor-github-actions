@@ -1,7 +1,7 @@
 import { execSync } from 'node:child_process';
 import semver from 'semver';
 
-import { ALLOWED_PATTERN } from './main.ts';
+export const ALLOWED_PATTERN = /^\d+\.\d+\.\d+(-beta\d+)?$/;
 
 function fetchTagsByChannel(channel: 'stable' | 'beta'): string[] {
 	let tagsOutput: string;
