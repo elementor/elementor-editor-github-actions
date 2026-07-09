@@ -22,11 +22,15 @@ export function patchReadmeTxt(
 	tags: { stable: string; beta: string },
 ): string {
 	if (!content.match(/^Stable tag: /m)) {
-		throw new Error('patchReadmeTxt: "Stable tag:" line not found in readme.txt');
+		throw new Error(
+			'patchReadmeTxt: "Stable tag:" line not found in readme.txt',
+		);
 	}
 
 	if (!content.match(/^Beta tag: /m)) {
-		throw new Error('patchReadmeTxt: "Beta tag:" line not found in readme.txt');
+		throw new Error(
+			'patchReadmeTxt: "Beta tag:" line not found in readme.txt',
+		);
 	}
 
 	return content
@@ -58,7 +62,7 @@ export function parseLatestTagFromLsRemote(
 		.sort((a, b) => {
 			// Semantic version sort: split on dots and numeric pre-release parts
 			const toparts = (v: string) =>
-				v.split(/[.\-]/).map((p) => (isNaN(Number(p)) ? p : Number(p)));
+				v.split(/[.-]/).map((p) => (isNaN(Number(p)) ? p : Number(p)));
 			const ap = toparts(a);
 			const bp = toparts(b);
 			for (let i = 0; i < Math.max(ap.length, bp.length); i++) {

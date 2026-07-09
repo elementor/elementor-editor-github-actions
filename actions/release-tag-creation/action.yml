@@ -2,150 +2,150 @@ name: Release Tag Creation
 description: Validates the version, bumps version files, creates and pushes a git release tag.
 
 inputs:
-  version:
-    required: true
-    description: 'Version to release (e.g. 4.1.0-beta1 or 4.0.11).'
-  dry_run:
-    required: false
-    default: 'true'
-    description: 'Dry run — validate everything but do not push commits or create tag.'
-  maintain_username:
-    required: true
-    description: 'Git user.name for the version-bump commit.'
-  maintain_email:
-    required: true
-    description: 'Git user.email for the version-bump commit.'
+    version:
+        required: true
+        description: 'Version to release (e.g. 4.1.0-beta1 or 4.0.11).'
+    dry_run:
+        required: false
+        default: 'true'
+        description: 'Dry run — validate everything but do not push commits or create tag.'
+    maintain_username:
+        required: true
+        description: 'Git user.name for the version-bump commit.'
+    maintain_email:
+        required: true
+        description: 'Git user.email for the version-bump commit.'
 
 outputs:
-  channel:
-    description: 'The release channel: stable or beta.'
-    value: ${{ steps.handle-version-input.outputs.channel }}
-  checkout_branch:
-    description: 'The branch the version bump was applied to.'
-    value: ${{ steps.handle-version-input.outputs.checkout_branch }}
-  tag_pushed:
-    description: 'Whether the tag was pushed (true/false).'
-    value: ${{ steps.create-release-tag.outputs.tag_pushed }}
-  readme_stable_tag:
-    description: 'The Stable tag value written to readme.txt.'
-    value: ${{ steps.capture-readme.outputs.readme_stable_tag }}
-  readme_beta_tag:
-    description: 'The Beta tag value written to readme.txt.'
-    value: ${{ steps.capture-readme.outputs.readme_beta_tag }}
+    channel:
+        description: 'The release channel: stable or beta.'
+        value: ${{ steps.handle-version-input.outputs.channel }}
+    checkout_branch:
+        description: 'The branch the version bump was applied to.'
+        value: ${{ steps.handle-version-input.outputs.checkout_branch }}
+    tag_pushed:
+        description: 'Whether the tag was pushed (true/false).'
+        value: ${{ steps.create-release-tag.outputs.tag_pushed }}
+    readme_stable_tag:
+        description: 'The Stable tag value written to readme.txt.'
+        value: ${{ steps.capture-readme.outputs.readme_stable_tag }}
+    readme_beta_tag:
+        description: 'The Beta tag value written to readme.txt.'
+        value: ${{ steps.capture-readme.outputs.readme_beta_tag }}
 
 runs:
-  using: composite
-  steps:
-  - name: Install dependencies
-    shell: bash
-    env:
-      ACTION_PATH: ${{ github.action_path }}
-    run: npm install --prefix "$ACTION_PATH"
+    using: composite
+    steps:
+        - name: Install dependencies
+          shell: bash
+          env:
+              ACTION_PATH: ${{ github.action_path }}
+          run: npm install --prefix "$ACTION_PATH"
 
-  - name: Handle version input
-    id: handle-version-input
-    shell: bash
-    env:
-      INPUT_VERSION: ${{ inputs.version }}
-      ACTION_PATH: ${{ github.action_path }}
-    run: node "$ACTION_PATH/main.ts"
+        - name: Handle version input
+          id: handle-version-input
+          shell: bash
+          env:
+              INPUT_VERSION: ${{ inputs.version }}
+              ACTION_PATH: ${{ github.action_path }}
+          run: node "$ACTION_PATH/main.ts"
 
-  - name: Switch to release branch
-    shell: bash
-    env:
-      CHECKOUT_BRANCH: ${{ steps.handle-version-input.outputs.checkout_branch }}
-      CHECKOUT_SHA: ${{ github.sha }}
-    run: |
-      git checkout "${CHECKOUT_BRANCH}"
-      git checkout "${CHECKOUT_SHA}" -- .github/
+        - name: Switch to release branch
+          shell: bash
+          env:
+              CHECKOUT_BRANCH: ${{ steps.handle-version-input.outputs.checkout_branch }}
+              CHECKOUT_SHA: ${{ github.sha }}
+          run: |
+              git checkout "${CHECKOUT_BRANCH}"
+              git checkout "${CHECKOUT_SHA}" -- .github/
 
-  - name: Config git user
-    shell: bash
-    env:
-      GIT_USER_NAME: ${{ inputs.maintain_username }}
-      GIT_USER_EMAIL: ${{ inputs.maintain_email }}
-    run: |
-      git config --global user.name "${GIT_USER_NAME}"
-      git config --global user.email "${GIT_USER_EMAIL}"
+        - name: Config git user
+          shell: bash
+          env:
+              GIT_USER_NAME: ${{ inputs.maintain_username }}
+              GIT_USER_EMAIL: ${{ inputs.maintain_email }}
+          run: |
+              git config --global user.name "${GIT_USER_NAME}"
+              git config --global user.email "${GIT_USER_EMAIL}"
 
-  - name: Update version files
-    id: capture-readme
-    shell: bash
-    env:
-      INPUT_VERSION: ${{ inputs.version }}
-      INPUT_CHANNEL: ${{ steps.handle-version-input.outputs.channel }}
-      INPUT_COMPANION_TAG: ${{ steps.handle-version-input.outputs.companion_tag }}
-      ACTION_PATH: ${{ github.action_path }}
-    run: node "$ACTION_PATH/update-version-files.ts"
+        - name: Update version files
+          id: capture-readme
+          shell: bash
+          env:
+              INPUT_VERSION: ${{ inputs.version }}
+              INPUT_CHANNEL: ${{ steps.handle-version-input.outputs.channel }}
+              INPUT_COMPANION_TAG: ${{ steps.handle-version-input.outputs.companion_tag }}
+              ACTION_PATH: ${{ github.action_path }}
+          run: node "$ACTION_PATH/update-version-files.ts"
 
-  - name: Commit version bump
-    shell: bash
-    env:
-      VERSION: ${{ inputs.version }}
-      DRY_RUN: ${{ inputs.dry_run }}
-    run: |
-      if [[ "${DRY_RUN}" == "true" ]]; then
-        echo "Dry run — skipping commit."
-        exit 0
-      fi
-      git add elementor.php readme.txt
-      if git diff --cached --quiet; then
-        echo "No changes to commit — version files already at ${VERSION}."
-        exit 0
-      fi
-      git commit -m "Bump version to ${VERSION}"
-      echo "Committed version bump to ${VERSION}."
+        - name: Commit version bump
+          shell: bash
+          env:
+              VERSION: ${{ inputs.version }}
+              DRY_RUN: ${{ inputs.dry_run }}
+          run: |
+              if [[ "${DRY_RUN}" == "true" ]]; then
+                echo "Dry run — skipping commit."
+                exit 0
+              fi
+              git add elementor.php readme.txt
+              if git diff --cached --quiet; then
+                echo "No changes to commit — version files already at ${VERSION}."
+                exit 0
+              fi
+              git commit -m "Bump version to ${VERSION}"
+              echo "Committed version bump to ${VERSION}."
 
-  - name: Create release tag
-    id: create-release-tag
-    shell: bash
-    env:
-      VERSION: ${{ inputs.version }}
-      DRY_RUN: ${{ inputs.dry_run }}
-    run: |
-      if [[ "${DRY_RUN}" == "true" ]]; then
-        echo "Dry run — skipping tag push."
-        echo "tag_pushed=false" >> "$GITHUB_OUTPUT"
-      else
-        git tag -a "${VERSION}" -m "Release version ${VERSION}"
-        git push origin "${VERSION}"
-        echo "Release tag ${VERSION} pushed successfully (branch unchanged)."
-        echo "tag_pushed=true" >> "$GITHUB_OUTPUT"
-      fi
+        - name: Create release tag
+          id: create-release-tag
+          shell: bash
+          env:
+              VERSION: ${{ inputs.version }}
+              DRY_RUN: ${{ inputs.dry_run }}
+          run: |
+              if [[ "${DRY_RUN}" == "true" ]]; then
+                echo "Dry run — skipping tag push."
+                echo "tag_pushed=false" >> "$GITHUB_OUTPUT"
+              else
+                git tag -a "${VERSION}" -m "Release version ${VERSION}"
+                git push origin "${VERSION}"
+                echo "Release tag ${VERSION} pushed successfully (branch unchanged)."
+                echo "tag_pushed=true" >> "$GITHUB_OUTPUT"
+              fi
 
-  - name: Write job summary
-    shell: bash
-    env:
-      DRY_RUN: ${{ inputs.dry_run }}
-      TAG_PUSHED: ${{ steps.create-release-tag.outputs.tag_pushed }}
-      CHANNEL: ${{ steps.handle-version-input.outputs.channel }}
-      BRANCH: ${{ steps.handle-version-input.outputs.checkout_branch }}
-      STABLE_TAG: ${{ steps.capture-readme.outputs.readme_stable_tag }}
-      BETA_TAG: ${{ steps.capture-readme.outputs.readme_beta_tag }}
-      VERSION: ${{ inputs.version }}
-    run: |
-      if [[ "${DRY_RUN}" == "true" ]]; then
-        MODE_BADGE="🔵 Dry Run"
-      else
-        MODE_BADGE="🚀 Live"
-      fi
+        - name: Write job summary
+          shell: bash
+          env:
+              DRY_RUN: ${{ inputs.dry_run }}
+              TAG_PUSHED: ${{ steps.create-release-tag.outputs.tag_pushed }}
+              CHANNEL: ${{ steps.handle-version-input.outputs.channel }}
+              BRANCH: ${{ steps.handle-version-input.outputs.checkout_branch }}
+              STABLE_TAG: ${{ steps.capture-readme.outputs.readme_stable_tag }}
+              BETA_TAG: ${{ steps.capture-readme.outputs.readme_beta_tag }}
+              VERSION: ${{ inputs.version }}
+          run: |
+              if [[ "${DRY_RUN}" == "true" ]]; then
+                MODE_BADGE="🔵 Dry Run"
+              else
+                MODE_BADGE="🚀 Live"
+              fi
 
-      if [[ "${TAG_PUSHED}" == "true" ]]; then
-        TAG_STATUS="✅ Pushed"
-      else
-        TAG_STATUS="⏭️ Skipped (dry run)"
-      fi
+              if [[ "${TAG_PUSHED}" == "true" ]]; then
+                TAG_STATUS="✅ Pushed"
+              else
+                TAG_STATUS="⏭️ Skipped (dry run)"
+              fi
 
-      {
-        echo "## Release Tag Creation Report"
-        echo ""
-        echo "| Field | Value |"
-        echo "| --- | --- |"
-        echo "| **Mode** | ${MODE_BADGE} |"
-        echo "| **Version** | \`${VERSION}\` |"
-        echo "| **Channel** | ${CHANNEL} |"
-        echo "| **Branch** | \`${BRANCH}\` |"
-        echo "| **Tag pushed** | ${TAG_STATUS} |"
-        echo "| **readme.txt stable tag** | \`${STABLE_TAG}\` |"
-        echo "| **readme.txt beta tag** | \`${BETA_TAG}\` |"
-      } >> "$GITHUB_STEP_SUMMARY"
+              {
+                echo "## Release Tag Creation Report"
+                echo ""
+                echo "| Field | Value |"
+                echo "| --- | --- |"
+                echo "| **Mode** | ${MODE_BADGE} |"
+                echo "| **Version** | \`${VERSION}\` |"
+                echo "| **Channel** | ${CHANNEL} |"
+                echo "| **Branch** | \`${BRANCH}\` |"
+                echo "| **Tag pushed** | ${TAG_STATUS} |"
+                echo "| **readme.txt stable tag** | \`${STABLE_TAG}\` |"
+                echo "| **readme.txt beta tag** | \`${BETA_TAG}\` |"
+              } >> "$GITHUB_STEP_SUMMARY"

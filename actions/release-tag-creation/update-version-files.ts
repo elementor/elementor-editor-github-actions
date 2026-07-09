@@ -6,18 +6,24 @@ function patchPhpVersion(content: string, version: string): string {
 		.replace(/(define\( 'ELEMENTOR_VERSION', ')[^']*'/, `$1${version}'`);
 }
 
-function patchReadmeTxt(content: string, tags: { stable: string; beta: string }): string {
+function patchReadmeTxt(
+	content: string,
+	tags: { stable: string; beta: string },
+): string {
 	if (!content.match(/^Stable tag: /m)) {
-		throw new Error('patchReadmeTxt: "Stable tag:" line not found in readme.txt');
+		throw new Error(
+			'patchReadmeTxt: "Stable tag:" line not found in readme.txt',
+		);
 	}
 	if (!content.match(/^Beta tag: /m)) {
-		throw new Error('patchReadmeTxt: "Beta tag:" line not found in readme.txt');
+		throw new Error(
+			'patchReadmeTxt: "Beta tag:" line not found in readme.txt',
+		);
 	}
 	return content
 		.replace(/^Stable tag: .*/m, `Stable tag: ${tags.stable}`)
 		.replace(/^Beta tag: .*/m, `Beta tag: ${tags.beta}`);
 }
-
 
 export function resolveReadmeTags(
 	version: string,
@@ -55,7 +61,10 @@ export function run(): void {
 
 		// ── elementor.php ────────────────────────────────────────────────────────
 		const phpPath = 'elementor.php';
-		const patchedPhp = patchPhpVersion(readFileSync(phpPath, 'utf8'), version);
+		const patchedPhp = patchPhpVersion(
+			readFileSync(phpPath, 'utf8'),
+			version,
+		);
 		writeFileSync(phpPath, patchedPhp, 'utf8');
 		console.log(`✅ elementor.php patched to ${version}`);
 
@@ -63,9 +72,14 @@ export function run(): void {
 		const readmePath = 'readme.txt';
 		const readmeTags = resolveReadmeTags(version, channel, companionTag);
 
-		const patchedReadme = patchReadmeTxt(readFileSync(readmePath, 'utf8'), readmeTags);
+		const patchedReadme = patchReadmeTxt(
+			readFileSync(readmePath, 'utf8'),
+			readmeTags,
+		);
 		writeFileSync(readmePath, patchedReadme, 'utf8');
-		console.log(`✅ readme.txt patched — Stable: ${readmeTags.stable}, Beta: ${readmeTags.beta}`);
+		console.log(
+			`✅ readme.txt patched — Stable: ${readmeTags.stable}, Beta: ${readmeTags.beta}`,
+		);
 
 		// ── outputs ──────────────────────────────────────────────────────────────
 		setOutput('readme_stable_tag', readmeTags.stable);
