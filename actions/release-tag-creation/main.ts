@@ -1,7 +1,11 @@
 import { spawnSync } from 'node:child_process';
 import { appendFileSync } from 'node:fs';
 import semver from 'semver';
-import { ALLOWED_PATTERN, checkVersionIsNext, fetchCompanionTag } from './current-version-validation.ts';
+import {
+	ALLOWED_PATTERN,
+	checkVersionIsNext,
+	fetchCompanionTag,
+} from './current-version-validation.ts';
 
 // ─── I/O helpers ──────────────────────────────────────────────────────────────
 
@@ -9,7 +13,9 @@ export function getVersion(): string {
 	const version = (process.env['INPUT_VERSION'] ?? '').trim();
 
 	if (!version) {
-		throw new Error('No version provided. Set the INPUT_VERSION environment variable.');
+		throw new Error(
+			'No version provided. Set the INPUT_VERSION environment variable.',
+		);
 	}
 
 	return version;
@@ -41,7 +47,9 @@ export function validateFormat(version: string): void {
 export function checkCurrentTagDoesNotExist(version: string): void {
 	const tagRef = `refs/tags/${version}`;
 
-	const result = spawnSync('git', ['ls-remote', 'origin', tagRef], { encoding: 'utf8' });
+	const result = spawnSync('git', ['ls-remote', 'origin', tagRef], {
+		encoding: 'utf8',
+	});
 
 	if (result.error) {
 		throw new Error(`Failed to check remote tags: ${result.error.message}`);
@@ -65,14 +73,16 @@ export function checkCurrentTagDoesNotExist(version: string): void {
 export function extractChannel(version: string): 'stable' | 'beta' {
 	const prerelease = semver.prerelease(version);
 
-	console.log(`Determining channel for version "${version}" (prerelease: ${JSON.stringify(prerelease)})`);
+	console.log(
+		`Determining channel for version "${version}" (prerelease: ${JSON.stringify(prerelease)})`,
+	);
 
 	if (prerelease === null) {
 		return 'stable';
 	}
 
-	const prereleaseChannel = String( prerelease[0] );
-	if ( prereleaseChannel?.startsWith('beta') ) {
+	const prereleaseChannel = String(prerelease[0]);
+	if (prereleaseChannel.startsWith('beta')) {
 		return 'beta';
 	}
 
@@ -83,7 +93,7 @@ export function extractChannel(version: string): 'stable' | 'beta' {
 }
 
 export function deriveBranch(channel: 'stable' | 'beta'): string {
-		return `release/${channel}`;
+	return `release/${channel}`;
 }
 
 // ─── entry point ──────────────────────────────────────────────────────────────
