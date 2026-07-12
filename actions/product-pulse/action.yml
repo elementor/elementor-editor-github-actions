@@ -5,13 +5,9 @@ inputs:
     pr-number:
         description: 'Pull request number to generate the pulse for'
         required: true
-    prompt-file:
-        description: 'Path (relative to the checked-out caller repo) to the product-pulse prompt markdown file'
+    product-areas-file:
+        description: 'Path (relative to the checked-out caller repo) to the repo-specific product-areas markdown file (PRODUCT_NAME/PRODUCT_AREAS/PRODUCT_ENUM). Combined with this action''s shared prompt-template.md to build the full prompt.'
         required: true
-    default-product:
-        description: 'Fallback product name used when the AI response omits one'
-        required: false
-        default: 'Elementor'
     model:
         description: 'Cursor Agent model to use for pulse generation'
         required: false
@@ -47,12 +43,23 @@ runs:
               curl https://cursor.com/install -fsS | bash
               echo "$HOME/.cursor/bin" >> "$GITHUB_PATH"
 
+        - name: Render prompt
+          shell: bash
+          env:
+              ACTION_PATH: ${{ github.action_path }}
+              PRODUCT_AREAS_FILE: ${{ inputs.product-areas-file }}
+          run: |
+              python3 "$ACTION_PATH/scripts/render-prompt.py" \
+                "$ACTION_PATH/prompt-template.md" \
+                "$PRODUCT_AREAS_FILE" \
+                /tmp/rendered_prompt.md \
+                /tmp/product_name.txt
+
         - name: Generate product pulse
           id: generate
           shell: bash
           env:
               CURSOR_API_KEY: ${{ inputs.cursor-api-key }}
-              PROMPT_FILE: ${{ inputs.prompt-file }}
               MODEL: ${{ inputs.model }}
           run: |
               if [ -z "$CURSOR_API_KEY" ]; then
@@ -66,7 +73,7 @@ runs:
               DIFF_DATA=$(head -500 /tmp/diff.txt 2>/dev/null | head -c 100000 || echo "No diff")
 
               {
-                cat "$PROMPT_FILE"
+                cat /tmp/rendered_prompt.md
                 printf '\n## PR Information\n'
                 printf '%s' "$PR_DATA"
                 printf '\n\n## Diff (first 500 lines, truncated to 100KB)\n```\n'
@@ -93,9 +100,9 @@ runs:
           id: update
           shell: bash
           env:
-              DEFAULT_PRODUCT: ${{ inputs.default-product }}
               ACTION_PATH: ${{ github.action_path }}
           run: |
+              DEFAULT_PRODUCT=$(cat /tmp/product_name.txt)
               RAW_OUTPUT=$(cat /tmp/pulse_output.json)
 
               RESULT_CONTENT=$(echo "$RAW_OUTPUT" | jq -r '.result // empty')
