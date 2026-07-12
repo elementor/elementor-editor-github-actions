@@ -34,9 +34,8 @@ runs:
           shell: bash
           env:
               GH_TOKEN: ${{ github.token }}
+              PR_NUMBER: ${{ inputs.pr-number }}
           run: |
-              PR_NUMBER="${{ inputs.pr-number }}"
-
               gh pr view "$PR_NUMBER" \
                 --json title,body,files > /tmp/pr.json
 
@@ -95,6 +94,7 @@ runs:
           shell: bash
           env:
               DEFAULT_PRODUCT: ${{ inputs.default-product }}
+              ACTION_PATH: ${{ github.action_path }}
           run: |
               RAW_OUTPUT=$(cat /tmp/pulse_output.json)
 
@@ -111,7 +111,7 @@ runs:
               fi
 
               if [ -z "$OUTPUT" ]; then
-                TRIMMED=$(echo "$RESULT_CONTENT" | python3 "${{ github.action_path }}/scripts/extract-pulse-json.py" 2>/dev/null)
+                TRIMMED=$(echo "$RESULT_CONTENT" | python3 "$ACTION_PATH/scripts/extract-pulse-json.py" 2>/dev/null)
                 if [ -n "$TRIMMED" ]; then
                   OUTPUT="$TRIMMED"
                 fi
@@ -194,16 +194,15 @@ runs:
           env:
               SLACK_TOKEN: ${{ inputs.slack-token }}
               SLACK_CHANNEL_ID: ${{ inputs.slack-channel-id }}
+              TITLE: ${{ steps.update.outputs.title }}
+              DESCRIPTION: ${{ steps.update.outputs.description }}
+              PRODUCT: ${{ steps.update.outputs.product }}
+              TYPE: ${{ steps.update.outputs.type }}
+              LOOM_URL: ${{ steps.update.outputs.loom_url }}
+              JIRA_URL: ${{ steps.update.outputs.jira_url }}
+              PR_NUMBER: ${{ inputs.pr-number }}
+              PR_URL: ${{ github.event.pull_request.html_url }}
           run: |
-              TITLE="${{ steps.update.outputs.title }}"
-              DESCRIPTION="${{ steps.update.outputs.description }}"
-              PRODUCT="${{ steps.update.outputs.product }}"
-              TYPE="${{ steps.update.outputs.type }}"
-              LOOM_URL="${{ steps.update.outputs.loom_url }}"
-              JIRA_URL="${{ steps.update.outputs.jira_url }}"
-              PR_NUMBER="${{ inputs.pr-number }}"
-              PR_URL="${{ github.event.pull_request.html_url }}"
-
               case "$TYPE" in
                 fix)
                   HEADER_EMOJI="🐛"
