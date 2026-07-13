@@ -5,8 +5,8 @@ inputs:
     pr-number:
         description: 'Pull request number to generate the pulse for'
         required: true
-    product-areas-file:
-        description: 'Path (relative to the checked-out caller repo) to the repo-specific product-areas markdown file (PRODUCT_NAME/PRODUCT_AREAS/PRODUCT_ENUM). Combined with this action''s shared prompt-template.md to build the full prompt.'
+    product-name:
+        description: 'Product name to use in the prompt and Slack header (e.g. "Elementor" or "Elementor Pro")'
         required: true
     model:
         description: 'Cursor Agent model to use for pulse generation'
@@ -47,13 +47,12 @@ runs:
           shell: bash
           env:
               ACTION_PATH: ${{ github.action_path }}
-              PRODUCT_AREAS_FILE: ${{ inputs.product-areas-file }}
+              PRODUCT_NAME: ${{ inputs.product-name }}
           run: |
               python3 "$ACTION_PATH/scripts/render-prompt.py" \
                 "$ACTION_PATH/prompt-template.md" \
-                "$PRODUCT_AREAS_FILE" \
-                /tmp/rendered_prompt.md \
-                /tmp/product_name.txt
+                "$PRODUCT_NAME" \
+                /tmp/rendered_prompt.md
 
         - name: Generate product pulse
           id: generate
@@ -102,7 +101,6 @@ runs:
           env:
               ACTION_PATH: ${{ github.action_path }}
           run: |
-              DEFAULT_PRODUCT=$(cat /tmp/product_name.txt)
               RAW_OUTPUT=$(cat /tmp/pulse_output.json)
 
               RESULT_CONTENT=$(echo "$RAW_OUTPUT" | jq -r '.result // empty')
@@ -143,7 +141,6 @@ runs:
 
               TITLE=$(echo "$OUTPUT" | jq -r '.title')
               DESCRIPTION=$(echo "$OUTPUT" | jq -r '.description')
-              PRODUCT=$(echo "$OUTPUT" | jq -r --arg default "$DEFAULT_PRODUCT" '.product // $default')
               TYPE=$(echo "$OUTPUT" | jq -r '.type // "feature"')
 
               if [ -z "$TITLE" ] || [ "$TITLE" = "null" ]; then
@@ -167,7 +164,7 @@ runs:
                   ;;
               esac
 
-              echo "✅ Generated pulse: $TITLE (product: $PRODUCT, type: $TYPE)"
+              echo "✅ Generated pulse: $TITLE (type: $TYPE)"
 
               PR_BODY=$(cat /tmp/pr.json | jq -r '.body // ""')
               LOOM_URL=$(echo "$PR_BODY" | grep -oE 'https://(www\.)?loom\.com/share/[a-zA-Z0-9]+' | head -1 || echo "")
@@ -190,7 +187,6 @@ runs:
                 echo "description<<EOF"
                 echo "$DESCRIPTION"
                 echo "EOF"
-                echo "product=$PRODUCT"
                 echo "type=$TYPE"
               } >> $GITHUB_OUTPUT
 
@@ -203,7 +199,7 @@ runs:
               SLACK_CHANNEL_ID: ${{ inputs.slack-channel-id }}
               TITLE: ${{ steps.update.outputs.title }}
               DESCRIPTION: ${{ steps.update.outputs.description }}
-              PRODUCT: ${{ steps.update.outputs.product }}
+              PRODUCT: ${{ inputs.product-name }}
               TYPE: ${{ steps.update.outputs.type }}
               LOOM_URL: ${{ steps.update.outputs.loom_url }}
               JIRA_URL: ${{ steps.update.outputs.jira_url }}

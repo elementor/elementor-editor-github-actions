@@ -36,14 +36,6 @@ Every included PR must also be classified with a `type`:
 - `"improvement"` — makes an existing feature faster, smoother, or easier to use, without adding new capability
 - `"internal"` — a notable change worth logging but with no direct end-user impact (e.g. new admin-only tooling)
 
-## Product Area Detection
-
-Based on which files the PR touches, determine the product area:
-
-{{PRODUCT_AREAS}}
-- If the PR touches multiple areas, pick the primary one (where the main feature lives).
-- Changes in `packages/` belong to whichever product area consumes them — check the PR context.
-
 ## Output Format
 
 Output ONLY valid JSON in this exact format:
@@ -52,7 +44,6 @@ Output ONLY valid JSON in this exact format:
 {
   "skip": false,
   "type": "feature",
-  "product": "Widgets",
   "title": "Loop Through WooCommerce Products",
   "description": "You can now build dynamic product grids that automatically loop through your WooCommerce catalog. No more manually adding each product one by one."
 }
@@ -66,8 +57,6 @@ Or if skipping:
   "reason": "Internal refactoring with no user-facing changes"
 }
 ```
-
-The `product` field must be one of: {{PRODUCT_ENUM}}.
 
 The `type` field must be one of: `"feature"`, `"fix"`, `"improvement"`, `"internal"`.
 
@@ -97,7 +86,6 @@ Follow Lovable's product update style:
 {
   "skip": false,
   "type": "feature",
-  "product": "Editor",
   "title": "Drag Widgets Between Columns",
   "description": "You can now drag widgets directly from one column to another in the editor. No more copy-paste or delete-and-recreate when rearranging your layout."
 }
@@ -125,7 +113,6 @@ Why it's bad: The title doesn't tell users WHAT the feature does.
 {
   "skip": false,
   "type": "feature",
-  "product": "Theme Builder",
   "title": "Preview Templates Before Publishing",
   "description": "You can now preview how a theme template looks against real content before making it live. Catch layout issues before your visitors do."
 }
@@ -136,7 +123,6 @@ Why it's bad: The title doesn't tell users WHAT the feature does.
 {
   "skip": false,
   "type": "fix",
-  "product": "Widgets",
   "title": "Fixed Broken Icons in Nav Menu",
   "description": "Custom icons in the Nav Menu widget no longer disappear when the Inline Font Icons experiment is off."
 }
@@ -156,11 +142,11 @@ Why it's bad: The title doesn't tell users WHAT the feature does.
 A PR titled `chore: update Playwright config` that only touches `.github/workflows/playwright.yml` and `tests/playwright/` → skip. CI and test infrastructure changes are never product-facing.
 
 ### Feature PR (include):
-A PR that adds a brand-new user-visible widget or capability, touching paths matched in the Product Area Detection list above → include with the corresponding product. New user-visible widgets always qualify.
+A PR that adds a brand-new user-visible widget or capability → include. New user-visible widgets always qualify.
 
 ### Partial `packages/` changes (evaluate carefully):
 A PR that only bumps versions or updates a CHANGELOG.md under `packages/` → skip (release housekeeping).
-A PR that changes behavior inside a `packages/` source directory with corresponding UI impact → include with the product area that consumes that package. Read the diff and PR body to determine whether the package change reaches users.
+A PR that changes behavior inside a `packages/` source directory with corresponding UI impact → include. Read the diff and PR body to determine whether the package change reaches users.
 
 ## Context You'll Receive
 
