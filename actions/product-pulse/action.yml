@@ -37,6 +37,31 @@ runs:
 
               gh pr diff "$PR_NUMBER" > /tmp/diff.txt || echo "No diff available"
 
+        - name: Get build artifact link
+          id: artifact
+          shell: bash
+          env:
+              GH_TOKEN: ${{ github.token }}
+              REPO: ${{ github.repository }}
+              HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          run: |
+              RUN_ID=$(gh api "repos/${REPO}/actions/workflows/build.yml/runs?head_sha=${HEAD_SHA}&status=success" --jq '.workflow_runs[0].id // empty' 2>/dev/null || echo "")
+
+              if [ -z "$RUN_ID" ]; then
+                echo "⚠️  No successful Build workflow run found for this PR, skipping artifact link"
+                exit 0
+              fi
+
+              ARTIFACT_ID=$(gh api "repos/${REPO}/actions/runs/${RUN_ID}/artifacts" --jq '.artifacts[0].id // empty' 2>/dev/null || echo "")
+
+              if [ -z "$ARTIFACT_ID" ]; then
+                echo "⚠️  No build artifact found for run $RUN_ID, skipping artifact link"
+                exit 0
+              fi
+
+              echo "🔗 Found build artifact: https://github.com/${REPO}/actions/runs/${RUN_ID}/artifacts/${ARTIFACT_ID}"
+              echo "build_artifact_url=https://github.com/${REPO}/actions/runs/${RUN_ID}/artifacts/${ARTIFACT_ID}" >> $GITHUB_OUTPUT
+
         - name: Install Cursor CLI
           shell: bash
           run: |
@@ -203,6 +228,7 @@ runs:
               TYPE: ${{ steps.update.outputs.type }}
               LOOM_URL: ${{ steps.update.outputs.loom_url }}
               JIRA_URL: ${{ steps.update.outputs.jira_url }}
+              BUILD_ARTIFACT_URL: ${{ steps.artifact.outputs.build_artifact_url }}
               PR_NUMBER: ${{ inputs.pr-number }}
               PR_URL: ${{ github.event.pull_request.html_url }}
           run: |
@@ -231,6 +257,9 @@ runs:
               if [ -n "$JIRA_URL" ]; then
                 TICKET=$(echo "$JIRA_URL" | grep -oE '[A-Z][A-Z0-9]+-[0-9]+$')
                 FOOTER="${FOOTER}  ·  <${JIRA_URL}|${TICKET}>"
+              fi
+              if [ -n "$BUILD_ARTIFACT_URL" ]; then
+                FOOTER="${FOOTER}  ·  <${BUILD_ARTIFACT_URL}|Build Artifact>"
               fi
 
               BLOCKS=$(jq -n \
