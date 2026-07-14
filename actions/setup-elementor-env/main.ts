@@ -21,11 +21,11 @@ export async function run() {
 			});
 		});
 
-		await core.group('Validating elementor being activated', async () => {
+		await core.group('Activating Elementor', async () => {
 			await runOnContainer({
 				container,
-				command: ['wp', 'plugin', 'is-active', 'elementor'],
-				error: "Can't find an active Elementor installation. Please make sure it's installed and activated.",
+				command: ['wp', 'plugin', 'activate', 'elementor'],
+				error: "Can't activate Elementor. Please make sure it's installed.",
 			});
 		});
 
