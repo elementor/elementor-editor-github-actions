@@ -44,14 +44,14 @@ jobs:
 
 ## Inputs
 
-| Input               | Required | Default        | Description                                                    |
-| -------------------- | -------- | -------------- | ---------------------------------------------------------------- |
-| `pr-number`          | yes      | –              | Merged PR number to generate the pulse for                     |
-| `product-name`       | yes      | –              | Product name used in the prompt and Slack header               |
-| `model`              | no       | `composer-2.5` | Cursor Agent model used for generation                         |
-| `cursor-api-key`     | yes      | –              | Cursor Agent API key                                            |
-| `slack-token`        | yes      | –              | Slack bot token with `chat:write`                               |
-| `slack-channel-id`   | yes      | –              | Slack channel ID for pulse notifications                       |
+| Input              | Required | Default        | Description                                      |
+| ------------------ | -------- | -------------- | ------------------------------------------------ |
+| `pr-number`        | yes      | –              | Merged PR number to generate the pulse for       |
+| `product-name`     | yes      | –              | Product name used in the prompt and Slack header |
+| `model`            | no       | `composer-2.5` | Cursor Agent model used for generation           |
+| `cursor-api-key`   | yes      | –              | Cursor Agent API key                             |
+| `slack-token`      | yes      | –              | Slack bot token with `chat:write`                |
+| `slack-channel-id` | yes      | –              | Slack channel ID for pulse notifications         |
 
 The full generic prompt lives in this action's `prompt-template.md` and is rendered
 with the caller's `product-name` substituted in before being sent to Cursor Agent.

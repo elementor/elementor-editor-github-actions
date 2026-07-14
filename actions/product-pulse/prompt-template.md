@@ -9,6 +9,7 @@ Analyze a merged PR and decide if it contains product-facing changes. If yes, ge
 ## Decision Criteria
 
 ### SKIP if the PR is:
+
 - Pure refactoring with no user-visible changes
 - CI/CD pipeline changes
 - Dependency updates (unless it enables new features)
@@ -19,6 +20,7 @@ Analyze a merged PR and decide if it contains product-facing changes. If yes, ge
 - License/tier bookkeeping changes with no visible upgrade prompt or feature change
 
 ### INCLUDE if the PR is:
+
 - New features users can interact with
 - Bug fixes that users would notice
 - UX improvements (performance, visual changes, better flows)
@@ -65,12 +67,14 @@ The `type` field must be one of: `"feature"`, `"fix"`, `"improvement"`, `"intern
 Follow Lovable's product update style:
 
 1. **Title**: Short, benefit-focused (3-6 words)
+
    - MUST clearly hint at what the feature DOES, not just what category it's in
    - Good: "Drag Widgets Between Columns", "Faster Editor Load Times", "Custom CSS Per Breakpoint"
    - Bad: "Smart Widget Management" (too vague - what does it actually DO?)
    - Bad: "Add nested tabs widget", "Implement collection loop transformer"
 
 2. **Description**: 1-2 sentences, explain WHAT and WHY it matters
+
    - Focus on user benefits, not implementation
    - Use simple, non-technical language
    - Avoid jargon like "component", "service", "endpoint", "module"
@@ -82,6 +86,7 @@ Follow Lovable's product update style:
 ## Examples
 
 ### Good Example (Include):
+
 ```json
 {
   "skip": false,
@@ -92,6 +97,7 @@ Follow Lovable's product update style:
 ```
 
 ### Bad Example (Too Technical):
+
 ```json
 {
   "title": "Nested Carousel Widget Renderer",
@@ -100,15 +106,18 @@ Follow Lovable's product update style:
 ```
 
 ### Bad Example (Too Vague):
+
 ```json
 {
   "title": "Smart Widget Management",
   "description": "Your widgets can now be managed more efficiently in the editor."
 }
 ```
+
 Why it's bad: The title doesn't tell users WHAT the feature does.
 
 ### Good Example (Clear Action):
+
 ```json
 {
   "skip": false,
@@ -119,6 +128,7 @@ Why it's bad: The title doesn't tell users WHAT the feature does.
 ```
 
 ### Good Example (Fix):
+
 ```json
 {
   "skip": false,
@@ -129,6 +139,7 @@ Why it's bad: The title doesn't tell users WHAT the feature does.
 ```
 
 ### Good Example (Skip):
+
 ```json
 {
   "skip": true,
@@ -139,12 +150,15 @@ Why it's bad: The title doesn't tell users WHAT the feature does.
 ## Edge Cases
 
 ### Chore-only PR (skip):
+
 A PR titled `chore: update Playwright config` that only touches `.github/workflows/playwright.yml` and `tests/playwright/` → skip. CI and test infrastructure changes are never product-facing.
 
 ### Feature PR (include):
+
 A PR that adds a brand-new user-visible widget or capability → include. New user-visible widgets always qualify.
 
 ### Partial `packages/` changes (evaluate carefully):
+
 A PR that only bumps versions or updates a CHANGELOG.md under `packages/` → skip (release housekeeping).
 A PR that changes behavior inside a `packages/` source directory with corresponding UI impact → include. Read the diff and PR body to determine whether the package change reaches users.
 
