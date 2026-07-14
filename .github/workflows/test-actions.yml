@@ -20,7 +20,7 @@ jobs:
               uses: ./actions/setup-wp-env
               with:
                   php: '8.0'
-                  wp: '6.6'
+                  wp: '7.0.1'
                   active-theme: 'hello-elementor'
                   themes: |-
                       https://downloads.wordpress.org/theme/hello-elementor.zip
