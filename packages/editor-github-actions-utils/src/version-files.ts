@@ -74,7 +74,6 @@ export function parseLatestTagFromLsRemote(
 				normalizeVersion(b),
 			),
 		);
-		console.log(tags);
 
 	return tags[tags.length - 1] ?? null;
 }
