@@ -14,8 +14,7 @@
 	},
 	"dependencies": {
 		"@actions/core": "^1.11.1",
-		"ansi-styles": "^6.2.1",
-		"semver": "^7.7.2"
+		"ansi-styles": "^6.2.1"
 	},
 	"devDependencies": {
 		"tsup": "^8.5.0",
