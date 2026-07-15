@@ -69,12 +69,9 @@ export function parseLatestTagFromLsRemote(
 		.filter((tag) => safePattern.test(tag))
 		.filter((tag) => semver.valid(normalizeVersion(tag)) !== null)
 		.sort((a, b) =>
-			semver.compare(
-				normalizeVersion(a),
-				normalizeVersion(b),
-			),
+			semver.compare(normalizeVersion(a), normalizeVersion(b)),
 		);
-		console.log(tags);
+	console.log(tags);
 
 	return tags[tags.length - 1] ?? null;
 }
