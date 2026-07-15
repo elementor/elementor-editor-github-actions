@@ -10,7 +10,6 @@
 	},
 	"dependencies": {
 		"@actions/core": "^1.11.1",
-		"@elementor/editor-github-actions-utils": "*",
 		"semver": "^7.7.2"
 	},
 	"devDependencies": {
