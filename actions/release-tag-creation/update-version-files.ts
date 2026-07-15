@@ -1,29 +1,8 @@
 import { readFileSync, writeFileSync, appendFileSync } from 'node:fs';
-
-function patchPhpVersion(content: string, version: string): string {
-	return content
-		.replace(/( \* Version: ).*/g, `$1${version}`)
-		.replace(/(define\( 'ELEMENTOR_VERSION', ')[^']*'/, `$1${version}'`);
-}
-
-function patchReadmeTxt(
-	content: string,
-	tags: { stable: string; beta: string },
-): string {
-	if (!content.match(/^Stable tag: /m)) {
-		throw new Error(
-			'patchReadmeTxt: "Stable tag:" line not found in readme.txt',
-		);
-	}
-	if (!content.match(/^Beta tag: /m)) {
-		throw new Error(
-			'patchReadmeTxt: "Beta tag:" line not found in readme.txt',
-		);
-	}
-	return content
-		.replace(/^Stable tag: .*/m, `Stable tag: ${tags.stable}`)
-		.replace(/^Beta tag: .*/m, `Beta tag: ${tags.beta}`);
-}
+import {
+	patchPhpVersion,
+	patchReadmeTxt,
+} from '@elementor/editor-github-actions-utils';
 
 export function resolveReadmeTags(
 	version: string,

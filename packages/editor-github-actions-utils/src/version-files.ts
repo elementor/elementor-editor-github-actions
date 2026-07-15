@@ -60,9 +60,13 @@ export function parseLatestTagFromLsRemote(
 		.map((ref) => ref.replace(/^refs\/tags\/v?/, ''))
 		.filter((tag) => pattern.test(tag))
 		.sort((a, b) => {
-			// Semantic version sort: split on dots and numeric pre-release parts
+			// Semantic version sort — splits numeric and alphabetic parts so that
+			// beta10 > beta2 (numeric comparison, not lexicographic).
 			const toparts = (v: string) =>
-				v.split(/[.-]/).map((p) => (isNaN(Number(p)) ? p : Number(p)));
+				v.split(/[.-]/).flatMap((p) => {
+					const m = p.match(/^([a-z]+)(\d+)$/);
+					return m ? [m[1], Number(m[2])] : [isNaN(Number(p)) ? p : Number(p)];
+				});
 			const ap = toparts(a);
 			const bp = toparts(b);
 			for (let i = 0; i < Math.max(ap.length, bp.length); i++) {

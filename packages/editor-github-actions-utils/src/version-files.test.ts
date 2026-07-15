@@ -150,4 +150,16 @@ describe('parseLatestTagFromLsRemote', () => {
 			'3.10.0',
 		);
 	});
+
+	it('correctly sorts multi-digit beta numbers numerically (beta10 > beta2)', () => {
+		const output = [
+			'a\trefs/tags/4.0.0-beta1',
+			'b\trefs/tags/4.0.0-beta2',
+			'c\trefs/tags/4.0.0-beta10',
+			'd\trefs/tags/4.0.0-beta9',
+		].join('\n');
+		expect(parseLatestTagFromLsRemote(output, BETA_PATTERN)).toBe(
+			'4.0.0-beta10',
+		);
+	});
 });
