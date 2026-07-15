@@ -71,7 +71,6 @@ export function parseLatestTagFromLsRemote(
 		.sort((a, b) =>
 			semver.compare(normalizeVersion(a), normalizeVersion(b)),
 		);
-	console.log(tags);
 
 	return tags[tags.length - 1] ?? null;
 }
