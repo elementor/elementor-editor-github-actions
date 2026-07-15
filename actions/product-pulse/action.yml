@@ -1,0 +1,383 @@
+name: 'Product Pulse'
+description: 'Use Cursor Agent to decide if a merged PR is product-facing, and notify Slack with a user-friendly pulse update'
+
+inputs:
+    pr-number:
+        description: 'Pull request number to generate the pulse for'
+        required: true
+    product-name:
+        description: 'Product name to use in the prompt and Slack header (e.g. "Elementor" or "Elementor Pro")'
+        required: true
+    model:
+        description: 'Cursor Agent model to use for pulse generation'
+        required: false
+        default: 'composer-2.5'
+    cursor-api-key:
+        description: 'Cursor Agent API key'
+        required: true
+    slack-token:
+        description: 'Slack bot token with chat:write scope'
+        required: true
+    slack-channel-id:
+        description: 'Slack channel ID to post pulse notifications to'
+        required: true
+
+runs:
+    using: composite
+    steps:
+        - name: Get PR details
+          id: pr
+          shell: bash
+          env:
+              GH_TOKEN: ${{ github.token }}
+              PR_NUMBER: ${{ inputs.pr-number }}
+          run: |
+              gh pr view "$PR_NUMBER" \
+                --json title,body,files > /tmp/pr.json
+
+              gh pr diff "$PR_NUMBER" > /tmp/diff.txt || echo "No diff available"
+
+        - name: Get build artifact link
+          id: artifact
+          shell: bash
+          env:
+              GH_TOKEN: ${{ github.token }}
+              REPO: ${{ github.repository }}
+              HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          run: |
+              RUN_ID=$(gh api "repos/${REPO}/actions/workflows/build.yml/runs?head_sha=${HEAD_SHA}&status=success" --jq '.workflow_runs[0].id // empty' 2>/dev/null || echo "")
+
+              if [ -z "$RUN_ID" ]; then
+                echo "⚠️  No successful Build workflow run found for this PR, skipping artifact link"
+                exit 0
+              fi
+
+              ARTIFACT_ID=$(gh api "repos/${REPO}/actions/runs/${RUN_ID}/artifacts" --jq '.artifacts[0].id // empty' 2>/dev/null || echo "")
+
+              if [ -z "$ARTIFACT_ID" ]; then
+                echo "⚠️  No build artifact found for run $RUN_ID, skipping artifact link"
+                exit 0
+              fi
+
+              echo "🔗 Found build artifact: https://github.com/${REPO}/actions/runs/${RUN_ID}/artifacts/${ARTIFACT_ID}"
+              echo "build_artifact_url=https://github.com/${REPO}/actions/runs/${RUN_ID}/artifacts/${ARTIFACT_ID}" >> $GITHUB_OUTPUT
+
+        - name: Install Cursor CLI
+          shell: bash
+          run: |
+              curl https://cursor.com/install -fsS | bash
+              echo "$HOME/.cursor/bin" >> "$GITHUB_PATH"
+
+        - name: Render prompt
+          shell: bash
+          env:
+              ACTION_PATH: ${{ github.action_path }}
+              PRODUCT_NAME: ${{ inputs.product-name }}
+          run: |
+              python3 "$ACTION_PATH/scripts/render-prompt.py" \
+                "$ACTION_PATH/prompt-template.md" \
+                "$PRODUCT_NAME" \
+                /tmp/rendered_prompt.md
+
+        - name: Generate product pulse
+          id: generate
+          shell: bash
+          env:
+              CURSOR_API_KEY: ${{ inputs.cursor-api-key }}
+              MODEL: ${{ inputs.model }}
+          run: |
+              if [ -z "$CURSOR_API_KEY" ]; then
+                echo "❌ Error: cursor-api-key input not configured"
+                exit 1
+              fi
+
+              echo "Generating product pulse..."
+
+              PR_DATA=$(cat /tmp/pr.json | head -c 50000)
+              DIFF_DATA=$(head -500 /tmp/diff.txt 2>/dev/null | head -c 100000 || echo "No diff")
+
+              {
+                cat /tmp/rendered_prompt.md
+                printf '\n## PR Information\n'
+                printf '%s' "$PR_DATA"
+                printf '\n\n## Diff (first 500 lines, truncated to 100KB)\n```\n'
+                printf '%s' "$DIFF_DATA"
+                printf '\n```\n'
+              } > /tmp/full_prompt.md
+
+              timeout 300 cursor-agent --force --model "$MODEL" \
+                --output-format=json --print "Read /tmp/full_prompt.md and follow its instructions exactly. Output ONLY the JSON object it specifies." \
+                > /tmp/pulse_output.json || {
+                exit_code=$?
+                if [ $exit_code -eq 124 ]; then
+                  echo "⚠️ Product pulse generation timed out after 5 minutes"
+                  echo '{"skip": true, "reason": "Timeout"}' > /tmp/pulse_output.json
+                else
+                  echo "❌ Product pulse generation failed with exit code: $exit_code"
+                  exit $exit_code
+                fi
+              }
+
+              cat /tmp/pulse_output.json
+
+        - name: Parse pulse output
+          id: update
+          shell: bash
+          env:
+              ACTION_PATH: ${{ github.action_path }}
+          run: |
+              RAW_OUTPUT=$(cat /tmp/pulse_output.json)
+
+              RESULT_CONTENT=$(echo "$RAW_OUTPUT" | jq -r '.result // empty')
+
+              if [ -z "$RESULT_CONTENT" ]; then
+                RESULT_CONTENT="$RAW_OUTPUT"
+              fi
+
+              OUTPUT=""
+
+              if echo "$RESULT_CONTENT" | jq -e 'has("title") or has("skip")' >/dev/null 2>&1; then
+                OUTPUT="$RESULT_CONTENT"
+              fi
+
+              if [ -z "$OUTPUT" ]; then
+                TRIMMED=$(echo "$RESULT_CONTENT" | python3 "$ACTION_PATH/scripts/extract-pulse-json.py" 2>/dev/null)
+                if [ -n "$TRIMMED" ]; then
+                  OUTPUT="$TRIMMED"
+                fi
+              fi
+
+              echo "Parsed output: $OUTPUT"
+
+              if [ -z "$OUTPUT" ]; then
+                echo "❌ Failed to extract JSON from AI output"
+                echo "Raw output: $RAW_OUTPUT"
+                exit 1
+              fi
+
+              SKIP=$(echo "$OUTPUT" | jq -r '.skip // false')
+
+              if [ "$SKIP" = "true" ]; then
+                REASON=$(echo "$OUTPUT" | jq -r '.reason // "Not product-facing"')
+                echo "⏭️  Skipping pulse entry: $REASON"
+                echo "should_notify=false" >> $GITHUB_OUTPUT
+                exit 0
+              fi
+
+              TITLE=$(echo "$OUTPUT" | jq -r '.title')
+              DESCRIPTION=$(echo "$OUTPUT" | jq -r '.description')
+              TYPE=$(echo "$OUTPUT" | jq -r '.type // "feature"')
+
+              if [ -z "$TITLE" ] || [ "$TITLE" = "null" ]; then
+                echo "⏭️  No title in AI response, skipping"
+                echo "should_notify=false" >> $GITHUB_OUTPUT
+                exit 0
+              fi
+
+              if [ -z "$DESCRIPTION" ] || [ "$DESCRIPTION" = "null" ]; then
+                echo "⏭️  No description in AI response, skipping"
+                echo "should_notify=false" >> $GITHUB_OUTPUT
+                exit 0
+              fi
+
+              case "$TYPE" in
+                feature|fix|improvement|internal)
+                  ;;
+                *)
+                  echo "⚠️  Invalid type '$TYPE', defaulting to feature"
+                  TYPE="feature"
+                  ;;
+              esac
+
+              echo "✅ Generated pulse: $TITLE (type: $TYPE)"
+
+              PR_BODY=$(cat /tmp/pr.json | jq -r '.body // ""')
+              LOOM_URL=$(echo "$PR_BODY" | grep -oE 'https://(www\.)?loom\.com/share/[a-zA-Z0-9]+' | head -1 || echo "")
+              if [ -n "$LOOM_URL" ]; then
+                echo "🎥 Found Loom video: $LOOM_URL"
+                echo "loom_url=$LOOM_URL" >> $GITHUB_OUTPUT
+              fi
+
+              JIRA_URL=$(echo "$PR_BODY" | grep -oE 'https://elementor\.atlassian\.net/browse/[A-Z][A-Z0-9]*-[0-9]+' | head -1 || echo "")
+              if [ -n "$JIRA_URL" ]; then
+                echo "🎫 Found Jira ticket: $JIRA_URL"
+                echo "jira_url=$JIRA_URL" >> $GITHUB_OUTPUT
+              fi
+
+              echo "should_notify=true" >> $GITHUB_OUTPUT
+              {
+                echo "title<<EOF"
+                echo "$TITLE"
+                echo "EOF"
+                echo "description<<EOF"
+                echo "$DESCRIPTION"
+                echo "EOF"
+                echo "type=$TYPE"
+              } >> $GITHUB_OUTPUT
+
+        - name: Notify Slack
+          if: steps.update.outputs.should_notify == 'true'
+          shell: bash
+          continue-on-error: true
+          env:
+              SLACK_TOKEN: ${{ inputs.slack-token }}
+              SLACK_CHANNEL_ID: ${{ inputs.slack-channel-id }}
+              TITLE: ${{ steps.update.outputs.title }}
+              DESCRIPTION: ${{ steps.update.outputs.description }}
+              PRODUCT: ${{ inputs.product-name }}
+              TYPE: ${{ steps.update.outputs.type }}
+              LOOM_URL: ${{ steps.update.outputs.loom_url }}
+              JIRA_URL: ${{ steps.update.outputs.jira_url }}
+              BUILD_ARTIFACT_URL: ${{ steps.artifact.outputs.build_artifact_url }}
+              PR_NUMBER: ${{ inputs.pr-number }}
+              PR_URL: ${{ github.event.pull_request.html_url }}
+          run: |
+              case "$TYPE" in
+                fix)
+                  HEADER_EMOJI="🐛"
+                  HEADER_TEXT="Fixed in ${PRODUCT}"
+                  ;;
+                improvement)
+                  HEADER_EMOJI="📈"
+                  HEADER_TEXT="Improved in ${PRODUCT}"
+                  ;;
+                internal)
+                  HEADER_EMOJI="🔧"
+                  HEADER_TEXT="Internal Update in ${PRODUCT}"
+                  ;;
+                *)
+                  HEADER_EMOJI="✨"
+                  HEADER_TEXT="New in ${PRODUCT}"
+                  ;;
+              esac
+
+              HEADER="${HEADER_EMOJI} ${HEADER_TEXT}"
+
+              FOOTER="<${PR_URL}|PR #${PR_NUMBER}>"
+              if [ -n "$JIRA_URL" ]; then
+                TICKET=$(echo "$JIRA_URL" | grep -oE '[A-Z][A-Z0-9]+-[0-9]+$')
+                FOOTER="${FOOTER}  ·  <${JIRA_URL}|${TICKET}>"
+              fi
+              if [ -n "$BUILD_ARTIFACT_URL" ]; then
+                FOOTER="${FOOTER}  ·  <${BUILD_ARTIFACT_URL}|Build Artifact>"
+              fi
+
+              BLOCKS=$(jq -n \
+                --arg title "$TITLE" \
+                --arg description "$DESCRIPTION" \
+                --arg header "$HEADER" \
+                --arg footer "$FOOTER" \
+                '[
+                  {
+                    type: "header",
+                    text: {
+                      type: "plain_text",
+                      text: $header,
+                      emoji: true
+                    }
+                  },
+                  {
+                    type: "section",
+                    text: {
+                      type: "mrkdwn",
+                      text: ("*" + $title + "*")
+                    }
+                  },
+                  {
+                    type: "section",
+                    text: {
+                      type: "mrkdwn",
+                      text: $description
+                    }
+                  },
+                  {
+                    type: "context",
+                    elements: [
+                      {
+                        type: "mrkdwn",
+                        text: $footer
+                      }
+                    ]
+                  }
+                ]')
+
+              if [ -n "$LOOM_URL" ]; then
+                BLOCKS=$(echo "$BLOCKS" | jq \
+                  --arg loom_url "$LOOM_URL" \
+                  '. + [{
+                    type: "actions",
+                    elements: [{
+                      type: "button",
+                      text: {
+                        type: "plain_text",
+                        text: "🎥 Watch Demo",
+                        emoji: true
+                      },
+                      url: $loom_url,
+                      style: "primary"
+                    }]
+                  }]')
+              fi
+
+              PAYLOAD=$(jq -n \
+                --arg channel "$SLACK_CHANNEL_ID" \
+                --arg title "$TITLE" \
+                --arg header "$HEADER" \
+                --argjson blocks "$BLOCKS" \
+                '{
+                  channel: $channel,
+                  text: ($header + ": " + $title),
+                  blocks: $blocks
+                }')
+
+              HTTP_STATUS=$(curl -s -w "%{http_code}" -X POST "https://slack.com/api/chat.postMessage" \
+                -H "Authorization: Bearer ${SLACK_TOKEN}" \
+                -H "Content-Type: application/json" \
+                -d "$PAYLOAD" \
+                -o /tmp/slack_response.json)
+
+              SLACK_OK=$(jq -r '.ok' /tmp/slack_response.json 2>/dev/null)
+
+              if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 300 ] && [ "$SLACK_OK" = "true" ]; then
+                echo "✅ Slack notification sent"
+              else
+                echo "❌ Slack notification failed (HTTP $HTTP_STATUS, ok=$SLACK_OK)"
+                cat /tmp/slack_response.json
+                exit 1
+              fi
+
+        - name: Notify Slack on failure
+          if: failure()
+          shell: bash
+          env:
+              SLACK_TOKEN: ${{ inputs.slack-token }}
+              SLACK_CHANNEL_ID: ${{ inputs.slack-channel-id }}
+              PR_NUMBER: ${{ inputs.pr-number }}
+              PR_TITLE: ${{ github.event.pull_request.title }}
+              PR_URL: ${{ github.event.pull_request.html_url }}
+              RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          run: |
+              PAYLOAD=$(jq -n \
+                --arg channel "$SLACK_CHANNEL_ID" \
+                --arg pr_title "$PR_TITLE" \
+                --arg pr_url "$PR_URL" \
+                --arg run_url "$RUN_URL" \
+                --arg pr_number "$PR_NUMBER" \
+                '{
+                  channel: $channel,
+                  text: ("⚠️ Product pulse generation failed for PR #" + $pr_number),
+                  blocks: [
+                    {
+                      type: "section",
+                      text: {
+                        type: "mrkdwn",
+                        text: ("⚠️ *Product pulse generation failed*\n<" + $pr_url + "|#" + $pr_number + ": " + $pr_title + ">\n<" + $run_url + "|View workflow run>")
+                      }
+                    }
+                  ]
+                }')
+
+              curl -s -X POST "https://slack.com/api/chat.postMessage" \
+                -H "Authorization: Bearer ${SLACK_TOKEN}" \
+                -H "Content-Type: application/json" \
+                -d "$PAYLOAD" > /dev/null
