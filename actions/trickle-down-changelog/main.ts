@@ -89,7 +89,7 @@ async function createPRWithChangesOnChangelog(
 	readmeContent?: Buffer,
 ) {
 	const PRBranchName = `changelog-${sourceBranch}-to-${targetBranch}`;
-	const PRMessage = `Internal: Changelog v${sourceBranch} to ${targetBranch} (automatic)`;
+	const PRMessage = `Internal: Changelog ${sourceBranch} to ${targetBranch} (automatic)`;
 	await exec.exec(`git fetch --all`);
 	await exec.exec(`git checkout ${targetBranch}`);
 	await exec.exec(`git pull`);
