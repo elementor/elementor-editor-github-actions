@@ -62,10 +62,12 @@ export function parseLatestTagFromLsRemote(
 		.sort((a, b) => {
 			// Semantic version sort — splits numeric and alphabetic parts so that
 			// beta10 > beta2 (numeric comparison, not lexicographic).
-			const toparts = (v: string) =>
+			const toparts = v: string =>
 				v.split(/[.-]/).flatMap((p) => {
 					const m = p.match(/^([a-z]+)(\d+)$/);
-					return m ? [m[1], Number(m[2])] : [isNaN(Number(p)) ? p : Number(p)];
+					return m
+						? [m[1], Number(m[2])]
+						: [isNaN(Number(p)) ? p : Number(p)];
 				});
 			const ap = toparts(a);
 			const bp = toparts(b);
