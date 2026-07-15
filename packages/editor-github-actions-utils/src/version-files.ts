@@ -1,3 +1,4 @@
+import semver from 'semver';
 // ─── elementor.php ────────────────────────────────────────────────────────────
 
 /**
@@ -7,7 +8,7 @@
  */
 export function patchPhpVersion(content: string, version: string): string {
 	return content
-		.replace(/( \* Version: ).*/g, `$1${version}`)
+		.replace(/( \* Version: ).*/, `$1${version}`)
 		.replace(/(define\( 'ELEMENTOR_VERSION', ')[^']*'/, `$1${version}'`);
 }
 
@@ -38,7 +39,9 @@ export function patchReadmeTxt(
 		.replace(/^Beta tag: .*/m, `Beta tag: ${tags.beta}`);
 }
 
-// ─── git ls-remote output parsing ─────────────────────────────────────────────
+function normalizeVersion(version: string): string {
+	return version.replace(/-beta(\d+)$/, '-beta.$1');
+}
 
 /**
  * Parses raw `git ls-remote --tags` output and returns the latest tag name
@@ -54,31 +57,24 @@ export function parseLatestTagFromLsRemote(
 	lsRemoteOutput: string,
 	pattern: RegExp,
 ): string | null {
+	const safePattern = new RegExp(
+		pattern.source,
+		pattern.flags.replace(/[gy]/g, ''),
+	);
+
 	const tags = lsRemoteOutput
 		.split('\n')
 		.map((line) => line.split('\t')[1] ?? '')
 		.map((ref) => ref.replace(/^refs\/tags\/v?/, ''))
-		.filter((tag) => pattern.test(tag))
-		.sort((a, b) => {
-			// Semantic version sort — splits numeric and alphabetic parts so that
-			// beta10 > beta2 (numeric comparison, not lexicographic).
-			const toparts = (v: string) =>
-				v.split(/[.-]/).flatMap((p) => {
-					const m = p.match(/^([a-z]+)(\d+)$/);
-					return m
-						? [m[1], Number(m[2])]
-						: [isNaN(Number(p)) ? p : Number(p)];
-				});
-			const ap = toparts(a);
-			const bp = toparts(b);
-			for (let i = 0; i < Math.max(ap.length, bp.length); i++) {
-				const ai = ap[i] ?? 0;
-				const bi = bp[i] ?? 0;
-				if (ai < bi) return -1;
-				if (ai > bi) return 1;
-			}
-			return 0;
-		});
+		.filter((tag) => safePattern.test(tag))
+		.filter((tag) => semver.valid(normalizeVersion(tag)) !== null)
+		.sort((a, b) =>
+			semver.compare(
+				normalizeVersion(a),
+				normalizeVersion(b),
+			),
+		);
+		console.log(tags);
 
 	return tags[tags.length - 1] ?? null;
 }
