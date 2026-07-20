@@ -9,6 +9,7 @@
 		"test:watch": "vitest"
 	},
 	"dependencies": {
+		"@elementor/editor-github-actions-utils": "1.0.0",
 		"@actions/core": "^1.11.1",
 		"semver": "^7.7.2"
 	},

@@ -1,3 +1,3 @@
-export * from './inputs';
-export * from './outputs';
-export * from './version-files';
+export * from './inputs.ts';
+export * from './outputs.ts';
+export * from './version-files.ts';
