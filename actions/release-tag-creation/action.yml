@@ -40,7 +40,9 @@ runs:
           shell: bash
           env:
               ACTION_PATH: ${{ github.action_path }}
-          run: npm install --prefix "$ACTION_PATH"
+          run: |
+              cd "$ACTION_PATH/../.."
+              npm install --workspaces --include-workspace-root=false
 
         - name: Handle version input
           id: handle-version-input
