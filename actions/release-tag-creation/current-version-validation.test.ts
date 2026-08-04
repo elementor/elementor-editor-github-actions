@@ -61,14 +61,43 @@ describe('checkVersionIsNext', () => {
 			false,
 			'Expected next beta to be 4.2.0-beta3',
 		],
-		// beta — new version line
+		// beta — next minor / next major
 		['beta', ['4.2.0-beta1', '4.2.0-beta2'], '4.3.0-beta1', true, null],
+		['beta', ['4.2.0-beta1', '4.2.0-beta2'], '5.0.0-beta1', true, null],
 		[
 			'beta',
 			['4.2.0-beta1', '4.2.0-beta2'],
 			'4.3.0-beta2',
 			false,
-			'must be beta1',
+			'Expected next beta line to be 4.3.0-beta1 or 5.0.0-beta1',
+		],
+		[
+			'beta',
+			['4.2.0-beta1', '4.2.0-beta2'],
+			'4.4.0-beta1',
+			false,
+			'Expected next beta line to be 4.3.0-beta1 or 5.0.0-beta1',
+		],
+		[
+			'beta',
+			['4.2.0-beta1', '4.2.0-beta2'],
+			'4.1.0-beta1',
+			false,
+			'Expected next beta line to be 4.3.0-beta1 or 5.0.0-beta1',
+		],
+		[
+			'beta',
+			['4.2.0-beta1', '4.2.0-beta2'],
+			'6.0.0-beta1',
+			false,
+			'Expected next beta line to be 4.3.0-beta1 or 5.0.0-beta1',
+		],
+		[
+			'beta',
+			['4.2.0-beta1', '4.2.0-beta2'],
+			'5.1.0-beta1',
+			false,
+			'Expected next beta line to be 4.3.0-beta1 or 5.0.0-beta1',
 		],
 		// beta — no existing tags
 		['beta', ['4.1.0', '4.2.0'], '4.2.0-beta1', true, null],
