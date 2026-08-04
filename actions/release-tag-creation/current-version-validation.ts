@@ -48,6 +48,12 @@ function validateNextBeta(
 	l: semver.SemVer,
 	latest: string,
 ): void {
+	if (!semver.gt(n, l)) {
+		throw new Error(
+			`Version ${version} must be greater than the latest beta tag ${latest}.`,
+		);
+	}
+
 	const latestBetaNum = Number(String(l.prerelease[0]).replace('beta', ''));
 	const newBetaNum = Number(String(n.prerelease[0]).replace('beta', ''));
 	const sameLine =

@@ -59,9 +59,16 @@ describe('checkVersionIsNext', () => {
 			['4.2.0-beta1', '4.2.0-beta2'],
 			'4.2.0-beta2',
 			false,
-			'Expected next beta to be 4.2.0-beta3',
+			'must be greater than the latest beta tag 4.2.0-beta2',
 		],
-		// beta — new version line
+		[
+			'beta',
+			['4.2.0-beta1', '4.2.0-beta2'],
+			'4.2.0-beta1',
+			false,
+			'must be greater than the latest beta tag 4.2.0-beta2',
+		],
+		// beta — new version line (must be greater than latest AND beta1)
 		['beta', ['4.2.0-beta1', '4.2.0-beta2'], '4.3.0-beta1', true, null],
 		[
 			'beta',
@@ -69,6 +76,14 @@ describe('checkVersionIsNext', () => {
 			'4.3.0-beta2',
 			false,
 			'must be beta1',
+		],
+		// beta — older version line must be rejected (regression)
+		[
+			'beta',
+			['4.2.0-beta1', '4.2.0-beta2'],
+			'4.1.0-beta1',
+			false,
+			'must be greater than the latest beta tag 4.2.0-beta2',
 		],
 		// beta — no existing tags
 		['beta', ['4.1.0', '4.2.0'], '4.2.0-beta1', true, null],
