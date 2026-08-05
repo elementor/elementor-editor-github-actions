@@ -52,14 +52,20 @@ function validateNextBeta(
 	const newBetaNum = Number(String(n.prerelease[0]).replace('beta', ''));
 	const sameLine =
 		n.major === l.major && n.minor === l.minor && n.patch === l.patch;
-	if (sameLine && newBetaNum !== latestBetaNum + 1) {
-		throw new Error(
-			`Expected next beta to be ${latest.replace(`beta${String(latestBetaNum)}`, `beta${String(latestBetaNum + 1)}`)}, got ${version}.`,
-		);
+	if (sameLine) {
+		if (newBetaNum !== latestBetaNum + 1) {
+			throw new Error(
+				`Expected next beta to be ${latest.replace(`beta${String(latestBetaNum)}`, `beta${String(latestBetaNum + 1)}`)}, got ${version}.`,
+			);
+		}
+		return;
 	}
-	if (!sameLine && newBetaNum !== 1) {
+
+	const nextMinor = `${String(l.major)}.${String(l.minor + 1)}.0-beta1`;
+	const nextMajor = `${String(l.major + 1)}.0.0-beta1`;
+	if (version !== nextMinor && version !== nextMajor) {
 		throw new Error(
-			`First beta of a new version line must be beta1, got ${version}.`,
+			`Expected next beta line to be ${nextMinor} or ${nextMajor}, got ${version} (latest: ${latest}).`,
 		);
 	}
 }
