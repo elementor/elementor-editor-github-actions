@@ -74,7 +74,7 @@ export function extractChannel(version: string): 'stable' | 'beta' {
 	const prerelease = semver.prerelease(version);
 
 	console.log(
-		`Determining channel for version "${version}" (prerelease: ${JSON.stringify(prerelease)})`,
+		`Determining channel for version "${version}" (prerelease: ${prerelease !== null ? String(prerelease[0]) : 'Stable'})`,
 	);
 
 	if (prerelease === null) {
