@@ -43,6 +43,24 @@ describe('checkVersionIsNext', () => {
 			false,
 			'Expected next minor release to be 4.3.0',
 		],
+		// stable — major
+		['stable', ['4.1.0', '4.2.0', '4.2.1'], '5.0.0', true, null],
+		[
+			'stable',
+			['4.1.0', '4.2.0', '4.2.1'],
+			'6.0.0',
+			false,
+			'Expected next major release to be 5.0.0',
+		],
+		[
+			'stable',
+			['4.1.0', '4.2.0', '4.2.1'],
+			'4.0.0',
+			false,
+			'Expected next major release to be 5.0.0',
+		],
+		['stable', ['5.0.0'], '5.0.1', true, null],
+		['stable', ['5.0.0'], '5.1.0', true, null],
 		// stable — no existing tags
 		['stable', ['4.1.0-beta1'], '4.1.0', true, null],
 		// beta — next in same series

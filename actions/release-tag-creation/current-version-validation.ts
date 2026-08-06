@@ -25,47 +25,72 @@ function fetchTagsByChannel(channel: 'stable' | 'beta'): string[] {
 		});
 }
 
+type StableBumpKind = 'patch' | 'minor' | 'major';
+
+function resolveStableBumpKind(requested: semver.SemVer): StableBumpKind {
+	if (requested.patch !== 0) return 'patch';
+	if (requested.minor !== 0) return 'minor';
+	return 'major';
+}
+
+function expectedNextStable(
+	latest: semver.SemVer,
+	kind: StableBumpKind,
+): string {
+	switch (kind) {
+		case 'patch':
+			return `${String(latest.major)}.${String(latest.minor)}.${String(latest.patch + 1)}`;
+		case 'minor':
+			return `${String(latest.major)}.${String(latest.minor + 1)}.0`;
+		case 'major':
+			return `${String(latest.major + 1)}.0.0`;
+	}
+}
+
 function validateNextStable(
 	version: string,
-	n: semver.SemVer,
-	l: semver.SemVer,
+	requested: semver.SemVer,
+	latest: semver.SemVer,
 ): void {
-	const isNewMinor = n.patch === 0;
-	const expected = isNewMinor
-		? `${String(l.major)}.${String(l.minor + 1)}.0`
-		: `${String(l.major)}.${String(l.minor)}.${String(l.patch + 1)}`;
+	const kind = resolveStableBumpKind(requested);
+	const expected = expectedNextStable(latest, kind);
 	if (version !== expected) {
-		const kind = isNewMinor ? 'minor' : 'patch';
 		throw new Error(
-			`Expected next ${kind} release to be ${expected}, got ${version} (latest: ${l.version}).`,
+			`Expected next ${kind} release to be ${expected}, got ${version} (latest: ${latest.version}).`,
 		);
 	}
 }
 
 function validateNextBeta(
 	version: string,
-	n: semver.SemVer,
-	l: semver.SemVer,
-	latest: string,
+	requested: semver.SemVer,
+	latest: semver.SemVer,
+	latestTag: string,
 ): void {
-	const latestBetaNum = Number(String(l.prerelease[0]).replace('beta', ''));
-	const newBetaNum = Number(String(n.prerelease[0]).replace('beta', ''));
+	const latestBetaNum = Number(
+		String(latest.prerelease[0]).replace('beta', ''),
+	);
+	const newBetaNum = Number(
+		String(requested.prerelease[0]).replace('beta', ''),
+	);
 	const sameLine =
-		n.major === l.major && n.minor === l.minor && n.patch === l.patch;
+		requested.major === latest.major &&
+		requested.minor === latest.minor &&
+		requested.patch === latest.patch;
 	if (sameLine) {
 		if (newBetaNum !== latestBetaNum + 1) {
 			throw new Error(
-				`Expected next beta to be ${latest.replace(`beta${String(latestBetaNum)}`, `beta${String(latestBetaNum + 1)}`)}, got ${version}.`,
+				`Expected next beta to be ${latestTag.replace(`beta${String(latestBetaNum)}`, `beta${String(latestBetaNum + 1)}`)}, got ${version}.`,
 			);
 		}
 		return;
 	}
 
-	const nextMinor = `${String(l.major)}.${String(l.minor + 1)}.0-beta1`;
-	const nextMajor = `${String(l.major + 1)}.0.0-beta1`;
+	const nextMinor = `${String(latest.major)}.${String(latest.minor + 1)}.0-beta1`;
+	const nextMajor = `${String(latest.major + 1)}.0.0-beta1`;
 	if (version !== nextMinor && version !== nextMajor) {
 		throw new Error(
-			`Expected next beta line to be ${nextMinor} or ${nextMajor}, got ${version} (latest: ${latest}).`,
+			`Expected next beta line to be ${nextMinor} or ${nextMajor}, got ${version} (latest: ${latestTag}).`,
 		);
 	}
 }
@@ -88,23 +113,23 @@ export function checkVersionIsNext(
 		);
 		return;
 	}
-	const latest = channelTags.sort(semver.rcompare)[0];
-	if (!latest) {
+	const latestTag = channelTags.sort(semver.rcompare)[0];
+	if (!latestTag) {
 		return;
 	}
-	const l = semver.parse(latest);
-	const n = semver.parse(version);
-	if (!l || !n) {
+	const latest = semver.parse(latestTag);
+	const requested = semver.parse(version);
+	if (!latest || !requested) {
 		throw new Error(
-			`Failed to parse version strings: latest=${latest}, version=${version}`,
+			`Failed to parse version strings: latest=${latestTag}, version=${version}`,
 		);
 	}
 	if (channel === 'stable') {
-		validateNextStable(version, n, l);
+		validateNextStable(version, requested, latest);
 	} else {
-		validateNextBeta(version, n, l, latest);
+		validateNextBeta(version, requested, latest, latestTag);
 	}
 	console.log(
-		`✅ Version ${version} is the correct next version after ${latest}.`,
+		`✅ Version ${version} is the correct next version after ${latestTag}.`,
 	);
 }
