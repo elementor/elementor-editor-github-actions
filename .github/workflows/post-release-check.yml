@@ -154,13 +154,14 @@ jobs:
                   active-theme: 'hello-elementor'
                   themes: |-
                       https://downloads.wordpress.org/theme/hello-elementor.zip
-                  plugins: |-
-                      https://downloads.wordpress.org/plugin/elementor.zip
                   mappings: |-
                       elementor-templates:./stubs/upgrade-templates
                       released-plugins:./released-plugins
                   config: |-
                       ELEMENTOR_SHOW_HIDDEN_EXPERIMENTS:1
+
+            - name: Install current wordpress.org Elementor
+              run: npx wp-env run tests-cli wp plugin install elementor --activate
 
             - name: Setup Elementor Env
               uses: ./actions/setup-elementor-env

@@ -49,9 +49,11 @@ runs:
         - name: Upgrade site
           shell: bash
           run: |
-              npx wp-env run tests-cli wp plugin install ./released-plugins/elementor.zip --force --activate
+              npx wp-env run tests-cli wp plugin uninstall elementor --deactivate
+              npx wp-env run tests-cli wp plugin install ./released-plugins/elementor.zip --activate
               if [ -f ./released-plugins/elementor-pro.zip ]; then
-                npx wp-env run tests-cli wp plugin install ./released-plugins/elementor-pro.zip --force --activate
+                npx wp-env run tests-cli wp plugin uninstall elementor-pro --deactivate || true
+                npx wp-env run tests-cli wp plugin install ./released-plugins/elementor-pro.zip --activate
               fi
               npx wp-env run tests-cli wp plugin list
               npx wp-env run tests-cli wp cache flush

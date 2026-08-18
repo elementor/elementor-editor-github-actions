@@ -1,5 +1,5 @@
 import { execFile as execFileCallback } from 'node:child_process';
-import { mkdir, readdir, writeFile } from 'node:fs/promises';
+import { mkdir, open, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 
@@ -24,8 +24,16 @@ export async function downloadZip(params: {
 		);
 	}
 
-	await mkdir(path.dirname(params.destPath), { recursive: true });
-	await writeFile(params.destPath, response.body);
+	const destDir = path.resolve(path.dirname(params.destPath));
+	const destPath = path.join(destDir, path.basename(params.destPath));
+	await mkdir(destDir, { recursive: true });
+
+	const file = await open(destPath, 'w', 0o600);
+	try {
+		await file.writeFile(response.body);
+	} finally {
+		await file.close();
+	}
 }
 
 export async function unzipTo(zipPath: string, destDir: string): Promise<void> {

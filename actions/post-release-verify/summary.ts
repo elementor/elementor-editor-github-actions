@@ -48,5 +48,8 @@ export function renderSummary(params: {
 }
 
 function escapeCell(value: string): string {
-	return value.replace(/\r?\n/g, '<br>').replace(/\|/g, '\\|');
+	return value
+		.replace(/\\/g, '\\\\')
+		.replace(/\r?\n/g, '<br>')
+		.replace(/\|/g, '\\|');
 }
