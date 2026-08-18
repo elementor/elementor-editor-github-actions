@@ -1,0 +1,9 @@
+{
+	"name": "@elementor/post-release-smoke",
+	"author": "Elementor Team",
+	"license": "GPL-3.0-or-later",
+	"private": true,
+	"dependencies": {
+		"@playwright/test": "^1.51.0"
+	}
+}

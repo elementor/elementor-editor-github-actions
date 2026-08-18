@@ -1,0 +1,75 @@
+name: Post-release smoke
+description: Upgrade from wordpress.org current Elementor to the released zip, then smoke the editor like Core plugin-upgrade-test.yml.
+
+inputs:
+    core-version:
+        description: 'Expected Core plugin version after upgrade.'
+        required: true
+    pro-version:
+        description: 'Expected Pro plugin version after install. Empty skips Pro.'
+        required: false
+        default: ''
+    base-url:
+        description: 'wp-env testing URL.'
+        required: false
+        default: 'http://localhost:8889'
+    wp-username:
+        required: false
+        default: 'admin'
+    wp-password:
+        required: false
+        default: 'password'
+
+runs:
+    using: composite
+    steps:
+        - name: Quiet editor popups
+          shell: bash
+          run: |
+              npx wp-env run tests-cli wp option update e_editor_counter 10
+              npx wp-env run tests-cli wp option update elementor_checklist '{"last_opened_timestamp":null,"first_closed_checklist_in_editor":true,"is_popup_minimized":false,"steps":[],"should_open_in_editor":false,"editor_visit_count":10}'
+              npx wp-env run tests-cli wp user meta add admin announcements_user_counter 999 || true
+
+        - name: Resolve existing heading page
+          id: seed
+          shell: bash
+          run: |
+              RAW=$(npx wp-env run tests-cli wp post list \
+                --post_type=page \
+                --name=upgrade-heading \
+                --field=ID \
+                --posts_per_page=1)
+              PAGE_ID=$(echo "$RAW" | tail -n 1 | tr -d '\r')
+              if [ -z "$PAGE_ID" ]; then
+                echo "Imported upgrade-heading page was not found."
+                exit 1
+              fi
+              echo "existing_page_id=$PAGE_ID" >> "$GITHUB_OUTPUT"
+
+        - name: Upgrade site
+          shell: bash
+          run: |
+              npx wp-env run tests-cli wp plugin install ./released-plugins/elementor.zip --force --activate
+              if [ -f ./released-plugins/elementor-pro.zip ]; then
+                npx wp-env run tests-cli wp plugin install ./released-plugins/elementor-pro.zip --force --activate
+              fi
+              npx wp-env run tests-cli wp plugin list
+              npx wp-env run tests-cli wp cache flush
+              npx wp-env run tests-cli wp elementor flush-css
+
+        - name: Install Playwright Chromium
+          shell: bash
+          working-directory: ${{ github.action_path }}
+          run: npx playwright install chromium
+
+        - name: Run editor smoke
+          shell: bash
+          working-directory: ${{ github.action_path }}
+          env:
+              WP_BASE_URL: ${{ inputs.base-url }}
+              WP_USERNAME: ${{ inputs.wp-username }}
+              WP_PASSWORD: ${{ inputs.wp-password }}
+              CORE_VERSION: ${{ inputs.core-version }}
+              PRO_VERSION: ${{ inputs.pro-version }}
+              EXISTING_PAGE_ID: ${{ steps.seed.outputs.existing_page_id }}
+          run: npx playwright test
