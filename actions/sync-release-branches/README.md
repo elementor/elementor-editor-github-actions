@@ -26,7 +26,7 @@ steps:
       fetch-depth: 0
       token: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
 
-  - uses: elementor/elementor-editor-github-actions/actions/cherry-pick-release-branches@main
+  - uses: elementor/elementor-editor-github-actions/actions/sync-release-branches@main
     with:
       token: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
       using-pat: ${{ secrets.GH_PAT != '' }}

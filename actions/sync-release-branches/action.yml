@@ -73,4 +73,4 @@ runs:
               BETA_BRANCH: ${{ inputs.beta-branch }}
               MAIN_BRANCH: ${{ inputs.main-branch }}
               ACTION_PATH: ${{ github.action_path }}
-          run: bash "$ACTION_PATH/cherry-pick-release-branches.sh"
+          run: bash "$ACTION_PATH/sync-release-branches.sh"
