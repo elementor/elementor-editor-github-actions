@@ -1,7 +1,7 @@
-name: Cherry Pick Release Branches
+name: Sync Release Branches
 description: >-
-    Cherry-pick a merged PR to downstream release branches using isolated git worktrees.
-    release/stable merges cascade to release/beta and main; release/beta merges cascade to main.
+    Create PRs on downstream release branches after a merge using isolated git worktrees.
+    release/stable merges open PRs to release/beta and main; release/beta merges open a PR to main.
 
 inputs:
     token:
@@ -14,7 +14,7 @@ inputs:
         description: Merged pull request number
         required: true
     merge-sha:
-        description: Merge commit SHA to cherry-pick
+        description: Merge commit SHA to sync into downstream branches
         required: true
     pr-title:
         description: Original PR title
@@ -28,6 +28,10 @@ inputs:
     source-repo:
         description: Head repository full name (owner/repo)
         required: true
+    head-ref:
+        description: Original PR head branch name
+        required: false
+        default: ''
     using-pat:
         description: Whether a PAT is used so downstream PR workflows trigger automatically
         required: false
@@ -52,7 +56,7 @@ runs:
           shell: bash
           run: git fetch --all
 
-        - name: Cherry-pick to downstream branches
+        - name: Create downstream PRs
           shell: bash
           env:
               GH_TOKEN: ${{ inputs.token }}
@@ -64,6 +68,7 @@ runs:
               PR_USER_LOGIN: ${{ inputs.pr-user-login }}
               ORIG_URL: ${{ inputs.pr-url }}
               SOURCE_REPO: ${{ inputs.source-repo }}
+              HEAD_REF: ${{ inputs.head-ref }}
               STABLE_BRANCH: ${{ inputs.stable-branch }}
               BETA_BRANCH: ${{ inputs.beta-branch }}
               MAIN_BRANCH: ${{ inputs.main-branch }}

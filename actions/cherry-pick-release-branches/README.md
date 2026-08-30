@@ -1,10 +1,10 @@
-# Cherry Pick Release Branches
+# Sync Release Branches
 
-Automatically cherry-picks merged PRs across the release branch cascade using isolated git worktrees.
+Creates downstream PRs after a release-branch merge using isolated git worktrees. This action does **not** cherry-pick — it merges the merged commit into a branch based on each target and opens a normal PR.
 
 ## Cascade rules
 
-| Merged into      | Cherry-pick targets    |
+| Merged into      | PR targets             |
 | ---------------- | ---------------------- |
 | `release/stable` | `release/beta`, `main` |
 | `release/beta`   | `main`                 |
@@ -13,7 +13,7 @@ Branch names are configurable via inputs.
 
 ## Usage
 
-The calling workflow must check out the target repository with `fetch-depth: 0` before invoking this action.
+The calling workflow must check out the target repository with `fetch-depth: 0` before invoking this action. Skip PRs whose head branch starts with `sync-pr` to avoid cascade loops.
 
 ```yaml
 permissions:
@@ -37,6 +37,7 @@ steps:
       pr-user-login: ${{ github.event.pull_request.user.login }}
       pr-url: ${{ github.event.pull_request.html_url }}
       source-repo: ${{ github.event.pull_request.head.repo.full_name }}
+      head-ref: ${{ github.event.pull_request.head.ref }}
 ```
 
 ## Inputs
@@ -47,10 +48,11 @@ steps:
 | `base-ref`      | yes      | —                | Branch the source PR was merged into                           |
 | `pr-number`     | yes      | —                | Source PR number                                               |
 | `merge-sha`     | yes      | —                | Merge commit SHA                                               |
-| `pr-title`      | yes      | —                | Source PR title                                                |
+| `pr-title`      | yes      | —                | Source PR title (reused for downstream PR title)               |
 | `pr-user-login` | yes      | —                | Source PR author                                               |
 | `pr-url`        | yes      | —                | Source PR URL                                                  |
 | `source-repo`   | yes      | —                | Head repo (`owner/repo`)                                       |
+| `head-ref`      | no       | `''`             | Source PR head branch                                          |
 | `using-pat`     | no       | `false`          | Set to `true` when using `GH_PAT`                              |
 | `stable-branch` | no       | `release/stable` | Stable branch name                                             |
 | `beta-branch`   | no       | `release/beta`   | Beta branch name                                               |
@@ -58,7 +60,8 @@ steps:
 
 ## Behavior
 
-- Creates one git worktree per target branch under `$RUNNER_TEMP/cherry-pick-worktrees/`
-- Opens a PR on success, or a draft PR with conflict markers on failure
+- Creates one git worktree per target branch under `$RUNNER_TEMP/release-sync-worktrees/`
+- Merges the source merge commit into `sync-pr<PR#>_to_<target>` branches
+- Opens a PR with the **same title** as the merged PR
+- Opens a draft PR with conflict markers when merge fails
 - Skips targets whose remote branch does not exist
-- Uses `-m 1` only for merge commits; squash merges use plain `git cherry-pick`

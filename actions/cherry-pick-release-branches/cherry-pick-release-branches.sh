@@ -1,29 +1,30 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Cherry-pick a merged PR to downstream release branches using isolated git worktrees.
+# Create downstream PRs after a release-branch merge using isolated git worktrees.
+# Applies the merged commit with git merge (not cherry-pick) and opens normal PRs.
 #
 # Required environment variables:
 #   BASE_REF       - branch the PR was merged into (e.g. release/stable)
 #   PR_NUMBER      - merged PR number
-#   MERGE_SHA      - merge commit SHA to cherry-pick
+#   MERGE_SHA      - merge commit SHA to sync
 #   PR_TITLE       - original PR title
 #   PR_USER_LOGIN  - original PR author login
 #   ORIG_URL       - original PR URL
 #   SOURCE_REPO    - head repo full name
 #
 # Optional:
+#   HEAD_REF       - original PR head branch (used for loop prevention messaging)
 #   USING_PAT      - "true" when a PAT is used (workflows trigger automatically)
 #   STABLE_BRANCH  - default: release/stable
 #   BETA_BRANCH    - default: release/beta
 #   MAIN_BRANCH    - default: main
-#   JIRA_TICKET_PATTERN - regex for Jira ticket extraction (default: [A-Z]{2,10}-[0-9]+)
 
-JIRA_TICKET_PATTERN="${JIRA_TICKET_PATTERN:-[A-Z]{2,10}-[0-9]+}"
-WORKTREE_ROOT="${RUNNER_TEMP:-/tmp}/cherry-pick-worktrees"
+WORKTREE_ROOT="${RUNNER_TEMP:-/tmp}/release-sync-worktrees"
 STABLE_BRANCH="${STABLE_BRANCH:-release/stable}"
 BETA_BRANCH="${BETA_BRANCH:-release/beta}"
 MAIN_BRANCH="${MAIN_BRANCH:-main}"
+SYNC_BRANCH_PREFIX="sync-pr"
 
 require_env() {
 	local name="$1"
@@ -57,57 +58,27 @@ resolve_targets_csv() {
 	esac
 }
 
-is_merge_commit() {
-	local parent_count
-	parent_count="$(git rev-list --parents -n 1 "$1" | awk '{print NF - 1}')"
-	[ "$parent_count" -ge 2 ]
-}
-
-run_cherry_pick() {
+merge_merged_commit() {
 	local merge_sha="$1"
 
-	if is_merge_commit "$merge_sha"; then
-		git cherry-pick -m 1 "$merge_sha"
-	else
-		git cherry-pick "$merge_sha"
-	fi
+	git merge --no-ff "$merge_sha" -m "Sync PR #${PR_NUMBER} from ${BASE_REF}"
 }
 
-extract_pr_title_parts() {
-	local sanitized_title type ticket ticket_suffix title_body
-
-	sanitized_title="$(sanitize_title "$PR_TITLE")"
-
-	type="$(echo "$sanitized_title" | grep -oE '^[A-Za-z]+:' | head -1)"
-	if [ -z "$type" ]; then
-		type="Internal:"
-	fi
-
-	ticket="$(echo "$sanitized_title" | grep -oE "$JIRA_TICKET_PATTERN" | head -1)"
-	if [ -n "$ticket" ]; then
-		ticket_suffix=" [${ticket}]"
-	else
-		ticket_suffix=" [NO-TICKET]"
-	fi
-
-	title_body="$(echo "$sanitized_title" | sed 's/^[A-Za-z]*: *//')"
-
-	PR_TITLE_TYPE="$type"
-	PR_TITLE_BODY="$title_body"
-	PR_TICKET_SUFFIX="$ticket_suffix"
+sanitize_pr_title() {
+	SANITIZED_PR_TITLE="$(sanitize_title "$PR_TITLE")"
 }
 
 create_conflict_pr() {
 	local target="$1"
-	local cp_branch="$2"
+	local sync_branch="$2"
 	local conflict_branch="$3"
 
 	git add .
-	git commit -m "Cherry-pick PR #${PR_NUMBER} with conflicts - manual resolution needed"
+	git commit -m "Sync PR #${PR_NUMBER} to ${target} with conflicts - manual resolution needed"
 
-	if ! git push --force-with-lease origin "${cp_branch}:${conflict_branch}"; then
+	if ! git push --force-with-lease origin "${sync_branch}:${conflict_branch}"; then
 		echo "::warning:: Failed to push conflict branch ${conflict_branch}"
-		git cherry-pick --abort
+		git merge --abort 2>/dev/null || true
 		return 1
 	fi
 
@@ -121,10 +92,10 @@ create_conflict_pr() {
 		--head "$conflict_branch" \
 		--assignee "$PR_USER_LOGIN" \
 		--label "auto-reviewed" \
-		--title "${PR_TITLE_TYPE} Cherry-pick PR ${PR_NUMBER} to ${target} with conflicts: ${PR_TITLE_BODY}" \
+		--title "${SANITIZED_PR_TITLE} (sync to ${target} — conflicts)" \
 		--body "⚠️ **Manual Resolution Required**
 
-This cherry-pick of [#${PR_NUMBER}](${ORIG_URL}) to \`${target}\` branch has conflicts that need manual resolution.
+This sync PR for [#${PR_NUMBER}](${ORIG_URL}) into \`${target}\` has conflicts that need manual resolution.
 
 **Conflict Files:**
 The conflicted files are included in this branch with conflict markers.
@@ -138,7 +109,8 @@ The conflicted files are included in this branch with conflict markers.
 6. Mark this PR as ready for review
 
 **Original PR:** [#${PR_NUMBER}](${ORIG_URL})
-**Trigger:** Automatic cascade from merge to \`${BASE_REF}\`" \
+**Merged to:** \`${BASE_REF}\`
+**Source branch:** \`${HEAD_REF:-unknown}\`" \
 		--draft
 
 	echo "::notice:: Created draft PR for manual conflict resolution: ${conflict_branch}"
@@ -146,25 +118,26 @@ The conflicted files are included in this branch with conflict markers.
 
 create_success_pr() {
 	local target="$1"
-	local cp_branch="$2"
+	local sync_branch="$2"
 
-	if gh pr list --head "$cp_branch" --base "$target" --state open | grep -q .; then
-		echo "PR already exists for branch ${cp_branch} -> ${target}, skipping creation"
+	if gh pr list --head "$sync_branch" --base "$target" --state open | grep -q .; then
+		echo "PR already exists for branch ${sync_branch} -> ${target}, skipping creation"
 		return 0
 	fi
 
 	local pr_url new_pr
 	pr_url="$(gh pr create \
 		--base "$target" \
-		--head "$cp_branch" \
+		--head "$sync_branch" \
 		--assignee "$PR_USER_LOGIN" \
 		--label "auto-reviewed" \
-		--title "${PR_TITLE_TYPE} Cherry-pick PR ${PR_NUMBER} to ${target}: ${PR_TITLE_BODY}" \
-		--body "Automatic cherry-pick of [#${PR_NUMBER}](${ORIG_URL}) to \`${target}\` branch.
+		--title "${SANITIZED_PR_TITLE}" \
+		--body "Automatic sync PR created after [#${PR_NUMBER}](${ORIG_URL}) was merged into \`${BASE_REF}\`.
 
+**Target branch:** \`${target}\`
 **Source:** ${SOURCE_REPO}
-**Original Author:** @${PR_USER_LOGIN}
-**Trigger:** Automatic cascade from merge to \`${BASE_REF}\`")"
+**Source branch:** \`${HEAD_REF:-unknown}\`
+**Original author:** @${PR_USER_LOGIN}")"
 
 	new_pr="$(echo "$pr_url" | grep -oE '/pull/[0-9]+' | grep -oE '[0-9]+' || echo "")"
 
@@ -179,17 +152,17 @@ create_success_pr() {
 
 	echo "Created PR #${new_pr} with GITHUB_TOKEN, triggering workflows via empty commit..."
 	git commit --allow-empty -m "Trigger workflows for PR #${new_pr}"
-	git push origin "$cp_branch"
+	git push origin "$sync_branch"
 	echo "::notice:: Triggered workflows for PR #${new_pr}"
 }
 
-cherry_pick_to_target() {
+sync_to_target() {
 	local target="$1"
-	local target_safe cp_branch conflict_branch worktree_path
+	local target_safe sync_branch conflict_branch worktree_path
 
 	target_safe="$(target_to_safe "$target")"
-	cp_branch="cherry-pick-pr${PR_NUMBER}_to_${target_safe}"
-	conflict_branch="${cp_branch}_conflicts"
+	sync_branch="${SYNC_BRANCH_PREFIX}${PR_NUMBER}_to_${target_safe}"
+	conflict_branch="${sync_branch}_conflicts"
 	worktree_path="${WORKTREE_ROOT}/${target_safe}"
 
 	if ! git show-ref --verify --quiet "refs/remotes/origin/${target}"; then
@@ -201,31 +174,31 @@ cherry_pick_to_target() {
 	rm -rf "$worktree_path"
 	mkdir -p "$WORKTREE_ROOT"
 
-	if ! git worktree add -B "$cp_branch" "$worktree_path" "origin/${target}"; then
+	if ! git worktree add -B "$sync_branch" "$worktree_path" "origin/${target}"; then
 		echo "::warning:: Failed to create worktree for ${target} - skipping"
 		return 0
 	fi
 
 	pushd "$worktree_path" >/dev/null
 
-	if ! run_cherry_pick "$MERGE_SHA"; then
-		echo "::error:: Cherry-pick conflicts detected for PR #${PR_NUMBER} on branch ${target}"
-		create_conflict_pr "$target" "$cp_branch" "$conflict_branch" || true
+	if ! merge_merged_commit "$MERGE_SHA"; then
+		echo "::error:: Merge conflicts detected for PR #${PR_NUMBER} on branch ${target}"
+		create_conflict_pr "$target" "$sync_branch" "$conflict_branch" || true
 		popd >/dev/null
 		git worktree remove --force "$worktree_path" 2>/dev/null || true
 		return 0
 	fi
 
-	echo "Cherry-pick successful for ${target}"
+	echo "Merge successful for ${target}"
 
-	if ! git push --force-with-lease origin "$cp_branch"; then
-		echo "::warning:: Failed to push branch ${cp_branch}"
+	if ! git push --force-with-lease origin "$sync_branch"; then
+		echo "::warning:: Failed to push branch ${sync_branch}"
 		popd >/dev/null
 		git worktree remove --force "$worktree_path" 2>/dev/null || true
 		return 0
 	fi
 
-	create_success_pr "$target" "$cp_branch"
+	create_success_pr "$target" "$sync_branch"
 
 	popd >/dev/null
 	git worktree remove --force "$worktree_path" 2>/dev/null || true
@@ -233,18 +206,18 @@ cherry_pick_to_target() {
 
 TARGETS_CSV="$(resolve_targets_csv "$BASE_REF")"
 if [ -z "$TARGETS_CSV" ]; then
-	echo "No cherry-pick targets configured for base branch: ${BASE_REF}"
+	echo "No sync targets configured for base branch: ${BASE_REF}"
 	exit 0
 fi
 
 git config user.name "github-actions[bot]"
 git config user.email "github-actions[bot]@users.noreply.github.com"
 
-extract_pr_title_parts
+sanitize_pr_title
 
 IFS=',' read -ra TARGETS <<< "$TARGETS_CSV"
 for target in "${TARGETS[@]}"; do
-	cherry_pick_to_target "$target"
+	sync_to_target "$target"
 done
 
 rm -rf "$WORKTREE_ROOT"
