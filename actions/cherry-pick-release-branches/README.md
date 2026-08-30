@@ -4,10 +4,10 @@ Automatically cherry-picks merged PRs across the release branch cascade using is
 
 ## Cascade rules
 
-| Merged into | Cherry-pick targets |
-| --- | --- |
+| Merged into      | Cherry-pick targets    |
+| ---------------- | ---------------------- |
 | `release/stable` | `release/beta`, `main` |
-| `release/beta` | `main` |
+| `release/beta`   | `main`                 |
 
 Branch names are configurable via inputs.
 
@@ -41,20 +41,20 @@ steps:
 
 ## Inputs
 
-| Input | Required | Default | Description |
-| --- | --- | --- | --- |
-| `token` | yes | — | GitHub token with `contents: write` and `pull-requests: write` |
-| `base-ref` | yes | — | Branch the source PR was merged into |
-| `pr-number` | yes | — | Source PR number |
-| `merge-sha` | yes | — | Merge commit SHA |
-| `pr-title` | yes | — | Source PR title |
-| `pr-user-login` | yes | — | Source PR author |
-| `pr-url` | yes | — | Source PR URL |
-| `source-repo` | yes | — | Head repo (`owner/repo`) |
-| `using-pat` | no | `false` | Set to `true` when using `GH_PAT` |
-| `stable-branch` | no | `release/stable` | Stable branch name |
-| `beta-branch` | no | `release/beta` | Beta branch name |
-| `main-branch` | no | `main` | Main branch name |
+| Input           | Required | Default          | Description                                                    |
+| --------------- | -------- | ---------------- | -------------------------------------------------------------- |
+| `token`         | yes      | —                | GitHub token with `contents: write` and `pull-requests: write` |
+| `base-ref`      | yes      | —                | Branch the source PR was merged into                           |
+| `pr-number`     | yes      | —                | Source PR number                                               |
+| `merge-sha`     | yes      | —                | Merge commit SHA                                               |
+| `pr-title`      | yes      | —                | Source PR title                                                |
+| `pr-user-login` | yes      | —                | Source PR author                                               |
+| `pr-url`        | yes      | —                | Source PR URL                                                  |
+| `source-repo`   | yes      | —                | Head repo (`owner/repo`)                                       |
+| `using-pat`     | no       | `false`          | Set to `true` when using `GH_PAT`                              |
+| `stable-branch` | no       | `release/stable` | Stable branch name                                             |
+| `beta-branch`   | no       | `release/beta`   | Beta branch name                                               |
+| `main-branch`   | no       | `main`           | Main branch name                                               |
 
 ## Behavior
 
