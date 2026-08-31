@@ -1,6 +1,6 @@
 # Sync Release Branches
 
-Creates downstream PRs after a release-branch merge using isolated git worktrees. This action does **not** cherry-pick — it merges the merged commit into a branch based on each target and opens a normal PR.
+Creates downstream PRs after a release-branch merge using isolated git worktrees. This action applies **only the merged commit's changes** to each target branch and opens a normal PR (not a full branch merge).
 
 ## Cascade rules
 
@@ -13,7 +13,7 @@ Branch names are configurable via inputs.
 
 ## Usage
 
-The calling workflow must check out the target repository with `fetch-depth: 0` before invoking this action. Skip PRs whose head branch starts with `sync-pr` to avoid cascade loops.
+The calling workflow must check out the target repository with `fetch-depth: 0` before invoking this action. Skip PRs whose head branch starts with `sync-pr` or `cherry-pick-pr` to avoid cascade loops.
 
 ```yaml
 permissions:
@@ -61,7 +61,8 @@ steps:
 ## Behavior
 
 - Creates one git worktree per target branch under `$RUNNER_TEMP/release-sync-worktrees/`
-- Merges the source merge commit into `sync-pr<PR#>_to_<target>` branches
+- Applies only the merged commit to each target (`git cherry-pick`, or `-m 1` for merge commits)
 - Opens a PR with the **same title** as the merged PR
-- Opens a draft PR with conflict markers when merge fails
+- Skips PR creation when the target branch already contains the changes
+- Opens a draft PR with conflict markers when apply fails
 - Skips targets whose remote branch does not exist

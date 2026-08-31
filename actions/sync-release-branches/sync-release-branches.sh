@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Create downstream PRs after a release-branch merge using isolated git worktrees.
-# Applies the merged commit with git merge (not cherry-pick) and opens normal PRs.
+# Applies only the merged commit's changes (cherry-pick) and opens normal PRs.
 #
 # Required environment variables:
 #   BASE_REF       - branch the PR was merged into (e.g. release/stable)
@@ -25,6 +25,7 @@ STABLE_BRANCH="${STABLE_BRANCH:-release/stable}"
 BETA_BRANCH="${BETA_BRANCH:-release/beta}"
 MAIN_BRANCH="${MAIN_BRANCH:-main}"
 SYNC_BRANCH_PREFIX="sync-pr"
+BOT_LOGIN="github-actions[bot]"
 
 require_env() {
 	local name="$1"
@@ -58,10 +59,31 @@ resolve_targets_csv() {
 	esac
 }
 
-merge_merged_commit() {
+is_merge_commit() {
+	local parent_count
+	parent_count="$(git rev-list --parents -n 1 "$1" | awk '{print NF - 1}')"
+	[ "$parent_count" -ge 2 ]
+}
+
+apply_merged_commit() {
 	local merge_sha="$1"
 
-	git merge --no-ff "$merge_sha" -m "Sync PR #${PR_NUMBER} from ${BASE_REF}"
+	if is_merge_commit "$merge_sha"; then
+		git cherry-pick -m 1 "$merge_sha"
+	else
+		git cherry-pick "$merge_sha"
+	fi
+}
+
+has_changes_vs_target() {
+	local target="$1"
+	! git diff --quiet "origin/${target}" HEAD
+}
+
+pr_assignee_args() {
+	if [ -n "$PR_USER_LOGIN" ] && [ "$PR_USER_LOGIN" != "$BOT_LOGIN" ]; then
+		printf '%s\n' --assignee "$PR_USER_LOGIN"
+	fi
 }
 
 sanitize_pr_title() {
@@ -72,13 +94,16 @@ create_conflict_pr() {
 	local target="$1"
 	local sync_branch="$2"
 	local conflict_branch="$3"
+	local -a assignee_args
+
+	readarray -t assignee_args < <(pr_assignee_args)
 
 	git add .
 	git commit -m "Sync PR #${PR_NUMBER} to ${target} with conflicts - manual resolution needed"
 
 	if ! git push --force-with-lease origin "${sync_branch}:${conflict_branch}"; then
 		echo "::warning:: Failed to push conflict branch ${conflict_branch}"
-		git merge --abort 2>/dev/null || true
+		git cherry-pick --abort 2>/dev/null || true
 		return 1
 	fi
 
@@ -90,7 +115,7 @@ create_conflict_pr() {
 	gh pr create \
 		--base "$target" \
 		--head "$conflict_branch" \
-		--assignee "$PR_USER_LOGIN" \
+		"${assignee_args[@]}" \
 		--label "auto-reviewed" \
 		--title "${SANITIZED_PR_TITLE} (sync to ${target} — conflicts)" \
 		--body "⚠️ **Manual Resolution Required**
@@ -119,6 +144,9 @@ The conflicted files are included in this branch with conflict markers.
 create_success_pr() {
 	local target="$1"
 	local sync_branch="$2"
+	local -a assignee_args
+
+	readarray -t assignee_args < <(pr_assignee_args)
 
 	if gh pr list --head "$sync_branch" --base "$target" --state open | grep -q .; then
 		echo "PR already exists for branch ${sync_branch} -> ${target}, skipping creation"
@@ -129,7 +157,7 @@ create_success_pr() {
 	pr_url="$(gh pr create \
 		--base "$target" \
 		--head "$sync_branch" \
-		--assignee "$PR_USER_LOGIN" \
+		"${assignee_args[@]}" \
 		--label "auto-reviewed" \
 		--title "${SANITIZED_PR_TITLE}" \
 		--body "Automatic sync PR created after [#${PR_NUMBER}](${ORIG_URL}) was merged into \`${BASE_REF}\`.
@@ -181,15 +209,23 @@ sync_to_target() {
 
 	pushd "$worktree_path" >/dev/null
 
-	if ! merge_merged_commit "$MERGE_SHA"; then
-		echo "::error:: Merge conflicts detected for PR #${PR_NUMBER} on branch ${target}"
+	if ! apply_merged_commit "$MERGE_SHA"; then
+		echo "::error:: Apply conflicts detected for PR #${PR_NUMBER} on branch ${target}"
 		create_conflict_pr "$target" "$sync_branch" "$conflict_branch" || true
 		popd >/dev/null
 		git worktree remove --force "$worktree_path" 2>/dev/null || true
 		return 0
 	fi
 
-	echo "Merge successful for ${target}"
+	if ! has_changes_vs_target "$target"; then
+		echo "::notice:: No changes to sync for PR #${PR_NUMBER} on ${target} - skipping PR creation"
+		popd >/dev/null
+		git worktree remove --force "$worktree_path" 2>/dev/null || true
+		git push origin --delete "$sync_branch" 2>/dev/null || true
+		return 0
+	fi
+
+	echo "Applied merged commit for ${target}"
 
 	if ! git push --force-with-lease origin "$sync_branch"; then
 		echo "::warning:: Failed to push branch ${sync_branch}"
