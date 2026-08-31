@@ -122,8 +122,22 @@ pr_assignee_args() {
 	fi
 }
 
+build_sync_pr_title() {
+	local title="$1"
+	local type rest
+
+	if [[ "$title" =~ ^([A-Za-z]+):[[:space:]]*(.*)$ ]]; then
+		type="${BASH_REMATCH[1]}"
+		rest="${BASH_REMATCH[2]}"
+		printf '%s: Syncd - %s' "$type" "$rest"
+		return 0
+	fi
+
+	printf 'Internal: Syncd - %s' "$title"
+}
+
 sanitize_pr_title() {
-	SANITIZED_PR_TITLE="$(sanitize_title "$PR_TITLE")"
+	SANITIZED_PR_TITLE="$(build_sync_pr_title "$(sanitize_title "$PR_TITLE")")"
 }
 
 create_conflict_pr() {
