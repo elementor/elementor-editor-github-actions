@@ -2,7 +2,8 @@
 set -euo pipefail
 
 # Create downstream PRs after a release-branch merge using isolated git worktrees.
-# Applies only the merged commit's changes (cherry-pick) and opens normal PRs.
+# Merges the PR source branch for merge commits, or applies a squash commit patch.
+# Opens normal downstream PRs with the original title.
 #
 # Required environment variables:
 #   BASE_REF       - branch the PR was merged into (e.g. release/stable)
@@ -26,6 +27,7 @@ BETA_BRANCH="${BETA_BRANCH:-release/beta}"
 MAIN_BRANCH="${MAIN_BRANCH:-main}"
 SYNC_BRANCH_PREFIX="sync-pr"
 BOT_LOGIN="github-actions[bot]"
+SYNC_COMMIT_MESSAGE="Sync PR #${PR_NUMBER} from ${BASE_REF}"
 
 require_env() {
 	local name="$1"
@@ -65,13 +67,47 @@ is_merge_commit() {
 	[ "$parent_count" -ge 2 ]
 }
 
-apply_merged_commit() {
+abort_apply() {
+	git merge --abort 2>/dev/null || true
+	git reset --hard HEAD 2>/dev/null || true
+}
+
+merge_pr_head() {
+	local merge_sha="$1"
+	local pr_head="${merge_sha}^2"
+
+	if ! git rev-parse --verify "${pr_head}^{commit}" >/dev/null 2>&1; then
+		echo "::error:: Merge commit ${merge_sha} has no second parent (PR head)"
+		return 1
+	fi
+
+	git merge --no-ff "$pr_head" -m "$SYNC_COMMIT_MESSAGE"
+}
+
+apply_squash_commit_patch() {
+	local merge_sha="$1"
+
+	if ! git diff "${merge_sha}^" "$merge_sha" | git apply --3way; then
+		return 1
+	fi
+
+	git add -A
+
+	if git diff --cached --quiet; then
+		echo "::notice:: Squash commit ${merge_sha} produced no staged changes"
+		return 0
+	fi
+
+	git commit -m "$SYNC_COMMIT_MESSAGE"
+}
+
+apply_merged_content() {
 	local merge_sha="$1"
 
 	if is_merge_commit "$merge_sha"; then
-		git cherry-pick -m 1 "$merge_sha"
+		merge_pr_head "$merge_sha"
 	else
-		git cherry-pick "$merge_sha"
+		apply_squash_commit_patch "$merge_sha"
 	fi
 }
 
@@ -103,7 +139,7 @@ create_conflict_pr() {
 
 	if ! git push --force-with-lease origin "${sync_branch}:${conflict_branch}"; then
 		echo "::warning:: Failed to push conflict branch ${conflict_branch}"
-		git cherry-pick --abort 2>/dev/null || true
+		abort_apply
 		return 1
 	fi
 
@@ -209,8 +245,8 @@ sync_to_target() {
 
 	pushd "$worktree_path" >/dev/null
 
-	if ! apply_merged_commit "$MERGE_SHA"; then
-		echo "::error:: Apply conflicts detected for PR #${PR_NUMBER} on branch ${target}"
+	if ! apply_merged_content "$MERGE_SHA"; then
+		echo "::error:: Merge conflicts detected for PR #${PR_NUMBER} on branch ${target}"
 		create_conflict_pr "$target" "$sync_branch" "$conflict_branch" || true
 		popd >/dev/null
 		git worktree remove --force "$worktree_path" 2>/dev/null || true
@@ -225,7 +261,7 @@ sync_to_target() {
 		return 0
 	fi
 
-	echo "Applied merged commit for ${target}"
+	echo "Merged PR content for ${target}"
 
 	if ! git push --force-with-lease origin "$sync_branch"; then
 		echo "::warning:: Failed to push branch ${sync_branch}"

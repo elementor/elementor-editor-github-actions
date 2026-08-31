@@ -1,6 +1,6 @@
 # Sync Release Branches
 
-Creates downstream PRs after a release-branch merge using isolated git worktrees. This action applies **only the merged commit's changes** to each target branch and opens a normal PR (not a full branch merge).
+Creates downstream PRs after a release-branch merge using isolated git worktrees. The action merges the **PR source branch** (for merge commits) or applies the **squash commit patch** (for squash/rebase merges), then opens a normal PR with the original title.
 
 ## Cascade rules
 
@@ -61,8 +61,9 @@ steps:
 ## Behavior
 
 - Creates one git worktree per target branch under `$RUNNER_TEMP/release-sync-worktrees/`
-- Applies only the merged commit to each target (`git cherry-pick`, or `-m 1` for merge commits)
+- **Merge commits:** `git merge --no-ff` of the PR head (`merge-sha^2`) into each target
+- **Squash/rebase commits:** applies only that commit's patch (`git diff parent..merge-sha`) and commits on the sync branch
 - Opens a PR with the **same title** as the merged PR
 - Skips PR creation when the target branch already contains the changes
-- Opens a draft PR with conflict markers when apply fails
+- Opens a draft PR with conflict markers when the merge/apply fails
 - Skips targets whose remote branch does not exist
