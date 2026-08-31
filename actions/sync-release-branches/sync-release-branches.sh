@@ -129,11 +129,11 @@ build_sync_pr_title() {
 	if [[ "$title" =~ ^([A-Za-z]+):[[:space:]]*(.*)$ ]]; then
 		type="${BASH_REMATCH[1]}"
 		rest="${BASH_REMATCH[2]}"
-		printf '%s: Syncd - %s' "$type" "$rest"
+		printf '%s: Synced - %s' "$type" "$rest"
 		return 0
 	fi
 
-	printf 'Internal: Syncd - %s' "$title"
+	printf 'Internal: Synced - %s' "$title"
 }
 
 sanitize_pr_title() {
