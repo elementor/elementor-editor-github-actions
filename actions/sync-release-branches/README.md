@@ -1,6 +1,6 @@
 # Sync Release Branches
 
-Creates downstream PRs after a release-branch merge using isolated git worktrees. This action does **not** cherry-pick — it merges the merged commit into a branch based on each target and opens a normal PR.
+Creates downstream PRs after a release-branch merge using isolated git worktrees. The action merges the **PR source branch** (for merge commits) or applies the **squash commit patch** (for squash/rebase merges), then opens a normal PR with the original title.
 
 ## Cascade rules
 
@@ -13,7 +13,7 @@ Branch names are configurable via inputs.
 
 ## Usage
 
-The calling workflow must check out the target repository with `fetch-depth: 0` before invoking this action. Skip PRs whose head branch starts with `sync-pr` to avoid cascade loops.
+The calling workflow must check out the target repository with `fetch-depth: 0` before invoking this action. Skip PRs whose head branch starts with `sync-pr` or `cherry-pick-pr` to avoid cascade loops.
 
 ```yaml
 permissions:
@@ -48,7 +48,7 @@ steps:
 | `base-ref`      | yes      | —                | Branch the source PR was merged into                           |
 | `pr-number`     | yes      | —                | Source PR number                                               |
 | `merge-sha`     | yes      | —                | Merge commit SHA                                               |
-| `pr-title`      | yes      | —                | Source PR title (reused for downstream PR title)               |
+| `pr-title`      | yes      | —                | Source PR title (used to build downstream PR title)            |
 | `pr-user-login` | yes      | —                | Source PR author                                               |
 | `pr-url`        | yes      | —                | Source PR URL                                                  |
 | `source-repo`   | yes      | —                | Head repo (`owner/repo`)                                       |
@@ -61,7 +61,9 @@ steps:
 ## Behavior
 
 - Creates one git worktree per target branch under `$RUNNER_TEMP/release-sync-worktrees/`
-- Merges the source merge commit into `sync-pr<PR#>_to_<target>` branches
-- Opens a PR with the **same title** as the merged PR
-- Opens a draft PR with conflict markers when merge fails
+- **Merge commits:** `git merge --no-ff` of the PR head (`merge-sha^2`) into each target
+- **Squash/rebase commits:** applies only that commit's patch (`git diff parent..merge-sha`) and commits on the sync branch
+- Opens a PR titled `{Type}: Synced - {original title without type prefix}` (falls back to `Internal: Synced - …`)
+- Skips PR creation when the target branch already contains the changes
+- Opens a draft PR with conflict markers when the merge/apply fails
 - Skips targets whose remote branch does not exist
