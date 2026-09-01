@@ -9,4 +9,4 @@ Mirrors Core [`plugin-upgrade-test.yml`](https://github.com/elementor/elementor/
 
 This is not Core elements-regression screenshots. It only checks that the **published** zip upgrades a current `.org` site and the editor boots.
 
-The `Post-Release Check` workflow in this repo wires the steps. Do not add this suite to Core/Pro PR CI.
+The reusable `Post-Release Check` workflow wires the steps. Core/Pro dispatch that workflow; do not add this suite to Core/Pro PR CI.

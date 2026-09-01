@@ -41,10 +41,10 @@ test.describe('Post-release upgrade smoke', () => {
 	});
 
 	test('edits the existing heading page in the editor', async ({ page }) => {
-		test.skip(
-			!existingPageId,
+		expect(
+			existingPageId,
 			'EXISTING_PAGE_ID was not resolved after template import',
-		);
+		).not.toBe('');
 
 		await page.goto(
 			`/wp-admin/post.php?post=${existingPageId}&action=elementor`,

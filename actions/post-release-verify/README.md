@@ -26,4 +26,55 @@ Changelog prose is dumped on the job summary for a quick human read. The action 
 - `core-zip-path` / `pro-zip-path` — downloaded zips for the smoke job
 - `failed` — `true` if any hard check failed
 
-Prefer the `Post-Release Check` workflow in this repo over calling the action from Core/Pro until a couple of real GAs have run green.
+## Call from Core or Pro
+
+Add a thin workflow in `elementor` / `elementor-pro` that `uses` this repo. Pin `uses:` and `actions_ref` to the same git ref. After [PR 49](https://github.com/elementor/elementor-editor-github-actions/pull/49) is merged, use `@main`.
+
+This repo must allow GitHub Actions access from other Elementor repositories (Settings → Actions → General → Access).
+
+Pass `MAINTAIN_TOKEN` from Core/Pro. `github.token` from *this* repo cannot read private Pro; the caller’s `github.token` can read its own repo.
+
+Core (`.github/workflows/post-release-check.yml`):
+
+```yaml
+name: Post-Release Check
+
+on:
+  workflow_dispatch:
+    inputs:
+      core_version:
+        description: 'Core version (e.g. 4.2.3)'
+        required: true
+        type: string
+      pro_version:
+        description: 'Pro version. Leave empty for Core-only.'
+        required: false
+        type: string
+        default: ''
+      skip_wordpress_org:
+        type: boolean
+        default: false
+      skip_smoke:
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  post-release-check:
+    if: github.repository_owner == 'elementor'
+    uses: elementor/elementor-editor-github-actions/.github/workflows/post-release-check.yml@feat/post-release-check
+    with:
+      core_version: ${{ inputs.core_version }}
+      pro_version: ${{ inputs.pro_version }}
+      skip_wordpress_org: ${{ inputs.skip_wordpress_org }}
+      skip_smoke: ${{ inputs.skip_smoke }}
+      actions_ref: feat/post-release-check
+    secrets:
+      MAINTAIN_TOKEN: ${{ secrets.MAINTAIN_TOKEN }}
+```
+
+Pro: same file, require `pro_version`, make `core_version` optional (empty = current wordpress.org Core), and pass both into `with:`.
+

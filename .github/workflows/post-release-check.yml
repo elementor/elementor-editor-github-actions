@@ -38,8 +38,10 @@ on:
     workflow_call:
         inputs:
             core_version:
-                required: true
+                description: 'Core version. Empty uses current wordpress.org Core.'
+                required: false
                 type: string
+                default: ''
             pro_version:
                 required: false
                 type: string
@@ -56,13 +58,18 @@ on:
                 required: false
                 type: boolean
                 default: false
+            actions_ref:
+                description: 'Git ref of this repo to check out. Must match the uses: pin (e.g. main).'
+                required: false
+                type: string
+                default: 'main'
         secrets:
             MAINTAIN_TOKEN:
                 required: false
 
 concurrency:
-    group: ${{ github.workflow }}-${{ github.ref }}
-    cancel-in-progress: true
+    group: post-release-check-${{ github.repository }}-${{ inputs.core_version || github.sha }}-${{ inputs.pro_version || 'core-only' }}
+    cancel-in-progress: false
 
 permissions:
     contents: read
@@ -79,8 +86,12 @@ jobs:
             core_zip_available: ${{ steps.verify.outputs.core-zip-path != '' }}
             pro_zip_available: ${{ steps.verify.outputs.pro-zip-path != '' }}
         steps:
-            - name: Checkout source code
+            - name: Checkout post-release actions
               uses: actions/checkout@v4
+              with:
+                  repository: elementor/elementor-editor-github-actions
+                  ref: ${{ github.event_name == 'workflow_call' && inputs.actions_ref || github.sha }}
+                  persist-credentials: false
 
             - name: Resolve versions
               id: versions
@@ -134,8 +145,12 @@ jobs:
             && inputs.skip_smoke != true
             && needs.verify-published.outputs.core_zip_available == 'true'
         steps:
-            - name: Checkout source code
+            - name: Checkout post-release actions
               uses: actions/checkout@v4
+              with:
+                  repository: elementor/elementor-editor-github-actions
+                  ref: ${{ github.event_name == 'workflow_call' && inputs.actions_ref || github.sha }}
+                  persist-credentials: false
 
             - name: Install Dependencies
               uses: ./.github/actions/install-deps
