@@ -38,8 +38,8 @@ export function majorMinor(version: string): string {
 }
 
 export function versionParts(version: string): [number, number, number] {
-	const [major = 0, minor = 0, patch = 0] = version
-		.split('-')[0]
+	const core = version.split('-')[0] ?? version;
+	const [major = 0, minor = 0, patch = 0] = core
 		.split('.')
 		.map((part) => Number.parseInt(part, 10) || 0);
 
@@ -52,11 +52,14 @@ export function isVersionAtLeast(version: string, minimum: string): boolean {
 	const right = versionParts(minimum);
 
 	for (let index = 0; index < 3; index += 1) {
-		if (left[index] > right[index]) {
+		const leftPart = left[index] ?? 0;
+		const rightPart = right[index] ?? 0;
+
+		if (leftPart > rightPart) {
 			return true;
 		}
 
-		if (left[index] < right[index]) {
+		if (leftPart < rightPart) {
 			return false;
 		}
 	}
