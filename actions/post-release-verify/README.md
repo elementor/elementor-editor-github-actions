@@ -7,7 +7,9 @@ Checks a published Elementor Core (and optionally Pro) release. This is the API/
 1. GitHub release API for `elementor/elementor` (`/releases/tags/{version}`) and, if requested, `elementor/elementor-pro`.
 2. Non-empty changelog section for that version on `main` (`changelog.txt`; Core also `readme.txt`).
 3. wordpress.org SVN tag `readme.txt`: `Stable tag` and changelog (Core GA only). A 404 is **skipped**, not failed — `.org` can lag GitHub by up to a day.
-4. Downloaded zip headers: Core `Version` / `ELEMENTOR_VERSION` / `Stable tag`; Pro `Version`, required Core, recommended Core.
+4. Downloaded zip headers: Core `Version` / `ELEMENTOR_VERSION` / `Stable tag`; Pro `Version`, required Core (must be satisfied by the Core version you passed), recommended Core (warn on mismatch).
+
+Does **not** check `elementor.com/changelog` or the wordpress.org plugin HTML page.
 
 Changelog prose is dumped on the job summary for a quick human read. The action does not judge wording.
 
@@ -28,7 +30,9 @@ Changelog prose is dumped on the job summary for a quick human read. The action 
 
 ## Call from Core or Pro
 
-Add a thin workflow in `elementor` / `elementor-pro` that `uses` this repo. Pin `uses:` and `actions_ref` to the same git ref. After [PR 49](https://github.com/elementor/elementor-editor-github-actions/pull/49) is merged, use `@main`.
+Add a thin workflow in `elementor` / `elementor-pro` that `uses` this repo. Pin `uses:` and `actions_ref` to **the same git ref**. After this workflow is on `main`, that ref is `main`.
+
+Merge this repo first. Core/Pro callers that pin `@main` will fail until then.
 
 This repo must allow GitHub Actions access from other Elementor repositories (Settings → Actions → General → Access).
 
@@ -65,13 +69,13 @@ permissions:
 jobs:
   post-release-check:
     if: github.repository_owner == 'elementor'
-    uses: elementor/elementor-editor-github-actions/.github/workflows/post-release-check.yml@feat/post-release-check
+    uses: elementor/elementor-editor-github-actions/.github/workflows/post-release-check.yml@main
     with:
       core_version: ${{ inputs.core_version }}
       pro_version: ${{ inputs.pro_version }}
       skip_wordpress_org: ${{ inputs.skip_wordpress_org }}
       skip_smoke: ${{ inputs.skip_smoke }}
-      actions_ref: feat/post-release-check
+      actions_ref: main
     secrets:
       MAINTAIN_TOKEN: ${{ secrets.MAINTAIN_TOKEN }}
 ```

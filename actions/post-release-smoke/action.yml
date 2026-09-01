@@ -40,11 +40,56 @@ runs:
                 --field=ID \
                 --posts_per_page=1)
               PAGE_ID=$(echo "$RAW" | tail -n 1 | tr -d '\r')
-              if [ -z "$PAGE_ID" ]; then
-                echo "Imported upgrade-heading page was not found."
+              if [ -z "$PAGE_ID" ] || ! [[ "$PAGE_ID" =~ ^[0-9]+$ ]]; then
+                echo "Imported upgrade-heading page was not found (got: ${PAGE_ID:-empty})."
                 exit 1
               fi
               echo "existing_page_id=$PAGE_ID" >> "$GITHUB_OUTPUT"
+
+        - name: Refuse Core downgrade
+          shell: bash
+          env:
+              TARGET_CORE: ${{ inputs.core-version }}
+          run: |
+              RAW=$(npx wp-env run tests-cli wp plugin get elementor --field=version)
+              INSTALLED=$(echo "$RAW" | tail -n 1 | tr -d '\r')
+              if [ -z "$INSTALLED" ]; then
+                echo "Could not read the installed wordpress.org Elementor version."
+                exit 1
+              fi
+              export INSTALLED
+              node -e '
+                const installed = process.env.INSTALLED;
+                const target = process.env.TARGET_CORE;
+                const parts = (value) =>
+                  value
+                    .split("-")[0]
+                    .split(".")
+                    .map((part) => Number.parseInt(part, 10) || 0);
+                const left = parts(target);
+                const right = parts(installed);
+                for (let index = 0; index < 3; index += 1) {
+                  const a = left[index] ?? 0;
+                  const b = right[index] ?? 0;
+                  if (a > b) process.exit(0);
+                  if (a < b) {
+                    console.error(
+                      "Refusing to install Core " +
+                        target +
+                        " over wordpress.org " +
+                        installed +
+                        " (downgrade). Dispatch the current GA, or skip smoke.",
+                    );
+                    process.exit(1);
+                  }
+                }
+                console.log(
+                  "wordpress.org Elementor " +
+                    installed +
+                    " -> released " +
+                    target,
+                );
+              '
 
         - name: Upgrade site
           shell: bash

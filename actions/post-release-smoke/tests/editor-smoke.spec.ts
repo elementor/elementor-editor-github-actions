@@ -51,7 +51,8 @@ test.describe('Post-release upgrade smoke', () => {
 		);
 		await dismissEditorChrome(page);
 		await page
-			.locator('#elementor-preview-iframe')
+			.frameLocator('#elementor-preview-iframe')
+			.getByText('Test title')
 			.waitFor({ state: 'visible', timeout: timeouts.editorLoad });
 	});
 

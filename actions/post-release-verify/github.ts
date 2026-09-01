@@ -34,6 +34,10 @@ export function githubAssetHeaders(token: string): Record<string, string> {
 	};
 }
 
+export function repoApiUrl(repo: 'elementor' | 'elementor-pro') {
+	return `https://api.github.com/repos/elementor/${repo}`;
+}
+
 export function releaseApiUrl(
 	repo: 'elementor' | 'elementor-pro',
 	tag: string,

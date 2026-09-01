@@ -86,11 +86,18 @@ jobs:
             core_zip_available: ${{ steps.verify.outputs.core-zip-path != '' }}
             pro_zip_available: ${{ steps.verify.outputs.pro-zip-path != '' }}
         steps:
+            - name: Checkout this repository
+              if: github.event_name != 'workflow_call'
+              uses: actions/checkout@v4
+              with:
+                  persist-credentials: false
+
             - name: Checkout post-release actions
+              if: github.event_name == 'workflow_call'
               uses: actions/checkout@v4
               with:
                   repository: elementor/elementor-editor-github-actions
-                  ref: ${{ github.event_name == 'workflow_call' && inputs.actions_ref || github.sha }}
+                  ref: ${{ inputs.actions_ref }}
                   persist-credentials: false
 
             - name: Resolve versions
@@ -145,11 +152,18 @@ jobs:
             && inputs.skip_smoke != true
             && needs.verify-published.outputs.core_zip_available == 'true'
         steps:
+            - name: Checkout this repository
+              if: github.event_name != 'workflow_call'
+              uses: actions/checkout@v4
+              with:
+                  persist-credentials: false
+
             - name: Checkout post-release actions
+              if: github.event_name == 'workflow_call'
               uses: actions/checkout@v4
               with:
                   repository: elementor/elementor-editor-github-actions
-                  ref: ${{ github.event_name == 'workflow_call' && inputs.actions_ref || github.sha }}
+                  ref: ${{ inputs.actions_ref }}
                   persist-credentials: false
 
             - name: Install Dependencies

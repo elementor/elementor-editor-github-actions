@@ -185,6 +185,49 @@ describe('runVerify', () => {
 				?.status,
 		).toBe('fail');
 	});
+
+	it('fails fast when the token cannot read private Pro', async () => {
+		const outcome = await runVerify(
+			{
+				coreVersion: '4.2.2',
+				proVersion: '4.2.2',
+				githubToken: 'token',
+				skipWordpressOrg: true,
+				workDir: '/tmp/post-release-unused',
+			},
+			{
+				get: mockGet({
+					'/repos/elementor/elementor/releases/tags/4.2.2': {
+						status: 200,
+						body: CORE_RELEASE,
+					},
+					'/repos/elementor/elementor/contents/changelog.txt': {
+						status: 200,
+						body: CORE_CHANGELOG,
+					},
+					'/repos/elementor/elementor/contents/readme.txt': {
+						status: 200,
+						body: CORE_README,
+					},
+					'/repos/elementor/elementor-pro': {
+						status: 404,
+						body: '{"message":"Not Found"}',
+					},
+				}),
+				getBuffer: unusedBuffer,
+			},
+		);
+
+		expect(
+			outcome.checks.find((check) => check.id === 'pro-repo-access')
+				?.status,
+		).toBe('fail');
+		expect(
+			outcome.checks.find((check) => check.id === 'pro-repo-access')
+				?.detail,
+		).toContain('MAINTAIN_TOKEN');
+		expect(outcome.failed).toBe(true);
+	});
 });
 
 describe('renderSummary', () => {

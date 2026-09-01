@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+	isVersionAtLeast,
 	majorMinor,
 	parseHeaderField,
 	parsePhpDefine,
@@ -64,5 +65,14 @@ describe('majorMinor', () => {
 	it('strips the patch segment', () => {
 		expect(majorMinor('4.2.2')).toBe('4.2');
 		expect(majorMinor('4.3.0-beta1')).toBe('4.3');
+	});
+});
+
+describe('isVersionAtLeast', () => {
+	it('compares major.minor and patch', () => {
+		expect(isVersionAtLeast('4.2.3', '4.2')).toBe(true);
+		expect(isVersionAtLeast('4.2.0', '4.2')).toBe(true);
+		expect(isVersionAtLeast('4.1.9', '4.2')).toBe(false);
+		expect(isVersionAtLeast('4.2.0-beta1', '4.0')).toBe(true);
 	});
 });

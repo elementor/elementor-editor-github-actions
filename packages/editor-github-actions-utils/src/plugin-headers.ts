@@ -36,3 +36,30 @@ export function majorMinor(version: string): string {
 
 	return `${major}.${minor}`;
 }
+
+export function versionParts(version: string): [number, number, number] {
+	const [major = 0, minor = 0, patch = 0] = version
+		.split('-')[0]
+		.split('.')
+		.map((part) => Number.parseInt(part, 10) || 0);
+
+	return [major, minor, patch];
+}
+
+/** True if `version` is greater than or equal to `minimum` (prerelease suffix ignored). */
+export function isVersionAtLeast(version: string, minimum: string): boolean {
+	const left = versionParts(version);
+	const right = versionParts(minimum);
+
+	for (let index = 0; index < 3; index += 1) {
+		if (left[index] > right[index]) {
+			return true;
+		}
+
+		if (left[index] < right[index]) {
+			return false;
+		}
+	}
+
+	return true;
+}

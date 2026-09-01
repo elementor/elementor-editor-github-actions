@@ -6,6 +6,7 @@ import {
 	assertValidVersion,
 	getChangelogSection,
 	isPrereleaseVersion,
+	isVersionAtLeast,
 	majorMinor,
 	parseHeaderField,
 	parsePhpDefine,
@@ -29,6 +30,7 @@ import {
 	parseGithubRelease,
 	pickZipAsset,
 	releaseApiUrl,
+	repoApiUrl,
 	wordpressOrgReadmeUrl,
 	wordpressOrgZipUrl,
 } from './github.ts';
@@ -95,6 +97,22 @@ export async function runVerify(
 	let proRelease = null;
 
 	if (inputs.proVersion) {
+		const proReadable = await checkProRepoAccess({
+			get: deps.get,
+			headers: githubJson,
+			checks,
+		});
+
+		if (!proReadable) {
+			return {
+				checks,
+				coreZipPath: null,
+				proZipPath: null,
+				changelogSections,
+				failed: hasFailedChecks(checks),
+			};
+		}
+
 		proRelease = await checkGithubRelease({
 			id: 'pro-github-release',
 			title: 'GitHub release API (Pro)',
@@ -258,10 +276,58 @@ async function checkGithubRelease(params: {
 		return release;
 	} catch (error) {
 		params.checks.push(
-			failed(params.id, params.title, formatCheckError(error)),
+			failed(
+				params.id,
+				params.title,
+				githubNotFoundHint(params.repo, error),
+			),
 		);
 		return null;
 	}
+}
+
+async function checkProRepoAccess(params: {
+	get: HttpGet;
+	headers: Record<string, string>;
+	checks: CheckResult[];
+}): Promise<boolean> {
+	const title = 'GitHub access to elementor-pro';
+
+	try {
+		await requireOk(params.get, repoApiUrl(PRO_REPO), {
+			headers: params.headers,
+		});
+		params.checks.push(
+			passed(
+				'pro-repo-access',
+				title,
+				'Token can read the private elementor-pro repository',
+			),
+		);
+		return true;
+	} catch (error) {
+		params.checks.push(
+			failed(
+				'pro-repo-access',
+				title,
+				`${githubNotFoundHint(PRO_REPO, error)} Pass MAINTAIN_TOKEN from Core/Pro (this repo's github.token cannot see private Pro).`,
+			),
+		);
+		return false;
+	}
+}
+
+function githubNotFoundHint(
+	repo: typeof CORE_REPO | typeof PRO_REPO,
+	error: unknown,
+): string {
+	const detail = formatCheckError(error);
+
+	if (repo === PRO_REPO && /404/.test(detail)) {
+		return `${detail} Private Pro returns 404 when the token has no access.`;
+	}
+
+	return detail;
 }
 
 async function checkMainChangelog(params: {
@@ -317,7 +383,11 @@ async function checkMainChangelog(params: {
 		);
 	} catch (error) {
 		params.checks.push(
-			failed(params.id, params.title, formatCheckError(error)),
+			failed(
+				params.id,
+				params.title,
+				githubNotFoundHint(params.repo, error),
+			),
 		);
 	}
 }
@@ -592,6 +662,10 @@ async function downloadAndCheckProZip(params: {
 
 		if (!required) {
 			mismatches.push('ELEMENTOR_PRO_REQUIRED_CORE_VERSION missing');
+		} else if (!isVersionAtLeast(params.coreVersion, required)) {
+			mismatches.push(
+				`ELEMENTOR_PRO_REQUIRED_CORE_VERSION=${required} but Core is ${params.coreVersion}`,
+			);
 		}
 
 		if (!recommended) {
