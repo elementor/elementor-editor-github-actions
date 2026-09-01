@@ -1,0 +1,77 @@
+name: Sync Release Branches
+description: >-
+    Create PRs on downstream release branches after a merge using isolated git worktrees.
+    Merges the PR source branch (merge commits) or applies squash commit patches.
+    release/stable merges open PRs to release/beta and main; release/beta merges open a PR to main.
+
+inputs:
+    token:
+        description: GitHub token with contents and pull-requests write access
+        required: true
+    base-ref:
+        description: Base branch the PR was merged into
+        required: true
+    pr-number:
+        description: Merged pull request number
+        required: true
+    merge-sha:
+        description: Merge commit SHA to sync into downstream branches
+        required: true
+    pr-title:
+        description: Original PR title
+        required: true
+    pr-user-login:
+        description: Original PR author login
+        required: true
+    pr-url:
+        description: Original PR URL
+        required: true
+    source-repo:
+        description: Head repository full name (owner/repo)
+        required: true
+    head-ref:
+        description: Original PR head branch name
+        required: false
+        default: ''
+    using-pat:
+        description: Whether a PAT is used so downstream PR workflows trigger automatically
+        required: false
+        default: 'false'
+    stable-branch:
+        description: Stable release branch name
+        required: false
+        default: release/stable
+    beta-branch:
+        description: Beta release branch name
+        required: false
+        default: release/beta
+    main-branch:
+        description: Main branch name
+        required: false
+        default: main
+
+runs:
+    using: composite
+    steps:
+        - name: Fetch all branches
+          shell: bash
+          run: git fetch --all
+
+        - name: Create downstream PRs
+          shell: bash
+          env:
+              GH_TOKEN: ${{ inputs.token }}
+              USING_PAT: ${{ inputs.using-pat }}
+              BASE_REF: ${{ inputs.base-ref }}
+              PR_NUMBER: ${{ inputs.pr-number }}
+              MERGE_SHA: ${{ inputs.merge-sha }}
+              PR_TITLE: ${{ inputs.pr-title }}
+              PR_USER_LOGIN: ${{ inputs.pr-user-login }}
+              ORIG_URL: ${{ inputs.pr-url }}
+              SOURCE_REPO: ${{ inputs.source-repo }}
+              HEAD_REF: ${{ inputs.head-ref }}
+              STABLE_BRANCH: ${{ inputs.stable-branch }}
+              BETA_BRANCH: ${{ inputs.beta-branch }}
+              MAIN_BRANCH: ${{ inputs.main-branch }}
+              ACTION_PATH: ${{ github.action_path }}
+          run: bash "$ACTION_PATH/sync-release-branches.sh"
