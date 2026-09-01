@@ -2,7 +2,8 @@
 set -euo pipefail
 
 # Create downstream PRs after a release-branch merge using isolated git worktrees.
-# Applies the merged commit with git merge (not cherry-pick) and opens normal PRs.
+# Merges the PR source branch for merge commits, or applies a squash commit patch.
+# Opens normal downstream PRs with the original title.
 #
 # Required environment variables:
 #   BASE_REF       - branch the PR was merged into (e.g. release/stable)
@@ -25,6 +26,8 @@ STABLE_BRANCH="${STABLE_BRANCH:-release/stable}"
 BETA_BRANCH="${BETA_BRANCH:-release/beta}"
 MAIN_BRANCH="${MAIN_BRANCH:-main}"
 SYNC_BRANCH_PREFIX="sync-pr"
+BOT_LOGIN="github-actions[bot]"
+SYNC_COMMIT_MESSAGE="Sync PR #${PR_NUMBER} from ${BASE_REF}"
 
 require_env() {
 	local name="$1"
@@ -58,27 +61,99 @@ resolve_targets_csv() {
 	esac
 }
 
-merge_merged_commit() {
+is_merge_commit() {
+	local parent_count
+	parent_count="$(git rev-list --parents -n 1 "$1" | awk '{print NF - 1}')"
+	[ "$parent_count" -ge 2 ]
+}
+
+abort_apply() {
+	git merge --abort 2>/dev/null || true
+	git reset --hard HEAD 2>/dev/null || true
+}
+
+merge_pr_head() {
+	local merge_sha="$1"
+	local pr_head="${merge_sha}^2"
+
+	if ! git rev-parse --verify "${pr_head}^{commit}" >/dev/null 2>&1; then
+		echo "::error:: Merge commit ${merge_sha} has no second parent (PR head)"
+		return 1
+	fi
+
+	git merge --no-ff "$pr_head" -m "$SYNC_COMMIT_MESSAGE"
+}
+
+apply_squash_commit_patch() {
 	local merge_sha="$1"
 
-	git merge --no-ff "$merge_sha" -m "Sync PR #${PR_NUMBER} from ${BASE_REF}"
+	if ! git diff "${merge_sha}^" "$merge_sha" | git apply --3way; then
+		return 1
+	fi
+
+	git add -A
+
+	if git diff --cached --quiet; then
+		echo "::notice:: Squash commit ${merge_sha} produced no staged changes"
+		return 0
+	fi
+
+	git commit -m "$SYNC_COMMIT_MESSAGE"
+}
+
+apply_merged_content() {
+	local merge_sha="$1"
+
+	if is_merge_commit "$merge_sha"; then
+		merge_pr_head "$merge_sha"
+	else
+		apply_squash_commit_patch "$merge_sha"
+	fi
+}
+
+has_changes_vs_target() {
+	local target="$1"
+	! git diff --quiet "origin/${target}" HEAD
+}
+
+pr_assignee_args() {
+	if [ -n "$PR_USER_LOGIN" ] && [ "$PR_USER_LOGIN" != "$BOT_LOGIN" ]; then
+		printf '%s\n' --assignee "$PR_USER_LOGIN"
+	fi
+}
+
+build_sync_pr_title() {
+	local title="$1"
+	local type rest
+
+	if [[ "$title" =~ ^([A-Za-z]+):[[:space:]]*(.*)$ ]]; then
+		type="${BASH_REMATCH[1]}"
+		rest="${BASH_REMATCH[2]}"
+		printf '%s: Synced - %s' "$type" "$rest"
+		return 0
+	fi
+
+	printf 'Internal: Synced - %s' "$title"
 }
 
 sanitize_pr_title() {
-	SANITIZED_PR_TITLE="$(sanitize_title "$PR_TITLE")"
+	SANITIZED_PR_TITLE="$(build_sync_pr_title "$(sanitize_title "$PR_TITLE")")"
 }
 
 create_conflict_pr() {
 	local target="$1"
 	local sync_branch="$2"
 	local conflict_branch="$3"
+	local -a assignee_args
+
+	readarray -t assignee_args < <(pr_assignee_args)
 
 	git add .
 	git commit -m "Sync PR #${PR_NUMBER} to ${target} with conflicts - manual resolution needed"
 
 	if ! git push --force-with-lease origin "${sync_branch}:${conflict_branch}"; then
 		echo "::warning:: Failed to push conflict branch ${conflict_branch}"
-		git merge --abort 2>/dev/null || true
+		abort_apply
 		return 1
 	fi
 
@@ -90,7 +165,7 @@ create_conflict_pr() {
 	gh pr create \
 		--base "$target" \
 		--head "$conflict_branch" \
-		--assignee "$PR_USER_LOGIN" \
+		"${assignee_args[@]}" \
 		--label "auto-reviewed" \
 		--title "${SANITIZED_PR_TITLE} (sync to ${target} — conflicts)" \
 		--body "⚠️ **Manual Resolution Required**
@@ -119,6 +194,9 @@ The conflicted files are included in this branch with conflict markers.
 create_success_pr() {
 	local target="$1"
 	local sync_branch="$2"
+	local -a assignee_args
+
+	readarray -t assignee_args < <(pr_assignee_args)
 
 	if gh pr list --head "$sync_branch" --base "$target" --state open | grep -q .; then
 		echo "PR already exists for branch ${sync_branch} -> ${target}, skipping creation"
@@ -129,7 +207,7 @@ create_success_pr() {
 	pr_url="$(gh pr create \
 		--base "$target" \
 		--head "$sync_branch" \
-		--assignee "$PR_USER_LOGIN" \
+		"${assignee_args[@]}" \
 		--label "auto-reviewed" \
 		--title "${SANITIZED_PR_TITLE}" \
 		--body "Automatic sync PR created after [#${PR_NUMBER}](${ORIG_URL}) was merged into \`${BASE_REF}\`.
@@ -181,7 +259,7 @@ sync_to_target() {
 
 	pushd "$worktree_path" >/dev/null
 
-	if ! merge_merged_commit "$MERGE_SHA"; then
+	if ! apply_merged_content "$MERGE_SHA"; then
 		echo "::error:: Merge conflicts detected for PR #${PR_NUMBER} on branch ${target}"
 		create_conflict_pr "$target" "$sync_branch" "$conflict_branch" || true
 		popd >/dev/null
@@ -189,7 +267,15 @@ sync_to_target() {
 		return 0
 	fi
 
-	echo "Merge successful for ${target}"
+	if ! has_changes_vs_target "$target"; then
+		echo "::notice:: No changes to sync for PR #${PR_NUMBER} on ${target} - skipping PR creation"
+		popd >/dev/null
+		git worktree remove --force "$worktree_path" 2>/dev/null || true
+		git push origin --delete "$sync_branch" 2>/dev/null || true
+		return 0
+	fi
+
+	echo "Merged PR content for ${target}"
 
 	if ! git push --force-with-lease origin "$sync_branch"; then
 		echo "::warning:: Failed to push branch ${sync_branch}"
