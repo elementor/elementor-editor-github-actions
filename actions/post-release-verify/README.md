@@ -36,7 +36,7 @@ Merge this repo first. Core/Pro callers that pin `@main` will fail until then.
 
 This repo must allow GitHub Actions access from other Elementor repositories (Settings → Actions → General → Access).
 
-Pass `MAINTAIN_TOKEN` from Core/Pro. `github.token` from *this* repo cannot read private Pro; the caller’s `github.token` can read its own repo.
+Pass `MAINTAIN_TOKEN` from Core/Pro. `github.token` from _this_ repo cannot read private Pro; the caller’s `github.token` can read its own repo.
 
 Core (`.github/workflows/post-release-check.yml`):
 
@@ -81,4 +81,3 @@ jobs:
 ```
 
 Pro: same file, require `pro_version`, make `core_version` optional (empty = current wordpress.org Core), and pass both into `with:`.
-
