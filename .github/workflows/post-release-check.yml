@@ -1,0 +1,206 @@
+name: Post-Release Check
+
+on:
+    pull_request:
+        types: [opened, synchronize, reopened]
+        paths:
+            - '.github/workflows/post-release-check.yml'
+            - 'actions/post-release-verify/**'
+            - 'actions/post-release-smoke/**'
+            - 'packages/editor-github-actions-utils/**'
+            - 'stubs/upgrade-templates/**'
+    workflow_dispatch:
+        inputs:
+            core_version:
+                description: 'Core version (e.g. 4.2.2)'
+                required: true
+                type: string
+            pro_version:
+                description: 'Pro version. Leave empty for Core-only.'
+                required: false
+                type: string
+                default: ''
+            skip_wordpress_org:
+                description: 'Skip wordpress.org SVN/download (use when the tag is not on .org yet)'
+                required: false
+                type: boolean
+                default: false
+            skip_smoke:
+                description: 'Run API/zip checks only'
+                required: false
+                type: boolean
+                default: false
+            dry_run:
+                description: 'Record failures in the summary without failing verify'
+                required: false
+                type: boolean
+                default: false
+    workflow_call:
+        inputs:
+            core_version:
+                description: 'Core version. Empty uses current wordpress.org Core.'
+                required: false
+                type: string
+                default: ''
+            pro_version:
+                required: false
+                type: string
+                default: ''
+            skip_wordpress_org:
+                required: false
+                type: boolean
+                default: false
+            skip_smoke:
+                required: false
+                type: boolean
+                default: false
+            dry_run:
+                required: false
+                type: boolean
+                default: false
+            actions_ref:
+                description: 'Git ref of this repo to check out. Must match the uses: pin (e.g. main).'
+                required: false
+                type: string
+                default: 'main'
+        secrets:
+            MAINTAIN_TOKEN:
+                required: false
+
+concurrency:
+    group: post-release-check-${{ github.repository }}-${{ inputs.core_version || github.sha }}-${{ inputs.pro_version || 'core-only' }}
+    cancel-in-progress: false
+
+permissions:
+    contents: read
+    actions: write
+
+jobs:
+    verify-published:
+        name: Verify published artifacts
+        runs-on: ubuntu-latest
+        if: startsWith(github.repository, 'elementor/')
+        outputs:
+            core_version: ${{ steps.versions.outputs.core }}
+            pro_version: ${{ steps.versions.outputs.pro }}
+            core_zip_available: ${{ steps.verify.outputs.core-zip-path != '' }}
+            pro_zip_available: ${{ steps.verify.outputs.pro-zip-path != '' }}
+        steps:
+            - name: Checkout this repository
+              if: github.event_name != 'workflow_call'
+              uses: actions/checkout@v4
+              with:
+                  persist-credentials: false
+
+            - name: Checkout post-release actions
+              if: github.event_name == 'workflow_call'
+              uses: actions/checkout@v4
+              with:
+                  repository: elementor/elementor-editor-github-actions
+                  ref: ${{ inputs.actions_ref }}
+                  persist-credentials: false
+
+            - name: Resolve versions
+              id: versions
+              env:
+                  INPUT_CORE: ${{ inputs.core_version }}
+                  INPUT_PRO: ${{ inputs.pro_version }}
+              run: |
+                  if [ -n "$INPUT_CORE" ]; then
+                    echo "core=$INPUT_CORE" >> "$GITHUB_OUTPUT"
+                  else
+                    CORE=$(curl -fsSL -A 'elementor-post-release-check' \
+                      'https://api.wordpress.org/plugins/info/1.2/?action=plugin_information&request%5Bslug%5D=elementor' \
+                      | jq -r '.version')
+                    if [ -z "$CORE" ] || [ "$CORE" = 'null' ]; then
+                      echo 'Failed to resolve current Core version from wordpress.org'
+                      exit 1
+                    fi
+                    echo "PR run: using wordpress.org current Core $CORE"
+                    echo "core=$CORE" >> "$GITHUB_OUTPUT"
+                  fi
+                  echo "pro=$INPUT_PRO" >> "$GITHUB_OUTPUT"
+
+            - name: Install Dependencies
+              uses: ./.github/actions/install-deps
+
+            - name: Verify release
+              id: verify
+              uses: ./actions/post-release-verify
+              with:
+                  core-version: ${{ steps.versions.outputs.core }}
+                  pro-version: ${{ steps.versions.outputs.pro }}
+                  github-token: ${{ secrets.MAINTAIN_TOKEN || github.token }}
+                  skip-wordpress-org: ${{ inputs.skip_wordpress_org || false }}
+                  dry-run: ${{ inputs.dry_run || false }}
+
+            - name: Upload plugin zips
+              if: steps.verify.outputs.core-zip-path != ''
+              uses: actions/upload-artifact@v4
+              with:
+                  name: released-plugins
+                  path: post-release-artifacts/*.zip
+                  if-no-files-found: error
+                  retention-days: 3
+
+    smoke-editor:
+        name: Upgrade site smoke
+        needs: verify-published
+        runs-on: ubuntu-latest
+        if: >-
+            startsWith(github.repository, 'elementor/')
+            && inputs.skip_smoke != true
+            && needs.verify-published.outputs.core_zip_available == 'true'
+        steps:
+            - name: Checkout this repository
+              if: github.event_name != 'workflow_call'
+              uses: actions/checkout@v4
+              with:
+                  persist-credentials: false
+
+            - name: Checkout post-release actions
+              if: github.event_name == 'workflow_call'
+              uses: actions/checkout@v4
+              with:
+                  repository: elementor/elementor-editor-github-actions
+                  ref: ${{ inputs.actions_ref }}
+                  persist-credentials: false
+
+            - name: Install Dependencies
+              uses: ./.github/actions/install-deps
+
+            - name: Download plugin zips
+              uses: actions/download-artifact@v4
+              with:
+                  name: released-plugins
+                  path: released-plugins
+
+            - name: Setup WP Env
+              uses: ./actions/setup-wp-env
+              with:
+                  php: '8.0'
+                  wp: '7.0.1'
+                  active-theme: 'hello-elementor'
+                  themes: |-
+                      https://downloads.wordpress.org/theme/hello-elementor.zip
+                  mappings: |-
+                      elementor-templates:./stubs/upgrade-templates
+                      released-plugins:./released-plugins
+                  config: |-
+                      ELEMENTOR_SHOW_HIDDEN_EXPERIMENTS:1
+
+            - name: Install current wordpress.org Elementor
+              run: npx wp-env run tests-cli wp plugin install elementor --activate
+
+            - name: Setup Elementor Env
+              uses: ./actions/setup-elementor-env
+              with:
+                  env: 'testing'
+                  templates: |-
+                      elementor-templates
+
+            - name: Upgrade site and run editor smoke
+              uses: ./actions/post-release-smoke
+              with:
+                  core-version: ${{ needs.verify-published.outputs.core_version }}
+                  pro-version: ${{ needs.verify-published.outputs.pro_version }}
