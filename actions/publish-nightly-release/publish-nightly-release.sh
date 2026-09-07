@@ -27,13 +27,17 @@ cp "${PLUGIN_ZIP_FILENAME}" "${NIGHTLY_ZIP_FILENAME}"
 git tag --force "${NIGHTLY_TAG}" "${NIGHTLY_COMMIT}"
 git push --force origin "refs/tags/${NIGHTLY_TAG}"
 
-printf 'Rolling build of `%s`, replaced on every merge. Not a stable release.\n\n- Build version: `%s`\n- Commit: %s\n- Pull request: [#%s](%s) %s\n' \
+if [[ -n "${PR_NUMBER}" ]]; then
+	SOURCE_LINE=$(printf -- '- Pull request: [#%s](%s) %s' "${PR_NUMBER}" "${PR_URL}" "${PR_TITLE}")
+else
+	SOURCE_LINE=$(printf -- '- Triggered manually by %s' "${TRIGGERED_BY:-unknown}")
+fi
+
+printf 'Rolling build of `%s`, replaced on every merge. Not a stable release.\n\n- Build version: `%s`\n- Commit: %s\n%s\n' \
 	"${BASE_REF}" \
 	"${PACKAGE_VERSION}" \
 	"${NIGHTLY_COMMIT}" \
-	"${PR_NUMBER}" \
-	"${PR_URL}" \
-	"${PR_TITLE}" \
+	"${SOURCE_LINE}" \
 	> "${NIGHTLY_NOTES_FILENAME}"
 
 {

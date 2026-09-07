@@ -32,6 +32,10 @@ inputs:
         description: Merged pull request URL
         required: false
         default: ''
+    triggered-by:
+        description: Actor credited in the release notes when there is no pull request
+        required: false
+        default: ''
     merge-commit-sha:
         description: >-
             Commit the nightly tag points at. Defaults to HEAD, which can advance under
@@ -84,6 +88,7 @@ runs:
               PR_NUMBER: ${{ inputs.pr-number }}
               PR_TITLE: ${{ inputs.pr-title }}
               PR_URL: ${{ inputs.pr-url }}
+              TRIGGERED_BY: ${{ inputs.triggered-by }}
               MERGE_COMMIT_SHA: ${{ inputs.merge-commit-sha }}
               NIGHTLY_NOTES_FILENAME: ${{ inputs.notes-filename }}
               MAIN_BRANCH: ${{ inputs.main-branch }}
