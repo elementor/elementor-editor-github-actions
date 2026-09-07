@@ -1,0 +1,84 @@
+name: Publish Nightly Release
+description: >-
+    Prepare a rolling nightly build for a plugin repository. Copies the built zip to a
+    stable nightly filename, force-moves the nightly tag to the current commit, and writes
+    release notes. Merges to main use the bare `nightly` tag; release branches use `<version>-nightly`.
+
+inputs:
+    plugin-slug:
+        description: Plugin slug used for the nightly zip filename (e.g. elementor, elementor-pro)
+        required: true
+    plugin-zip:
+        description: Path to the built plugin zip to publish
+        required: true
+    package-version:
+        description: Full build version, used in the release notes
+        required: true
+    clean-package-version:
+        description: Version without build suffixes, used to build the nightly tag on release branches
+        required: true
+    base-ref:
+        description: Branch the pull request was merged into
+        required: true
+    pr-number:
+        description: Merged pull request number
+        required: false
+        default: ''
+    pr-title:
+        description: Merged pull request title
+        required: false
+        default: ''
+    pr-url:
+        description: Merged pull request URL
+        required: false
+        default: ''
+    notes-filename:
+        description: File the generated release notes are written to
+        required: false
+        default: nightly-release-notes.md
+    main-branch:
+        description: Branch that receives the unsuffixed nightly tag
+        required: false
+        default: main
+    main-nightly-tag:
+        description: Tag name used for the main branch nightly release
+        required: false
+        default: nightly
+
+outputs:
+    tag:
+        description: Nightly tag that was moved to the current commit
+        value: ${{ steps.publish.outputs.tag }}
+    release-name:
+        description: Display name for the nightly release
+        value: ${{ steps.publish.outputs.release-name }}
+    zip:
+        description: Nightly zip filename to attach to the release
+        value: ${{ steps.publish.outputs.zip }}
+    notes:
+        description: Path to the generated release notes file
+        value: ${{ steps.publish.outputs.notes }}
+    commit:
+        description: Commit the nightly tag points at
+        value: ${{ steps.publish.outputs.commit }}
+
+runs:
+    using: composite
+    steps:
+        - name: Publish nightly build
+          id: publish
+          shell: bash
+          env:
+              ACTION_PATH: ${{ github.action_path }}
+              PLUGIN_SLUG: ${{ inputs.plugin-slug }}
+              PLUGIN_ZIP_FILENAME: ${{ inputs.plugin-zip }}
+              PACKAGE_VERSION: ${{ inputs.package-version }}
+              CLEAN_PACKAGE_VERSION: ${{ inputs.clean-package-version }}
+              BASE_REF: ${{ inputs.base-ref }}
+              PR_NUMBER: ${{ inputs.pr-number }}
+              PR_TITLE: ${{ inputs.pr-title }}
+              PR_URL: ${{ inputs.pr-url }}
+              NIGHTLY_NOTES_FILENAME: ${{ inputs.notes-filename }}
+              MAIN_BRANCH: ${{ inputs.main-branch }}
+              MAIN_NIGHTLY_TAG: ${{ inputs.main-nightly-tag }}
+          run: bash "$ACTION_PATH/publish-nightly-release.sh"
