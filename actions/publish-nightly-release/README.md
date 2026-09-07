@@ -33,6 +33,7 @@ steps:
       pr-number: ${{ github.event.pull_request.number }}
       pr-title: ${{ github.event.pull_request.title }}
       pr-url: ${{ github.event.pull_request.html_url }}
+      merge-commit-sha: ${{ github.event.pull_request.merge_commit_sha }}
 
   - uses: softprops/action-gh-release@v1
     with:
@@ -57,6 +58,7 @@ steps:
 | `pr-number`             | no       | `''`                       | Merged PR number, shown in the release notes            |
 | `pr-title`              | no       | `''`                       | Merged PR title, shown in the release notes             |
 | `pr-url`                | no       | `''`                       | Merged PR URL, shown in the release notes               |
+| `merge-commit-sha`      | no       | `''`                       | Commit to tag; defaults to `HEAD`                       |
 | `notes-filename`        | no       | `nightly-release-notes.md` | File the release notes are written to                   |
 | `main-branch`           | no       | `main`                     | Branch that receives the unsuffixed tag                 |
 | `main-nightly-tag`      | no       | `nightly`                  | Tag name used for the main branch                       |

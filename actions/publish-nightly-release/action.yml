@@ -32,6 +32,12 @@ inputs:
         description: Merged pull request URL
         required: false
         default: ''
+    merge-commit-sha:
+        description: >-
+            Commit the nightly tag points at. Defaults to HEAD, which can advance under
+            concurrent merges, so pass the pull request merge commit where available.
+        required: false
+        default: ''
     notes-filename:
         description: File the generated release notes are written to
         required: false
@@ -78,6 +84,7 @@ runs:
               PR_NUMBER: ${{ inputs.pr-number }}
               PR_TITLE: ${{ inputs.pr-title }}
               PR_URL: ${{ inputs.pr-url }}
+              MERGE_COMMIT_SHA: ${{ inputs.merge-commit-sha }}
               NIGHTLY_NOTES_FILENAME: ${{ inputs.notes-filename }}
               MAIN_BRANCH: ${{ inputs.main-branch }}
               MAIN_NIGHTLY_TAG: ${{ inputs.main-nightly-tag }}

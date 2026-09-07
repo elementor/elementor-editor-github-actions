@@ -24,7 +24,13 @@ if ! CORE_PACKAGE_JSON=$(core_api \
 	exit 1
 fi
 
-CORE_PACKAGE_VERSION=$(jq -r '.version' <<< "${CORE_PACKAGE_JSON}")
+CORE_PACKAGE_VERSION=$(jq -r '.version // ""' <<< "${CORE_PACKAGE_JSON}")
+
+if [[ -z "${CORE_PACKAGE_VERSION}" || "${CORE_PACKAGE_VERSION}" == "null" ]]; then
+	echo "::error::No version field in package.json on Core branch ${CORE_BRANCH}"
+	exit 1
+fi
+
 CORE_RELEASE_TAG=$(nightly_tag_for "${CORE_BRANCH}" "${CORE_PACKAGE_VERSION}")
 
 if ! CORE_RELEASE=$(core_api \
@@ -52,10 +58,12 @@ fi
 	echo "CORE_RELEASE_TAG=${CORE_RELEASE_TAG}"
 	echo "CORE_PACKAGE_VERSION=${CORE_PACKAGE_VERSION}"
 	echo "CORE_ZIP_URL=${CORE_ZIP_URL}"
+	echo "ELEMENTOR_CORE_BRANCH=${CORE_BRANCH}"
 } >> "$GITHUB_ENV"
 
 {
 	echo "tag=${CORE_RELEASE_TAG}"
 	echo "version=${CORE_PACKAGE_VERSION}"
 	echo "zip-url=${CORE_ZIP_URL}"
+	echo "branch=${CORE_BRANCH}"
 } >> "$GITHUB_OUTPUT"

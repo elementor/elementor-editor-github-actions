@@ -46,6 +46,11 @@ outputs:
     zip-url:
         description: Download URL of the Core nightly zip asset
         value: ${{ steps.resolve.outputs.zip-url }}
+    branch:
+        description: >-
+            Core branch after alias normalization. Reuse it for later Core steps such as
+            cloning, so the alias mapping is applied once per run.
+        value: ${{ steps.resolve.outputs.branch }}
 
 runs:
     using: composite

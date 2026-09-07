@@ -13,7 +13,13 @@ done
 NIGHTLY_TAG=$(nightly_tag_for "${BASE_REF}" "${CLEAN_PACKAGE_VERSION}")
 NIGHTLY_ZIP_FILENAME="${PLUGIN_SLUG}-${NIGHTLY_TAG}.zip"
 NIGHTLY_RELEASE_NAME="Nightly (${BASE_REF})"
-NIGHTLY_COMMIT=$(git rev-parse HEAD)
+# Prefer the merge commit over HEAD, which can advance under concurrent merges to the same branch.
+NIGHTLY_COMMIT="${MERGE_COMMIT_SHA:-$(git rev-parse HEAD)}"
+
+# Shallow checkouts only contain the branch tip, so the merge commit may need fetching.
+if ! git cat-file -e "${NIGHTLY_COMMIT}^{commit}" 2>/dev/null; then
+	git fetch --depth 1 origin "${NIGHTLY_COMMIT}"
+fi
 
 cp "${PLUGIN_ZIP_FILENAME}" "${NIGHTLY_ZIP_FILENAME}"
 

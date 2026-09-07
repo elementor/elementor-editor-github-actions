@@ -35,4 +35,6 @@ Omit `zip-path` to resolve the tag and URL without downloading.
 
 ## Outputs
 
-`tag`, `version`, `zip-url`. The same values are also exported to `GITHUB_ENV` as `CORE_RELEASE_TAG`, `CORE_PACKAGE_VERSION` and `CORE_ZIP_URL`.
+`tag`, `version`, `zip-url`, `branch`. The same values are also exported to `GITHUB_ENV` as `CORE_RELEASE_TAG`, `CORE_PACKAGE_VERSION`, `CORE_ZIP_URL` and `ELEMENTOR_CORE_BRANCH`.
+
+`branch` is the Core branch after alias normalization. Because it is exported as `ELEMENTOR_CORE_BRANCH`, later steps that clone Core pick up the normalized value automatically and the alias mapping is applied once per run.
