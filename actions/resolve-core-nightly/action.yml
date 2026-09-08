@@ -1,0 +1,71 @@
+name: Resolve Core Nightly
+description: >-
+    Resolve the Elementor Core nightly release for a given Core branch and optionally download
+    its zip. Uses the same tag rule as publish-nightly-release: main resolves to `nightly`,
+    release branches resolve to `<version>-nightly` from the branch's package.json.
+
+inputs:
+    core-branch:
+        description: Core branch to resolve the nightly release for
+        required: true
+    token:
+        description: GitHub token used to read the Core repository and download the asset
+        required: true
+    zip-path:
+        description: Path to download the Core zip to. Leave empty to only resolve the URL.
+        required: false
+        default: ''
+    core-repo:
+        description: Core repository to resolve against
+        required: false
+        default: elementor/elementor
+    beta-branch-alias:
+        description: Alias accepted for the beta branch (e.g. a version number used by test matrices)
+        required: false
+        default: '4.03'
+    beta-branch:
+        description: Branch the beta alias maps to
+        required: false
+        default: release/beta
+    main-branch:
+        description: Branch that carries the unsuffixed nightly tag
+        required: false
+        default: main
+    main-nightly-tag:
+        description: Tag name used for the main branch nightly release
+        required: false
+        default: nightly
+
+outputs:
+    tag:
+        description: Resolved Core nightly tag
+        value: ${{ steps.resolve.outputs.tag }}
+    version:
+        description: Core package.json version on the resolved branch
+        value: ${{ steps.resolve.outputs.version }}
+    zip-url:
+        description: Download URL of the Core nightly zip asset
+        value: ${{ steps.resolve.outputs.zip-url }}
+    branch:
+        description: >-
+            Core branch after alias normalization. Reuse it for later Core steps such as
+            cloning, so the alias mapping is applied once per run.
+        value: ${{ steps.resolve.outputs.branch }}
+
+runs:
+    using: composite
+    steps:
+        - name: Resolve Core nightly release
+          id: resolve
+          shell: bash
+          env:
+              ACTION_PATH: ${{ github.action_path }}
+              CORE_BRANCH: ${{ inputs.core-branch }}
+              GITHUB_TOKEN: ${{ inputs.token }}
+              CORE_ZIP_PATH: ${{ inputs.zip-path }}
+              CORE_REPO: ${{ inputs.core-repo }}
+              BETA_BRANCH_ALIAS: ${{ inputs.beta-branch-alias }}
+              BETA_BRANCH: ${{ inputs.beta-branch }}
+              MAIN_BRANCH: ${{ inputs.main-branch }}
+              MAIN_NIGHTLY_TAG: ${{ inputs.main-nightly-tag }}
+          run: bash "$ACTION_PATH/resolve-core-nightly.sh"

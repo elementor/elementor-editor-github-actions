@@ -1,0 +1,62 @@
+name: Invalidate changelog cache
+description: Bust Elementor.com product changelog transients after a release.
+
+inputs:
+    invalidate_token:
+        description: 'API key sent as api-key header; Hosting WAF validates it.'
+        required: true
+    product:
+        description: 'Changelog product: core or pro.'
+        required: true
+    channel:
+        description: 'Release channel: ga, stable, or beta. Ignored when types is set.'
+        required: false
+        default: ''
+    types:
+        description: 'Optional space-separated changelog types (release, beta, dev). Overrides channel mapping.'
+        required: false
+        default: ''
+
+runs:
+    using: 'composite'
+    steps:
+        - name: Invalidate changelog cache
+          shell: bash
+          env:
+              INVALIDATE_TOKEN: ${{ inputs.invalidate_token }}
+              PRODUCT: ${{ inputs.product }}
+              CHANNEL: ${{ inputs.channel }}
+              TYPES_INPUT: ${{ inputs.types }}
+              INVALIDATE_URL: https://elementor.com/wp-json/elementor-site-product-changelog/v1/cache/invalidate
+          run: |
+              set -euo pipefail
+
+              if [ -z "${INVALIDATE_TOKEN}" ]; then
+                echo "Changelog cache invalidate token is not configured. Skipping."
+                exit 0
+              fi
+
+              if [ -n "${TYPES_INPUT}" ]; then
+                TYPES="${TYPES_INPUT}"
+              else
+                case "${CHANNEL}" in
+                  ga|stable) TYPES="release" ;;
+                  beta) TYPES="beta dev" ;;
+                  dev) TYPES="dev" ;;
+                  *)
+                    echo "Unknown channel '${CHANNEL}', skipping changelog cache invalidation."
+                    exit 0
+                    ;;
+                esac
+              fi
+
+              for TYPE in ${TYPES}; do
+                echo "Invalidating changelog cache product=${PRODUCT} type=${TYPE}"
+                if ! curl --fail --show-error --silent --max-time 60 --request POST \
+                  --header "Content-Type: application/json" \
+                  --header "api-key: ${INVALIDATE_TOKEN}" \
+                  --data "{\"product\":\"${PRODUCT}\",\"type\":\"${TYPE}\"}" \
+                  "${INVALIDATE_URL}"; then
+                  echo "Warning: failed to invalidate changelog cache type=${TYPE}"
+                fi
+              done
