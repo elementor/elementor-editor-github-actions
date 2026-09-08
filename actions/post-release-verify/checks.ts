@@ -341,6 +341,17 @@ async function checkMainChangelog(params: {
 	checks: CheckResult[];
 	changelogSections: Array<{ title: string; body: string }>;
 }) {
+	if (isPrereleaseVersion(params.version)) {
+		params.checks.push(
+			skipped(
+				params.id,
+				params.title,
+				`Prerelease ${params.version} has no changelog on main`,
+			),
+		);
+		return;
+	}
+
 	try {
 		const missing: string[] = [];
 

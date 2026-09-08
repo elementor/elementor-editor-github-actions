@@ -228,6 +228,79 @@ describe('runVerify', () => {
 		).toContain('MAINTAIN_TOKEN');
 		expect(outcome.failed).toBe(true);
 	});
+
+	it('skips changelog on main for prerelease versions', async () => {
+		const betaRelease = JSON.stringify({
+			tag_name: '4.3.0-beta2',
+			assets: [
+				{
+					name: 'elementor-4.3.0-beta2.zip',
+					url: 'https://api.github.com/repos/elementor/elementor/releases/assets/1',
+					browser_download_url:
+						'https://github.com/elementor/elementor/releases/download/4.3.0-beta2/elementor-4.3.0-beta2.zip',
+				},
+			],
+		});
+
+		const outcome = await runVerify(
+			{
+				coreVersion: '4.3.0-beta2',
+				proVersion: '4.3.0-beta2',
+				githubToken: 'token',
+				skipWordpressOrg: false,
+				workDir: '/tmp/post-release-unused',
+			},
+			{
+				get: mockGet({
+					'/repos/elementor/elementor/releases/tags/4.3.0-beta2': {
+						status: 200,
+						body: betaRelease,
+					},
+					'/repos/elementor/elementor-pro/releases/tags/4.3.0-beta2':
+						{
+							status: 200,
+							body: JSON.stringify({
+								tag_name: '4.3.0-beta2',
+								assets: [
+									{
+										name: 'elementor-pro-4.3.0-beta2.zip',
+										url: 'https://api.github.com/repos/elementor/elementor-pro/releases/assets/2',
+										browser_download_url:
+											'https://github.com/elementor/elementor-pro/releases/download/4.3.0-beta2/elementor-pro-4.3.0-beta2.zip',
+									},
+								],
+							}),
+						},
+					'/repos/elementor/elementor-pro': {
+						status: 200,
+						body: '{"id":1}',
+					},
+				}),
+				getBuffer: unusedBuffer,
+			},
+		);
+
+		expect(
+			outcome.checks.find((check) => check.id === 'core-changelog-main')
+				?.status,
+		).toBe('skipped');
+		expect(
+			outcome.checks.find((check) => check.id === 'pro-changelog-main')
+				?.status,
+		).toBe('skipped');
+		expect(
+			outcome.checks.find((check) => check.id === 'wordpress-org')
+				?.status,
+		).toBe('skipped');
+		expect(
+			outcome.checks.find((check) => check.id === 'core-github-release')
+				?.status,
+		).toBe('pass');
+		expect(
+			outcome.checks.find((check) => check.id === 'pro-github-release')
+				?.status,
+		).toBe('pass');
+	});
 });
 
 describe('renderSummary', () => {

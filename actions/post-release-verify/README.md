@@ -5,7 +5,7 @@ Checks a published Elementor Core (and optionally Pro) release. This is the API/
 ## What it checks
 
 1. GitHub release API for `elementor/elementor` (`/releases/tags/{version}`) and, if requested, `elementor/elementor-pro`.
-2. Non-empty changelog section for that version on `main` (`changelog.txt`; Core also `readme.txt`).
+2. Non-empty changelog section for that version on `main` (`changelog.txt`; Core also `readme.txt`). **Skipped for prereleases** (`4.3.0-beta2`, any tag with `-`).
 3. wordpress.org SVN tag `readme.txt`: `Stable tag` and changelog (Core GA only). A 404 is **skipped**, not failed — `.org` can lag GitHub by up to a day.
 4. Downloaded zip headers: Core `Version` / `ELEMENTOR_VERSION` / `Stable tag`; Pro `Version`, required Core (must be satisfied by the Core version you passed), recommended Core (warn on mismatch).
 
