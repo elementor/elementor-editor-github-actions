@@ -96,14 +96,19 @@ async function allowExpiredDebianReleaseFiles() {
 	}
 
 	const original = await fs.readFile(initConfigPath, 'utf8');
-	const patched = original.replaceAll(
-		'RUN apt-get -qy update',
-		'RUN apt-get -qy -o Acquire::Check-Valid-Until=false update',
-	);
+	const patched = original
+		.replaceAll(
+			'RUN apt-get -qy update',
+			'RUN apt-get -qy -o Acquire::Check-Valid-Until=false update',
+		)
+		.replaceAll(
+			'RUN apt-get -qy install',
+			'RUN apt-get -qy install --no-upgrade',
+		);
 
 	if (patched === original) {
 		core.warning(
-			'Could not patch wp-env apt-get update for expired Debian Release files',
+			'Could not patch wp-env apt-get commands for Debian mirror failures',
 		);
 		return;
 	}
