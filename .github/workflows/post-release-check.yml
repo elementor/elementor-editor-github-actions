@@ -1,14 +1,6 @@
 name: Post-Release Check
 
 on:
-    pull_request:
-        types: [opened, synchronize, reopened]
-        paths:
-            - '.github/workflows/post-release-check.yml'
-            - 'actions/post-release-verify/**'
-            - 'actions/post-release-smoke/**'
-            - 'packages/editor-github-actions-utils/**'
-            - 'stubs/upgrade-templates/**'
     workflow_dispatch:
         inputs:
             core_version:
@@ -116,7 +108,7 @@ jobs:
                       echo 'Failed to resolve current Core version from wordpress.org'
                       exit 1
                     fi
-                    echo "PR run: using wordpress.org current Core $CORE"
+                    echo "No core_version input; using wordpress.org current Core $CORE"
                     echo "core=$CORE" >> "$GITHUB_OUTPUT"
                   fi
                   echo "pro=$INPUT_PRO" >> "$GITHUB_OUTPUT"
