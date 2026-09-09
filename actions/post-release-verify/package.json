@@ -4,7 +4,7 @@
 	"license": "GPL-3.0-or-later",
 	"private": true,
 	"scripts": {
-		"build": "tsup --config ./tsup.config.ts",
+		"build": "tsup --config ../setup-wp-env/tsup.config.ts",
 		"dev": "npm run build -- --watch"
 	},
 	"dependencies": {
