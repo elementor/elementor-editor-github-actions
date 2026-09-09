@@ -30,7 +30,7 @@ Changelog prose is dumped on the job summary for a quick human read. The action 
 
 ## Call from Core or Pro
 
-Add a thin workflow in `elementor` / `elementor-pro` that `uses` this repo. Pin `uses:` and `actions_ref` to **the same git ref**. After this workflow is on `main`, that ref is `main`.
+Add a thin workflow in `elementor` / `elementor-pro` that `uses` this repo. `actions_ref` is required and must be the **same git ref** as the `uses:` pin. After this workflow is on `main`, that ref is `main`.
 
 Merge this repo first. Core/Pro callers that pin `@main` will fail until then.
 
