@@ -147,6 +147,8 @@ jobs:
             startsWith(github.repository, 'elementor/')
             && inputs.skip_smoke != true
             && needs.verify-published.outputs.core_zip_available == 'true'
+            && (needs.verify-published.outputs.pro_version == ''
+                || needs.verify-published.outputs.pro_zip_available == 'true')
         steps:
             - name: Checkout this repository
               if: github.event_name != 'workflow_call'
@@ -170,6 +172,15 @@ jobs:
               with:
                   name: released-plugins
                   path: released-plugins
+
+            - name: Require released zip files
+              env:
+                  PRO_VERSION: ${{ needs.verify-published.outputs.pro_version }}
+              run: |
+                  test -f released-plugins/elementor.zip
+                  if [ -n "$PRO_VERSION" ]; then
+                    test -f released-plugins/elementor-pro.zip
+                  fi
 
             - name: Setup WP Env
               uses: ./actions/setup-wp-env
