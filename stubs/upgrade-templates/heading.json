@@ -1,0 +1,26 @@
+{
+	"version": "0.4",
+	"title": "Upgrade heading",
+	"type": "wp-page",
+	"content": [
+		{
+			"id": "1cf221e4",
+			"settings": [],
+			"elements": [
+				{
+					"id": "5df15480",
+					"settings": {
+						"title": "Test title"
+					},
+					"elements": [],
+					"isInner": false,
+					"widgetType": "heading",
+					"elType": "widget"
+				}
+			],
+			"isInner": false,
+			"elType": "container"
+		}
+	],
+	"page_settings": { "template": "elementor_canvas" }
+}

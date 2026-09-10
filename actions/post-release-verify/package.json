@@ -1,0 +1,17 @@
+{
+	"name": "@elementor/post-release-verify",
+	"author": "Elementor Team",
+	"license": "GPL-3.0-or-later",
+	"private": true,
+	"scripts": {
+		"build": "tsup --config ../setup-wp-env/tsup.config.ts",
+		"dev": "npm run build -- --watch"
+	},
+	"dependencies": {
+		"@actions/core": "^1.11.1",
+		"@elementor/editor-github-actions-utils": "1.0.0"
+	},
+	"devDependencies": {
+		"tsup": "^8.5.0"
+	}
+}

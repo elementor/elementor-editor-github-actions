@@ -1,6 +1,7 @@
 import * as core from '@actions/core';
 import * as exec from '@actions/exec';
 import * as fs from 'fs-extra';
+import path from 'node:path';
 import { z } from 'zod';
 import {
 	getArrayInput,
@@ -65,6 +66,11 @@ export async function run() {
 			await fs.writeJSON('./.wp-env.json', config);
 		});
 
+		await core.group(
+			'Allowing expired Debian Release files in wp-env images',
+			allowExpiredDebianReleaseFiles,
+		);
+
 		await core.group('Starting wp-env', async () => {
 			await exec.exec('npx', ['wp-env', 'start']);
 		});
@@ -73,6 +79,41 @@ export async function run() {
 
 		core.setFailed(error);
 	}
+}
+
+async function allowExpiredDebianReleaseFiles() {
+	const { stdout } = await exec.getExecOutput('npm', ['root', '-g']);
+	const initConfigPath = path.join(
+		stdout.trim(),
+		'@wordpress/env/lib/init-config.js',
+	);
+
+	if (!(await fs.pathExists(initConfigPath))) {
+		core.warning(
+			`wp-env init-config not found at ${initConfigPath}; skipping Debian Release expiry workaround`,
+		);
+		return;
+	}
+
+	const original = await fs.readFile(initConfigPath, 'utf8');
+	const patched = original
+		.replaceAll(
+			'RUN apt-get -qy update',
+			'RUN apt-get -qy -o Acquire::Check-Valid-Until=false update',
+		)
+		.replaceAll(
+			'RUN apt-get -qy install',
+			'RUN apt-get -qy install --no-upgrade',
+		);
+
+	if (patched === original) {
+		core.warning(
+			'Could not patch wp-env apt-get commands for Debian mirror failures',
+		);
+		return;
+	}
+
+	await fs.writeFile(initConfigPath, patched);
 }
 
 // eslint-disable-next-line @typescript-eslint/require-await -- `core.group` requires a promise.
