@@ -32,6 +32,8 @@ Changelog prose is dumped on the job summary for a quick human read. The action 
 
 Add a thin workflow in `elementor` / `elementor-pro` that `uses` this repo. `actions_ref` is required and must be the **same git ref** as the `uses:` pin. After this workflow is on `main`, that ref is `main`.
 
+In the reusable workflow, `github.event_name` is the **caller's** event (e.g. `workflow_dispatch`). Checkout of this repo is keyed off `github.repository`, not `workflow_call`.
+
 Merge this repo first. Core/Pro callers that pin `@main` will fail until then.
 
 This repo must allow GitHub Actions access from other Elementor repositories (Settings → Actions → General → Access).
