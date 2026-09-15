@@ -83,13 +83,13 @@ jobs:
             pro_zip_available: ${{ steps.verify.outputs.pro-zip-path != '' }}
         steps:
             - name: Checkout this repository
-              if: github.event_name != 'workflow_call'
+              if: github.repository == 'elementor/elementor-editor-github-actions'
               uses: actions/checkout@v4
               with:
                   persist-credentials: false
 
             - name: Checkout post-release actions
-              if: github.event_name == 'workflow_call'
+              if: github.repository != 'elementor/elementor-editor-github-actions'
               uses: actions/checkout@v4
               with:
                   repository: elementor/elementor-editor-github-actions
@@ -151,13 +151,13 @@ jobs:
                 || needs.verify-published.outputs.pro_zip_available == 'true')
         steps:
             - name: Checkout this repository
-              if: github.event_name != 'workflow_call'
+              if: github.repository == 'elementor/elementor-editor-github-actions'
               uses: actions/checkout@v4
               with:
                   persist-credentials: false
 
             - name: Checkout post-release actions
-              if: github.event_name == 'workflow_call'
+              if: github.repository != 'elementor/elementor-editor-github-actions'
               uses: actions/checkout@v4
               with:
                   repository: elementor/elementor-editor-github-actions
