@@ -50,6 +50,7 @@ Order: Summary → Test plan → Visual proof → Jira.
 
 ```markdown
 ## Visual proof
+
 **Broken:** <one sentence: what used to happen in the editor>
 **Where:** <editor path using visible labels>
 **Steps:** <happy path on this PR’s Playground>
@@ -61,6 +62,7 @@ Order: Summary → Test plan → Visual proof → Jira.
 
 ```markdown
 ## Visual proof
+
 #skip_proof
 <One sentence why this cannot be shown on this repo’s Playground editor.>
 ```

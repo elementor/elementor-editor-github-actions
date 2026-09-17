@@ -4,6 +4,7 @@
 
 ```markdown
 ## Visual proof
+
 **Broken:** Z-index stayed disabled on Tablet when Position was inherited from Desktop.
 **Where:** Edit with Elementor → select a container → Style → Position → device switcher
 **Steps:** on Desktop set Position to Absolute → switch to Tablet → open Style → Position → set Z-index to 5
@@ -15,6 +16,7 @@
 
 ```markdown
 ## Visual proof
+
 #skip_proof
 Task adds a new Style control; visual proof is editor-bugs only.
 ```
@@ -23,6 +25,7 @@ Task adds a new Style control; visual proof is editor-bugs only.
 
 ```markdown
 ## Visual proof
+
 #skip_proof
 Fix needs a plugin that playground-preview does not install.
 ```
