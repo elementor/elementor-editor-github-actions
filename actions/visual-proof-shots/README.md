@@ -1,6 +1,10 @@
 # Visual proof shots
 
 After `playground-preview` succeeds, records Playground PNGs and a short clip.
+When the caller skips Playground on `ready_for_review` (draft marked ready),
+the job should still run if a `playground-preview` deployment already exists
+for the head SHA.
+
 A Cursor storyboard actor follows **Steps**; if that produces no shots, CI
 falls back to Pages → Add New → Edit with Elementor.
 
@@ -15,11 +19,13 @@ visual-proof-shots:
   needs: [playground-preview]
   if: |
     always() &&
-    needs.playground-preview.result == 'success' &&
     github.event.pull_request.draft == false &&
-    github.event.action != 'ready_for_review' &&
     github.event.action != 'labeled' &&
-    github.event.pull_request.head.repo.full_name == github.repository
+    github.event.pull_request.head.repo.full_name == github.repository &&
+    (
+      needs.playground-preview.result == 'success' ||
+      github.event.action == 'ready_for_review'
+    )
   runs-on: ubuntu-22.04
   timeout-minutes: 25
   permissions:
