@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# WARNING: This script runs an unsandboxed Cursor Agent (storyboard actor) that
+# has full write access to the calling repo's checkout and executes code from the
+# PR branch. Only use with same-repo PRs (fork PRs are blocked by the workflow).
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="${GITHUB_WORKSPACE:-$(pwd)}"
 OUT_DIR="${VISUAL_PROOF_OUT_DIR:-${REPO_ROOT}/visual-proof-shots}"

@@ -35,7 +35,7 @@ parse_visual_proof_section() {
 	const broken = extractBrokenCaption(result.section);
 	const overlay = buildOverlayCaption(result.section);
 	process.stdout.write(JSON.stringify({ ...result, broken, overlay }));
-	' "${SCRIPT_DIR}/parse-section.js"
+	' "${SCRIPT_DIR}/../visual-proof/parse-section.cjs"
 }
 
 log "step=start PR_NUMBER=${PR_NUMBER} HEAD_SHA=${HEAD_SHA} GITHUB_REPOSITORY=${GITHUB_REPOSITORY}"

@@ -63,4 +63,5 @@ runs:
               PRODUCT_NAME: ${{ inputs.product-name }}
               VISUAL_PROOF_SKILL_FILE: ${{ inputs.skill-file }}
               VISUAL_PROOF_EXAMPLES_FILE: ${{ inputs.examples-file }}
-          run: bash "$GITHUB_ACTION_PATH/author.sh"
+              ACTION_PATH: ${{ github.action_path }}
+          run: bash "$ACTION_PATH/author.sh"

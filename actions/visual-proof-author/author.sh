@@ -36,7 +36,7 @@ DECISION=$(
 	const fs = require("fs");
 	const body = fs.readFileSync(0, "utf8");
 	process.stdout.write(JSON.stringify(shouldCaptureVisualProof(body)));
-	' "${SCRIPT_DIR}/parse-section.js"
+	' "${SCRIPT_DIR}/../visual-proof/parse-section.cjs"
 )
 
 REASON=$(echo "$DECISION" | jq -r .reason)
@@ -121,7 +121,7 @@ AFTER=$(
 	const fs = require("fs");
 	const body = fs.readFileSync(0, "utf8");
 	process.stdout.write(JSON.stringify(shouldCaptureVisualProof(body)));
-	' "${SCRIPT_DIR}/parse-section.js"
+	' "${SCRIPT_DIR}/../visual-proof/parse-section.cjs"
 )
 AFTER_REASON=$(echo "$AFTER" | jq -r .reason)
 log "step=verify reason=${AFTER_REASON}"

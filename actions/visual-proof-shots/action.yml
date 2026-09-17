@@ -40,7 +40,9 @@ runs:
 
         - name: Parse Visual proof section
           shell: bash
-          run: node "$GITHUB_ACTION_PATH/parse-section.js" --test
+          env:
+              ACTION_PATH: ${{ github.action_path }}
+          run: node "$ACTION_PATH/../visual-proof/parse-section.cjs" --test
 
         - name: Capture Playground shots and comment
           shell: bash
@@ -55,7 +57,8 @@ runs:
               PRODUCT_NAME: ${{ inputs.product-name }}
               GITHUB_SERVER_URL: ${{ github.server_url }}
               GITHUB_RUN_ID: ${{ github.run_id }}
-          run: bash "$GITHUB_ACTION_PATH/run.sh"
+              ACTION_PATH: ${{ github.action_path }}
+          run: bash "$ACTION_PATH/run.sh"
 
         - name: Upload shots artifact
           if: hashFiles('visual-proof-shots/*.png') != ''

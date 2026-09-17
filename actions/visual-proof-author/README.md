@@ -41,3 +41,10 @@ jobs:
 ```
 
 Use `product-name: 'Elementor Pro'` in Pro.
+
+## Intentional non-blocking behavior
+
+The action runs with `continue-on-error: true` because the **Visual proof**
+section is optional for contributors. Author failures (timeout, missing skill,
+API errors) do not block the PR workflow. The shots action will fall back to
+a generic Playground walk when the section is missing or marked `#skip_proof`.

@@ -153,7 +153,7 @@ COMMENT_BODY=$(printf '%s\n' "${COMMENT_SECTIONS[@]}")
 log "step=find-comment looking for existing visual-proof-ci marker"
 existing_id=$(
 	gh_api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" --paginate \
-		--jq "[.[] | select(.body | contains(\"visual-proof-ci\")) | .id][0] // empty" || true
+		--jq "[.[] | select(.body | contains(\"${MARKER}\")) | .id][0] // empty"
 )
 
 payload=$(jq -n --arg body "$COMMENT_BODY" '{body: $body}')
