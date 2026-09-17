@@ -4,7 +4,7 @@ Writes `## Visual proof` on a PR body when that section is still missing.
 Ported from Core so Elementor and Elementor Pro share one implementation.
 
 If the caller checkout has `.cursor/skills/visual-proof/SKILL.md`, that file
-wins. Otherwise the bundled skill in `actions/visual-proof/skill.md` is used.
+wins. Otherwise the bundled skill in this action’s `skill.md` is used.
 
 ## Usage
 
