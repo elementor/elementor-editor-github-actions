@@ -1,0 +1,67 @@
+name: 'Visual proof shots'
+description: 'Record Playground screenshots and a short clip from ## Visual proof Steps'
+
+inputs:
+  pr-number:
+    description: 'Pull request number'
+    required: true
+  head-sha:
+    description: 'PR head commit SHA used to resolve playground-preview'
+    required: true
+  product-name:
+    description: 'Product name (Elementor or Elementor Pro)'
+    required: true
+  cursor-api-key:
+    description: 'Cursor Agent API key for the storyboard actor'
+    required: true
+  model:
+    description: 'Cursor Agent model'
+    required: false
+    default: ''
+  github-token:
+    description: 'Token with contents:write and pull-requests:write'
+    required: false
+    default: ${{ github.token }}
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v6
+      with:
+        node-version: 24.15.0
+        package-manager-cache: false
+
+    - name: Install Cursor CLI
+      shell: bash
+      run: |
+        curl https://cursor.com/install -fsS | bash
+        echo "$HOME/.cursor/bin" >> "$GITHUB_PATH"
+
+    - name: Parse Visual proof section
+      shell: bash
+      run: node "${{ github.action_path }}/../visual-proof/parse-section.js" --test
+
+    - name: Capture Playground shots and comment
+      shell: bash
+      continue-on-error: true
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        CURSOR_API_KEY: ${{ inputs.cursor-api-key }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+        HEAD_SHA: ${{ inputs.head-sha }}
+        PR_REVIEW_MODEL: ${{ inputs.model }}
+        PRODUCT_NAME: ${{ inputs.product-name }}
+        GITHUB_SERVER_URL: ${{ github.server_url }}
+        GITHUB_RUN_ID: ${{ github.run_id }}
+      run: bash "${{ github.action_path }}/../visual-proof/run.sh"
+
+    - name: Upload shots artifact
+      if: hashFiles('visual-proof-shots/*.png') != ''
+      uses: actions/upload-artifact@v7
+      with:
+        name: visual-proof-shots
+        path: visual-proof-shots/
+        if-no-files-found: ignore
+        retention-days: 7
