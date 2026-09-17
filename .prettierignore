@@ -2,3 +2,5 @@
 **/dist/**
 **/__snapshots__/**
 package-lock.json
+actions/visual-proof-author/**/*.{js,sh}
+actions/visual-proof-shots/**/*.{js,cjs,sh}

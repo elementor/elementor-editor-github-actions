@@ -20,6 +20,8 @@ export default tseslint.config(
 			'**/dist/**',
 			'**/node_modules/**',
 			'**/__snapshots__/**',
+			'actions/visual-proof-author/**/*.js',
+			'actions/visual-proof-shots/**/*.{js,cjs}',
 		],
 	},
 );

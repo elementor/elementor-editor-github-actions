@@ -114,15 +114,21 @@ png_count() {
 }
 
 cd "$SCRIPT_DIR"
-log "step=npm-install about to install local package.json playwright in ${SCRIPT_DIR} (workspaces off)"
-if ! npm install --no-package-lock --no-fund --workspaces=false --loglevel error; then
+PLAYWRIGHT_DIR="${SCRIPT_DIR}/.npm-playwright"
+rm -rf "$PLAYWRIGHT_DIR"
+mkdir -p "$PLAYWRIGHT_DIR"
+printf '%s\n' '{"private":true}' > "${PLAYWRIGHT_DIR}/package.json"
+log "step=npm-install about to install playwright in ${PLAYWRIGHT_DIR}"
+if ! ( cd "$PLAYWRIGHT_DIR" && npm install --no-package-lock --no-fund --loglevel error playwright@1.55.1 ); then
 	err "step=npm-install failed"
 	exit 1
 fi
 log "step=npm-install ok"
 
-log "step=playwright-install about to run ./node_modules/.bin/playwright install chromium"
-if ! ./node_modules/.bin/playwright install chromium; then
+export PLAYGROUND_NODE_PATH="${PLAYWRIGHT_DIR}/node_modules"
+
+log "step=playwright-install about to run playwright install chromium"
+if ! "${PLAYGROUND_NODE_PATH}/.bin/playwright" install chromium; then
 	err "step=playwright-install failed"
 	exit 1
 fi
@@ -144,7 +150,7 @@ fi
 
 if [[ "$(png_count)" -eq 0 ]]; then
 	log "step=capture about to run capture.cjs OUT_DIR=${OUT_DIR}"
-	if ! NODE_PATH="${SCRIPT_DIR}/node_modules" node "${SCRIPT_DIR}/capture.cjs"; then
+	if ! NODE_PATH="${PLAYGROUND_NODE_PATH}" node "${SCRIPT_DIR}/capture.cjs"; then
 		err "step=capture failed"
 		exit 1
 	fi

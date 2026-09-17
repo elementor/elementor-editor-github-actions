@@ -29,6 +29,7 @@ require_env CURSOR_API_KEY
 require_env PLAYGROUND_URL
 require_env VISUAL_PROOF_SECTION_FILE
 require_env VISUAL_PROOF_OUT_DIR
+require_env PLAYGROUND_NODE_PATH
 
 if [[ ! -f "$VISUAL_PROOF_SECTION_FILE" ]]; then
 	err "section file missing: ${VISUAL_PROOF_SECTION_FILE}"
@@ -49,7 +50,7 @@ DYNAMIC_CONTEXT=$(cat << EOF
 ## Runtime
 - PLAYGROUND_URL: ${PLAYGROUND_URL}
 - PLAYGROUND_HELPERS: ${SCRIPT_DIR}/playground.cjs
-- PLAYGROUND_NODE_PATH: ${SCRIPT_DIR}/node_modules
+- PLAYGROUND_NODE_PATH: ${PLAYGROUND_NODE_PATH}
 - VISUAL_PROOF_OUT_DIR: ${OUT_DIR}
 - VISUAL_PROOF_SECTION_FILE: ${VISUAL_PROOF_SECTION_FILE}
 - VISUAL_PROOF_OVERLAY_FILE: ${VISUAL_PROOF_OVERLAY_FILE:-}
@@ -62,7 +63,6 @@ EOF
 log "step=cursor-agent storyboard actor model=${MODEL:-default}"
 cd "$REPO_ROOT"
 export PLAYGROUND_HELPERS="${SCRIPT_DIR}/playground.cjs"
-export PLAYGROUND_NODE_PATH="${SCRIPT_DIR}/node_modules"
 
 set +e
 if [[ -n "$MODEL" ]]; then
@@ -84,7 +84,7 @@ fi
 
 if [[ "$(png_count)" -eq 0 && -f "${OUT_DIR}/actor.cjs" ]]; then
 	log "step=run-actor.cjs"
-	if ! NODE_PATH="${SCRIPT_DIR}/node_modules" node "${OUT_DIR}/actor.cjs"; then
+	if ! NODE_PATH="${PLAYGROUND_NODE_PATH}" node "${OUT_DIR}/actor.cjs"; then
 		err "step=run-actor.cjs failed"
 		exit 1
 	fi
