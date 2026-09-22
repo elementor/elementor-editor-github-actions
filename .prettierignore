@@ -2,3 +2,5 @@
 **/dist/**
 **/__snapshots__/**
 package-lock.json
+actions/visual-proof*/**
+
