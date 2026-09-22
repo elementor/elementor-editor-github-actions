@@ -1,0 +1,104 @@
+# Thin ephemeral workflow — build the image, then apply CRs.
+# Replaces the heavy shared ephemeral-environment reusable workflow.
+name: Ephemeral Environment (operator)
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment_name:
+        description: EphemeralEnvironment name (becomes ephem-<name>)
+        required: true
+        type: string
+      database_to_use:
+        description: Database mode
+        required: true
+        type: choice
+        options:
+          - shared
+          - fresh
+        default: shared
+      existing_environment:
+        description: Join this existing environment (leave empty to create)
+        required: false
+        type: string
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      image_repo: ${{ steps.meta.outputs.repo }}
+      image_tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      # Reuse your existing shared build-push action here.
+      - id: meta
+        run: |
+          echo "repo=gcr.io/elementor/${{ github.event.repository.name }}" >> "$GITHUB_OUTPUT"
+          echo "tag=sha-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+      - name: Build and push
+        run: echo "delegate to elementor-cloud-github-actions microservice-build-push"
+
+  apply:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Authenticate to staging cluster
+        run: echo "use your existing workload-identity / kubeconfig action"
+
+      - name: Ensure environment
+        if: ${{ inputs.existing_environment == '' }}
+        env:
+          ENV_NAME: ${{ inputs.environment_name }}
+          DB_MODE: ${{ inputs.database_to_use }}
+        run: |
+          cat <<EOF | kubectl apply -f -
+          apiVersion: ephemeral.elementor.io/v1alpha1
+          kind: EphemeralEnvironment
+          metadata:
+            name: ${ENV_NAME}
+          spec:
+            ttl: 24h
+            owner: ${{ github.actor }}
+            database:
+              mode: ${DB_MODE}
+            ingress:
+              domain: stg.elementor.cloud
+            includeCoreApps: true
+          EOF
+
+      - name: Apply service
+        env:
+          ENV_NAME: ${{ inputs.existing_environment || inputs.environment_name }}
+          SVC: ${{ github.event.repository.name }}
+          IMAGE_REPO: ${{ needs.build.outputs.image_repo }}
+          IMAGE_TAG: ${{ needs.build.outputs.image_tag }}
+        run: |
+          cat <<EOF | kubectl apply -f -
+          apiVersion: ephemeral.elementor.io/v1alpha1
+          kind: EphemeralService
+          metadata:
+            name: ${ENV_NAME}-${SVC}
+          spec:
+            environmentRef: ${ENV_NAME}
+            serviceName: ${SVC}
+            image:
+              repository: ${IMAGE_REPO}
+              tag: ${IMAGE_TAG}
+            source:
+              repoURL: https://github.com/elementor/example-gitops.git
+              path: apps/${SVC}
+              targetRevision: master
+          EOF
+
+      - name: Wait until Ready
+        env:
+          ENV_NAME: ${{ inputs.existing_environment || inputs.environment_name }}
+          SVC: ${{ github.event.repository.name }}
+        run: |
+          kubectl wait --for=jsonpath='{.status.phase}'=Ready \
+            "ephemeralservice/${ENV_NAME}-${SVC}" --timeout=15m
+          kubectl get ephemeralenvironment "${ENV_NAME}" -o yaml

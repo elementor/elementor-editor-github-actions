@@ -1,0 +1,15 @@
+# Binaries
+bin/
+*.exe
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+
+# Test / coverage
+coverage.out
+*.test
+
+# Vendor (we rely on modules)
+vendor/

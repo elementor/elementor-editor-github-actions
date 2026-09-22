@@ -1,0 +1,12 @@
+apiVersion: v2
+name: ephemeral-operator
+description: Kubernetes-native ephemeral environments for Elementor staging
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - ephemeral
+  - preview
+  - argocd
+maintainers:
+  - name: Elementor Cloud Platform DevOps

@@ -1,0 +1,41 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/elementor/ephemeral-operator
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+rbac:
+  create: true
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+# Default ingress domain stamped into sample CRs / docs only.
+defaults:
+  ingressDomain: stg.elementor.cloud
+  argoCDNamespace: argocd
+  argoCDProject: ephemeral
+  ttl: 24h
+
+leaderElection: true
+
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}

@@ -1,0 +1,16 @@
+# Example: join a second service into an existing environment.
+# Apply after the EphemeralEnvironment already exists — no Actions sequencing.
+apiVersion: ephemeral.elementor.io/v1alpha1
+kind: EphemeralService
+metadata:
+  name: feat-billing-payments-api
+spec:
+  environmentRef: feat-billing
+  serviceName: payments-api
+  image:
+    repository: gcr.io/elementor/payments-api
+    tag: sha-def456
+  source:
+    repoURL: https://github.com/elementor/example-gitops.git
+    path: apps/payments-api
+    targetRevision: master
