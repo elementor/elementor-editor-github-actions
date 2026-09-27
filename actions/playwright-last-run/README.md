@@ -76,18 +76,18 @@ with:
 
 ### `save`
 
-| Input            | Required | Default                    | Description                                      |
-| ---------------- | -------- | -------------------------- | ------------------------------------------------ |
-| `artifact-name`  | yes      | —                          | Artifact name for re-run restore                 |
-| `last-run-paths` | yes      | —                          | First path with non-empty `failedTests` wins     |
-| `staging-dir`    | no       | `playwright-last-run-staging` | Directory containing only `.last-run.json`    |
+| Input            | Required | Default                       | Description                                  |
+| ---------------- | -------- | ----------------------------- | -------------------------------------------- |
+| `artifact-name`  | yes      | —                             | Artifact name for re-run restore             |
+| `last-run-paths` | yes      | —                             | First path with non-empty `failedTests` wins |
+| `staging-dir`    | no       | `playwright-last-run-staging` | Directory containing only `.last-run.json`   |
 
 ## Outputs
 
-| Action   | Output      | Description                                                |
-| -------- | ----------- | ---------------------------------------------------------- |
-| restore  | `extra_args`| `""` or `--last-failed` (also sets `PLAYWRIGHT_EXTRA_ARGS`) |
-| save     | `uploaded`  | `true` if an artifact was uploaded                         |
+| Action  | Output       | Description                                                 |
+| ------- | ------------ | ----------------------------------------------------------- |
+| restore | `extra_args` | `""` or `--last-failed` (also sets `PLAYWRIGHT_EXTRA_ARGS`) |
+| save    | `uploaded`   | `true` if an artifact was uploaded                          |
 
 ## Behavior
 
