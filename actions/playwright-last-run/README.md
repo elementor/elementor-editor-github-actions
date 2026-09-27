@@ -93,6 +93,7 @@ with:
 
 - `github.run_attempt == 1`: restore is a no-op; save still uploads when failures exist (for a later **Re-run failed jobs** / re-run).
 - `github.run_attempt > 1`: restore downloads the artifact (missing artifact → full shard), restores files, sets `--last-failed` only when `failedTests` is a non-empty array (`jq`).
+- `save` uploads with `include-hidden-files: true` so `.last-run.json` is not dropped by upload-artifact defaults.
 - Requires `jq` on the runner (preinstalled on `ubuntu-latest`).
 
 Pin consumers to a commit SHA on `main` after merge, e.g. `...@<sha>`, instead of a floating `@main` ref in production workflows.

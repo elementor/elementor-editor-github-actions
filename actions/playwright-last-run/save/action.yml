@@ -1,7 +1,8 @@
 name: Playwright last-run save
 description: >-
     When Playwright recorded failures in .last-run.json, upload only that file as a tiny
-    artifact (retention-days 1) for failed-only re-runs. Skips upload when there are no failures.
+    artifact (retention-days 1) for failed-only re-runs. Uses include-hidden-files so
+    dotfile .last-run.json is included. Skips upload when there are no failures.
 
 inputs:
     artifact-name:
@@ -40,5 +41,6 @@ runs:
           with:
               name: ${{ inputs.artifact-name }}
               path: ${{ inputs.staging-dir }}/.last-run.json
+              include-hidden-files: true
               retention-days: 1
               if-no-files-found: ignore
