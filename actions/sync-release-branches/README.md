@@ -62,8 +62,9 @@ steps:
 
 - Creates one git worktree per target branch under `$RUNNER_TEMP/release-sync-worktrees/`
 - **Merge commits:** `git merge --no-ff` of the PR head (`merge-sha^2`) into each target
-- **Squash/rebase commits:** applies only that commit's patch (`git diff parent..merge-sha`) and commits on the sync branch
+- **Squash/rebase commits:** cherry-picks that commit onto each target (a text `git diff | git apply` cannot apply binary files)
 - Opens a PR titled `{Type}: Synced - {original title without type prefix}` (falls back to `Internal: Synced - …`)
 - Skips PR creation when the target branch already contains the changes
-- Opens a draft PR with conflict markers when the merge/apply fails
+- Opens a draft PR when the merge or cherry-pick conflicts. Text files keep conflict markers. Binary files are the incoming version, because they cannot store conflict markers. The draft is skipped when that commit would be empty, so GitHub is not asked to open a PR with no commits between the branches
+- Comments on the original PR when a downstream sync fails. The comment includes the git or GitHub error, and the draft PR link when one was opened
 - Skips targets whose remote branch does not exist

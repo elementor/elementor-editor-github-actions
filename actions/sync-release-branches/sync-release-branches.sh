@@ -77,28 +77,87 @@ merge_pr_head() {
 	local pr_head="${merge_sha}^2"
 
 	if ! git rev-parse --verify "${pr_head}^{commit}" >/dev/null 2>&1; then
-		echo "::error:: Merge commit ${merge_sha} has no second parent (PR head)"
+		LAST_SYNC_ERROR="Merge commit ${merge_sha} has no second parent (PR head)"
+		echo "::error:: ${LAST_SYNC_ERROR}"
 		return 1
 	fi
 
-	git merge --no-ff "$pr_head" -m "$SYNC_COMMIT_MESSAGE"
+	local merge_output
+	if ! merge_output="$(git merge --no-ff "$pr_head" -m "$SYNC_COMMIT_MESSAGE" 2>&1)"; then
+		LAST_SYNC_ERROR="$merge_output"
+		printf '%s\n' "$merge_output"
+		return 1
+	fi
+
+	printf '%s\n' "$merge_output"
 }
 
+clear_cherry_pick_state() {
+	git cherry-pick --quit 2>/dev/null || true
+}
+
+# A text diff piped into git apply omits full blob ids, so binary patches never
+# apply. That failure used to leave a clean tree, and the conflict branch was
+# identical to the target, which GitHub rejects with "No commits between".
 apply_squash_commit_patch() {
 	local merge_sha="$1"
+	local output
 
-	if ! git diff "${merge_sha}^" "$merge_sha" | git apply --3way; then
-		return 1
-	fi
+	if output="$(git cherry-pick --no-commit "$merge_sha" 2>&1)"; then
+		git add -A
 
-	git add -A
+		if git diff --cached --quiet; then
+			echo "::notice:: Squash commit ${merge_sha} produced no staged changes"
+			clear_cherry_pick_state
+			return 0
+		fi
 
-	if git diff --cached --quiet; then
-		echo "::notice:: Squash commit ${merge_sha} produced no staged changes"
+		if ! output="$(git commit -m "$SYNC_COMMIT_MESSAGE" 2>&1)"; then
+			LAST_SYNC_ERROR="$output"
+			echo "::error:: Failed to commit squash sync for ${merge_sha}"
+			printf '%s\n' "$output"
+			clear_cherry_pick_state
+			return 1
+		fi
+
+		clear_cherry_pick_state
 		return 0
 	fi
 
-	git commit -m "$SYNC_COMMIT_MESSAGE"
+	printf '%s\n' "$output"
+
+	if ! git diff --name-only --diff-filter=U | grep -q . \
+		&& git diff --quiet \
+		&& git diff --cached --quiet; then
+		echo "::notice:: Squash commit ${merge_sha} produced no staged changes"
+		clear_cherry_pick_state
+		return 0
+	fi
+
+	LAST_SYNC_ERROR="$output"
+	return 1
+}
+
+keep_incoming_binary_conflicts() {
+	local path numstat
+
+	while IFS= read -r path; do
+		[ -n "$path" ] || continue
+		if ! git cat-file -e ":2:${path}" 2>/dev/null; then
+			continue
+		fi
+		if ! git cat-file -e ":3:${path}" 2>/dev/null; then
+			continue
+		fi
+
+		numstat="$(git diff --numstat ":2:${path}" ":3:${path}")"
+		case "$numstat" in
+			"-"*)
+				git checkout --theirs -- "$path"
+				echo "::warning:: Binary conflict in ${path}; included the incoming file because binaries cannot hold conflict markers"
+				;;
+		esac
+	done < <(git diff --name-only --diff-filter=U)
 }
 
 apply_merged_content() {
@@ -140,6 +199,40 @@ sanitize_pr_title() {
 	SANITIZED_PR_TITLE="$(build_sync_pr_title "$(sanitize_title "$PR_TITLE")")"
 }
 
+truncate_error() {
+	local text="$1"
+	local max=3500
+
+	if [ "${#text}" -le "$max" ]; then
+		printf '%s\n' "$text"
+		return
+	fi
+
+	printf '...truncated...\n%s\n' "${text: -$max}"
+}
+
+comment_on_original_pr() {
+	local target="$1"
+	local message="$2"
+	local safe body
+
+	[ -n "$message" ] || return 0
+
+	safe="${message//\`\`\`/~~~}"
+	body="$(cat <<EOF
+Sync to \`${target}\` failed.
+
+\`\`\`
+$(truncate_error "$safe")
+\`\`\`
+EOF
+)"
+
+	if ! gh pr comment "$PR_NUMBER" --body "$body"; then
+		echo "::warning:: Failed to comment on original PR #${PR_NUMBER}"
+	fi
+}
+
 create_conflict_pr() {
 	local target="$1"
 	local sync_branch="$2"
@@ -148,11 +241,34 @@ create_conflict_pr() {
 
 	readarray -t assignee_args < <(pr_assignee_args)
 
+	keep_incoming_binary_conflicts
 	git add .
-	git commit -m "Sync PR #${PR_NUMBER} to ${target} with conflicts - manual resolution needed"
 
-	if ! git push --force-with-lease origin "${sync_branch}:${conflict_branch}"; then
+	if git diff --cached --quiet; then
+		CONFLICT_FAILURE_ERROR="Conflict sync for PR #${PR_NUMBER} onto ${target} produced no changes"
+		echo "::warning:: ${CONFLICT_FAILURE_ERROR} — skipping PR"
+		abort_apply
+		clear_cherry_pick_state
+		return 1
+	fi
+
+	local commit_output
+	if ! commit_output="$(git commit -m "Sync PR #${PR_NUMBER} to ${target} with conflicts - manual resolution needed" 2>&1)"; then
+		CONFLICT_FAILURE_ERROR="$commit_output"
+		echo "::warning:: Failed to commit conflict sync for ${conflict_branch}"
+		printf '%s\n' "$commit_output"
+		abort_apply
+		clear_cherry_pick_state
+		return 1
+	fi
+
+	clear_cherry_pick_state
+
+	local push_output
+	if ! push_output="$(git push --force-with-lease origin "${sync_branch}:${conflict_branch}" 2>&1)"; then
+		CONFLICT_FAILURE_ERROR="$push_output"
 		echo "::warning:: Failed to push conflict branch ${conflict_branch}"
+		printf '%s\n' "$push_output"
 		abort_apply
 		return 1
 	fi
@@ -162,7 +278,9 @@ create_conflict_pr() {
 		return 0
 	fi
 
-	gh pr create \
+	local create_log
+	create_log="$(mktemp)"
+	if ! gh pr create \
 		--base "$target" \
 		--head "$conflict_branch" \
 		"${assignee_args[@]}" \
@@ -173,7 +291,7 @@ create_conflict_pr() {
 This sync PR for [#${PR_NUMBER}](${ORIG_URL}) into \`${target}\` has conflicts that need manual resolution.
 
 **Conflict Files:**
-The conflicted files are included in this branch with conflict markers.
+Text conflicts are included in this branch with conflict markers. Binary files cannot store conflict markers, so those files are the incoming version from the original PR.
 
 **Resolution Steps:**
 1. Check out this branch: \`git checkout ${conflict_branch}\`
@@ -186,8 +304,16 @@ The conflicted files are included in this branch with conflict markers.
 **Original PR:** [#${PR_NUMBER}](${ORIG_URL})
 **Merged to:** \`${BASE_REF}\`
 **Source branch:** \`${HEAD_REF:-unknown}\`" \
-		--draft
+		--draft >"$create_log" 2>&1; then
+		CONFLICT_FAILURE_ERROR="$(cat "$create_log")"
+		rm -f "$create_log"
+		echo "::warning:: Failed to create draft PR for ${conflict_branch}"
+		printf '%s\n' "$CONFLICT_FAILURE_ERROR"
+		return 1
+	fi
 
+	CONFLICT_PR_URL="$(tr -d '\r' <"$create_log" | tail -n 1)"
+	rm -f "$create_log"
 	echo "::notice:: Created draft PR for manual conflict resolution: ${conflict_branch}"
 }
 
@@ -203,8 +329,9 @@ create_success_pr() {
 		return 0
 	fi
 
-	local pr_url new_pr
-	pr_url="$(gh pr create \
+	local pr_url new_pr create_log push_output
+	create_log="$(mktemp)"
+	if ! gh pr create \
 		--base "$target" \
 		--head "$sync_branch" \
 		"${assignee_args[@]}" \
@@ -215,7 +342,16 @@ create_success_pr() {
 **Target branch:** \`${target}\`
 **Source:** ${SOURCE_REPO}
 **Source branch:** \`${HEAD_REF:-unknown}\`
-**Original author:** @${PR_USER_LOGIN}")"
+**Original author:** @${PR_USER_LOGIN}" >"$create_log" 2>&1; then
+		SUCCESS_PR_ERROR="$(cat "$create_log")"
+		rm -f "$create_log"
+		printf '%s\n' "$SUCCESS_PR_ERROR"
+		return 1
+	fi
+
+	pr_url="$(cat "$create_log")"
+	rm -f "$create_log"
+	printf '%s\n' "$pr_url"
 
 	new_pr="$(echo "$pr_url" | grep -oE '/pull/[0-9]+' | grep -oE '[0-9]+' || echo "")"
 
@@ -230,13 +366,22 @@ create_success_pr() {
 
 	echo "Created PR #${new_pr} with GITHUB_TOKEN, triggering workflows via empty commit..."
 	git commit --allow-empty -m "Trigger workflows for PR #${new_pr}"
-	git push origin "$sync_branch"
+	if ! push_output="$(git push origin "$sync_branch" 2>&1)"; then
+		SUCCESS_PR_ERROR="$push_output"
+		printf '%s\n' "$push_output"
+		return 1
+	fi
 	echo "::notice:: Triggered workflows for PR #${new_pr}"
 }
 
 sync_to_target() {
 	local target="$1"
-	local target_safe sync_branch conflict_branch worktree_path
+	local target_safe sync_branch conflict_branch worktree_path failure_message
+
+	LAST_SYNC_ERROR=""
+	CONFLICT_PR_URL=""
+	CONFLICT_FAILURE_ERROR=""
+	SUCCESS_PR_ERROR=""
 
 	target_safe="$(target_to_safe "$target")"
 	sync_branch="${SYNC_BRANCH_PREFIX}${PR_NUMBER}_to_${target_safe}"
@@ -252,8 +397,11 @@ sync_to_target() {
 	rm -rf "$worktree_path"
 	mkdir -p "$WORKTREE_ROOT"
 
-	if ! git worktree add -B "$sync_branch" "$worktree_path" "origin/${target}"; then
+	local worktree_output
+	if ! worktree_output="$(git worktree add -B "$sync_branch" "$worktree_path" "origin/${target}" 2>&1)"; then
 		echo "::warning:: Failed to create worktree for ${target} - skipping"
+		printf '%s\n' "$worktree_output"
+		comment_on_original_pr "$target" "$worktree_output"
 		return 0
 	fi
 
@@ -262,6 +410,14 @@ sync_to_target() {
 	if ! apply_merged_content "$MERGE_SHA"; then
 		echo "::error:: Merge conflicts detected for PR #${PR_NUMBER} on branch ${target}"
 		create_conflict_pr "$target" "$sync_branch" "$conflict_branch" || true
+		failure_message="$LAST_SYNC_ERROR"
+		if [ -n "$CONFLICT_PR_URL" ]; then
+			failure_message="${failure_message}"$'\n\n'"Draft PR: ${CONFLICT_PR_URL}"
+		fi
+		if [ -n "$CONFLICT_FAILURE_ERROR" ]; then
+			failure_message="${failure_message}"$'\n\n'"${CONFLICT_FAILURE_ERROR}"
+		fi
+		comment_on_original_pr "$target" "$failure_message"
 		popd >/dev/null
 		git worktree remove --force "$worktree_path" 2>/dev/null || true
 		return 0
@@ -277,14 +433,19 @@ sync_to_target() {
 
 	echo "Merged PR content for ${target}"
 
-	if ! git push --force-with-lease origin "$sync_branch"; then
+	local push_output
+	if ! push_output="$(git push --force-with-lease origin "$sync_branch" 2>&1)"; then
 		echo "::warning:: Failed to push branch ${sync_branch}"
+		printf '%s\n' "$push_output"
+		comment_on_original_pr "$target" "$push_output"
 		popd >/dev/null
 		git worktree remove --force "$worktree_path" 2>/dev/null || true
 		return 0
 	fi
 
-	create_success_pr "$target" "$sync_branch"
+	if ! create_success_pr "$target" "$sync_branch"; then
+		comment_on_original_pr "$target" "$SUCCESS_PR_ERROR"
+	fi
 
 	popd >/dev/null
 	git worktree remove --force "$worktree_path" 2>/dev/null || true
