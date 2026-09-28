@@ -1,0 +1,50 @@
+name: Playwright last-run restore
+description: >-
+    On workflow re-run (github.run_attempt > 1), download a tiny playwright-last-run artifact,
+    restore .last-run.json under the configured paths, and expose --last-failed when failedTests
+    is non-empty. First attempts skip download and leave extra_args empty.
+
+inputs:
+    artifact-name:
+        description: Artifact name from the prior attempt (e.g. playwright-last-run-1-chromium)
+        required: true
+    last-run-paths:
+        description: >-
+            Newline-separated paths to .last-run.json or directories where Playwright writes
+            test-results/.last-run.json. The same restored file is copied to each entry.
+        required: true
+    github-token:
+        description: Token used to download the artifact from the same workflow run
+        required: false
+        default: ${{ github.token }}
+    download-path:
+        description: Directory to download the artifact into
+        required: false
+        default: .playwright-last-run-artifact
+
+outputs:
+    extra_args:
+        description: Empty on first attempt or when last-run has no failures; otherwise --last-failed
+        value: ${{ steps.restore.outputs.extra_args }}
+
+runs:
+    using: composite
+    steps:
+        - name: Download Playwright last-run artifact
+          if: github.run_attempt > 1
+          uses: actions/download-artifact@v4
+          continue-on-error: true
+          with:
+              name: ${{ inputs.artifact-name }}
+              path: ${{ inputs.download-path }}
+              github-token: ${{ inputs.github-token }}
+
+        - name: Restore .last-run.json and set Playwright args
+          id: restore
+          shell: bash
+          env:
+              ACTION_PATH: ${{ github.action_path }}
+              GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+              ARTIFACT_DOWNLOAD_PATH: ${{ inputs.download-path }}
+              LAST_RUN_PATHS: ${{ inputs.last-run-paths }}
+          run: bash "$ACTION_PATH/restore.sh"

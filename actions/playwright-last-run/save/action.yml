@@ -1,0 +1,46 @@
+name: Playwright last-run save
+description: >-
+    When Playwright recorded failures in .last-run.json, upload only that file as a tiny
+    artifact (retention-days 1) for failed-only re-runs. Uses include-hidden-files so
+    dotfile .last-run.json is included. Skips upload when there are no failures.
+
+inputs:
+    artifact-name:
+        description: Artifact name for the next re-run restore step
+        required: true
+    last-run-paths:
+        description: >-
+            Newline-separated paths to .last-run.json or directories containing it. The first
+            path with a non-empty failedTests array is uploaded.
+        required: true
+    staging-dir:
+        description: Staging directory holding only .last-run.json for upload
+        required: false
+        default: playwright-last-run-staging
+
+outputs:
+    uploaded:
+        description: "'true' when an artifact was uploaded"
+        value: ${{ steps.stage.outputs.uploaded }}
+
+runs:
+    using: composite
+    steps:
+        - name: Stage .last-run.json for upload
+          id: stage
+          shell: bash
+          env:
+              ACTION_PATH: ${{ github.action_path }}
+              LAST_RUN_PATHS: ${{ inputs.last-run-paths }}
+              STAGING_DIR: ${{ inputs.staging-dir }}
+          run: bash "$ACTION_PATH/save.sh"
+
+        - name: Upload Playwright last-run artifact
+          if: steps.stage.outputs.uploaded == 'true'
+          uses: actions/upload-artifact@v4
+          with:
+              name: ${{ inputs.artifact-name }}
+              path: ${{ inputs.staging-dir }}/.last-run.json
+              include-hidden-files: true
+              retention-days: 1
+              if-no-files-found: ignore
