@@ -142,6 +142,47 @@ describe('assertTestsRan', () => {
 		expect(act).toThrow('wp-env is not running');
 	});
 
+	it('accepts the notice Playwright adds when --max-failures stops the run', () => {
+		// Arrange
+		const json = {
+			...report([spec(TARGET, ['failed', 'skipped'])]),
+			errors: [
+				{
+					message:
+						'Testing stopped early after 1 maximum allowed failures.',
+				},
+			],
+		};
+
+		// Act
+		const act = () =>
+			assertTestsRan(json, summarizeReport(json, TARGET), SCOPE_TEST);
+
+		// Assert
+		expect(act).not.toThrow();
+	});
+
+	it('still fails on a real error reported next to the --max-failures notice', () => {
+		// Arrange
+		const json = {
+			...report([spec(TARGET, ['failed'])]),
+			errors: [
+				{
+					message:
+						'Testing stopped early after 1 maximum allowed failures.',
+				},
+				{ message: 'Error: globalTeardown crashed' },
+			],
+		};
+
+		// Act
+		const act = () =>
+			assertTestsRan(json, summarizeReport(json, TARGET), SCOPE_TEST);
+
+		// Assert
+		expect(act).toThrow('globalTeardown crashed');
+	});
+
 	it('fails when nothing ran, rather than reading it as a test that never failed', () => {
 		// Arrange
 		const json = report([spec(TARGET, ['skipped'])]);

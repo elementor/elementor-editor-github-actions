@@ -30,6 +30,8 @@ const MAX_BASELINE_FILE_REPEAT = 3;
 
 const FAILED_STATUSES = new Set(['failed', 'timedOut', 'interrupted']);
 const TEST_FILE_IN_LIST = /(\S+\.(?:test|spec)\.[cm]?[jt]sx?):\d+:\d+\s+›/;
+const MAX_FAILURES_NOTICE =
+	/^Testing stopped early after \d+ maximum allowed failures?\.?$/;
 
 function parseTestFile(listOutput) {
 	const match = TEST_FILE_IN_LIST.exec(String(listOutput || ''));
@@ -96,7 +98,12 @@ function summarizeReport(report, testName) {
  * failed — which would turn a broken environment into "did not reproduce".
  */
 function assertTestsRan(report, summary, scope) {
-	const errors = (report && report.errors) || [];
+	const errors = ((report && report.errors) || []).filter(
+		(error) =>
+			!MAX_FAILURES_NOTICE.test(
+				String(error.message || '').split('\n')[0],
+			),
+	);
 
 	if (errors.length) {
 		const first = String(errors[0].message || '').split('\n')[0];
