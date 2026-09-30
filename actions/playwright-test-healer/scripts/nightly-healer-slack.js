@@ -4,12 +4,23 @@ function section(text) {
 	return { type: 'section', text: { type: 'mrkdwn', text } };
 }
 
+/**
+ * Slack reads `<...>` as a link or a mention, so an agent summary that says
+ * `<!channel>` would ping everyone. Links the healer builds itself stay raw.
+ */
+function escapeMrkdwn(text) {
+	return String(text ?? '')
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;');
+}
+
 const OUTCOME_BUILDERS = {
 	disabled: ({ healerSwitch }) => ({
 		text: 'Test Healer: switched off',
 		blocks: [
 			section(
-				`⏸️ *Test Healer: switched off*\n\`vars.TEST_HEALER_ENABLED\` is \`${healerSwitch || 'off'}\` — nothing ran.`,
+				`⏸️ *Test Healer: switched off*\n\`vars.TEST_HEALER_ENABLED\` is \`${escapeMrkdwn(healerSwitch || 'off')}\` — nothing ran.`,
 			),
 		],
 	}),
@@ -17,7 +28,7 @@ const OUTCOME_BUILDERS = {
 		text: 'Test Healer: skipped — this test already has an open PR',
 		blocks: [
 			section(
-				`⏭️ *Test Healer: skipped*\nTest: *${testName}*\nIt already has an open PR: <${existingPrUrl}|View PR>. No duplicate was opened.`,
+				`⏭️ *Test Healer: skipped*\nTest: *${escapeMrkdwn(testName)}*\nIt already has an open PR: <${existingPrUrl}|View PR>. No duplicate was opened.`,
 			),
 		],
 	}),
@@ -25,7 +36,7 @@ const OUTCOME_BUILDERS = {
 		text: 'Nightly Test Healer: every candidate was skipped',
 		blocks: [
 			section(
-				`⏭️ *Nightly Test Healer: nothing ran*\nEvery failure with evidence has an open PR or a recent healer verdict:\n${skippedCandidates.map((skip) => `• ${skip.testName} (${skip.reason})`).join('\n')}`,
+				`⏭️ *Nightly Test Healer: nothing ran*\nEvery failure with evidence has an open PR or a recent healer verdict:\n${skippedCandidates.map((skip) => `• ${escapeMrkdwn(skip.testName)} (${escapeMrkdwn(skip.reason)})`).join('\n')}`,
 			),
 		],
 	}),
@@ -41,7 +52,7 @@ const OUTCOME_BUILDERS = {
 		text: 'Nightly Test Healer: no candidate had artifact evidence',
 		blocks: [
 			section(
-				`⚠️ *Nightly Test Healer: no PR opened*\nHard failures were found, but none had a matching trace/log artifact to investigate from:\n${rankedFailures.map((name) => `• ${name}`).join('\n')}`,
+				`⚠️ *Nightly Test Healer: no PR opened*\nHard failures were found, but none had a matching trace/log artifact to investigate from:\n${rankedFailures.map((name) => `• ${escapeMrkdwn(name)}`).join('\n')}`,
 			),
 		],
 	}),
@@ -49,7 +60,7 @@ const OUTCOME_BUILDERS = {
 		text: 'Test Healer: no failure artifact for the requested test',
 		blocks: [
 			section(
-				`⚠️ *Test Healer: no PR opened*\nNo recent CI failure artifact found for *${testName}*, so there was nothing to investigate from.`,
+				`⚠️ *Test Healer: no PR opened*\nNo recent CI failure artifact found for *${escapeMrkdwn(testName)}*, so there was nothing to investigate from.`,
 			),
 		],
 	}),
@@ -57,7 +68,7 @@ const OUTCOME_BUILDERS = {
 		text: 'Test Healer: verification environment failed',
 		blocks: [
 			section(
-				`🧰 *Test Healer: could not verify*\nTest: *${testName}*\nThe verification environment failed at \`${stage}\`, so the fix on \`${branch}\` is untested — this is not a verdict on the fix.`,
+				`🧰 *Test Healer: could not verify*\nTest: *${escapeMrkdwn(testName)}*\nThe verification environment failed at \`${escapeMrkdwn(stage)}\`, so the fix on \`${escapeMrkdwn(branch)}\` is untested — this is not a verdict on the fix.`,
 			),
 		],
 	}),
@@ -65,15 +76,15 @@ const OUTCOME_BUILDERS = {
 		text: 'Test Healer: branch verified',
 		blocks: [
 			section(
-				`✅ *Test Healer: branch verified (verify-only, no PR opened)*\nTest: *${testName}*\nBranch: \`${branch}\``,
+				`✅ *Test Healer: branch verified (verify-only, no PR opened)*\nTest: *${escapeMrkdwn(testName)}*\nBranch: \`${escapeMrkdwn(branch)}\``,
 			),
 		],
 	}),
-	'verification-not-reproducible': ({ testName, branch }) => ({
-		text: 'Test Healer: failure did not reproduce',
+	'verification-baseline-neighbour-failed': ({ testName, branch }) => ({
+		text: 'Test Healer: another test failed first, fix not run',
 		blocks: [
 			section(
-				`🤷 *Test Healer: failure did not reproduce, no PR opened*\nTest: *${testName}*\nThe test passed without the fix on the same builds, so the fix on \`${branch}\` proves nothing.`,
+				`🧰 *Test Healer: could not verify, no PR opened*\nTest: *${escapeMrkdwn(testName)}*\nAnother test in the file failed before the target during the baseline run, so the fix on \`${escapeMrkdwn(branch)}\` was not run. This is not a verdict on the test or the fix.`,
 			),
 		],
 	}),
@@ -81,7 +92,7 @@ const OUTCOME_BUILDERS = {
 		text: 'Test Healer: fix rejected for touching files out of scope',
 		blocks: [
 			section(
-				`⛔ *Test Healer: fix rejected, no PR opened*\nTest: *${testName}*\nThe fix on \`${branch}\` changes files outside \`tests/playwright/\` or snapshot baselines, so it was not run.`,
+				`⛔ *Test Healer: fix rejected, no PR opened*\nTest: *${escapeMrkdwn(testName)}*\nThe fix on \`${escapeMrkdwn(branch)}\` changes files the healer may not touch — outside \`tests/playwright/\`, snapshot baselines, or environment config — so it was not run.`,
 			),
 		],
 	}),
@@ -89,7 +100,7 @@ const OUTCOME_BUILDERS = {
 		text: 'Nightly Test Healer: agent escalated a possible product bug',
 		blocks: [
 			section(
-				`🚨 *Nightly Test Healer: escalated, no PR opened*\nTest: *${testName}*\n${summary}`,
+				`🚨 *Nightly Test Healer: escalated, no PR opened*\nTest: *${escapeMrkdwn(testName)}*\n${escapeMrkdwn(summary)}`,
 			),
 		],
 	}),
@@ -97,7 +108,7 @@ const OUTCOME_BUILDERS = {
 		text: 'Test Healer: baseline drift, no PR opened',
 		blocks: [
 			section(
-				`📸 *Test Healer: baseline drift, no PR opened*\nTest: *${testName}*${shardIndex ? `\nShard: \`${shardIndex}\`` : ''}\n${summary || ''}\nThe UI renders differently rather than racing — this needs a version-gated snapshot and a new fallback baseline, which the healer may not add.`,
+				`📸 *Test Healer: baseline drift, no PR opened*\nTest: *${escapeMrkdwn(testName)}*${shardIndex ? `\nShard: \`${escapeMrkdwn(shardIndex)}\`` : ''}\n${escapeMrkdwn(summary)}\nThe UI renders differently rather than racing — this needs a version-gated snapshot and a new fallback baseline, which the healer may not add.`,
 			),
 		],
 	}),
@@ -105,7 +116,7 @@ const OUTCOME_BUILDERS = {
 		text: 'Nightly Test Healer: Cloud agent run failed',
 		blocks: [
 			section(
-				`❌ *Nightly Test Healer: agent failed*\nTest: *${testName}*\nAgent run ended with status: ${status}`,
+				`❌ *Nightly Test Healer: agent failed*\nTest: *${escapeMrkdwn(testName)}*\nAgent run ended with status: ${escapeMrkdwn(status)}`,
 			),
 		],
 	}),
@@ -113,7 +124,23 @@ const OUTCOME_BUILDERS = {
 		text: 'Nightly Test Healer: fix did not verify',
 		blocks: [
 			section(
-				`❌ *Nightly Test Healer: fix did not verify*\nTest: *${testName}*\nThe re-run against the nightly build still failed. Branch left for manual pickup: \`${branch}\`.`,
+				`❌ *Nightly Test Healer: fix did not verify*\nTest: *${escapeMrkdwn(testName)}*\nThe re-run against the nightly build still failed. Branch left for manual pickup: \`${escapeMrkdwn(branch)}\`.`,
+			),
+		],
+	}),
+	'pr-open-failed': ({ testName, branch }) => ({
+		text: 'Test Healer: fix verified, but the PR could not be opened',
+		blocks: [
+			section(
+				`⚠️ *Test Healer: fix verified, no PR opened*\nTest: *${escapeMrkdwn(testName)}*\nThe fix verified, but the PR could not be opened; branch \`${escapeMrkdwn(branch)}\` is left for manual pickup, see the run.`,
+			),
+		],
+	}),
+	'unreproduced-pr-limit': ({ testName, branch }) => ({
+		text: 'Test Healer: too many open unreproduced drafts, no PR opened',
+		blocks: [
+			section(
+				`⏸️ *Test Healer: unreproduced draft limit reached, no PR opened*\nTest: *${escapeMrkdwn(testName)}*\nThe failure did not reproduce and enough unreproduced healer drafts are already open, so no draft or Jira task was created. Branch \`${escapeMrkdwn(branch)}\` is left for manual pickup.`,
 			),
 		],
 	}),
@@ -130,12 +157,12 @@ const OUTCOME_BUILDERS = {
 				: '✅ *Test Healer: opened a PR*';
 		const blocks = [
 			section(
-				`${headline}\nTest: *${testName}*${shardIndex ? `\nShard: \`${shardIndex}\`` : ''}\n${links.join(' · ')}`,
+				`${headline}\nTest: *${escapeMrkdwn(testName)}*${shardIndex ? `\nShard: \`${escapeMrkdwn(shardIndex)}\`` : ''}\n${links.join(' · ')}`,
 			),
 		];
 
 		if (rca) {
-			blocks.push(section(`*RCA:* ${rca}`));
+			blocks.push(section(`*RCA:* ${escapeMrkdwn(rca)}`));
 		}
 
 		return { text: 'Test Healer: opened a PR', blocks };
@@ -150,4 +177,4 @@ function buildNightlyHealerSlackPayload({ outcome, details }) {
 	return builder(details);
 }
 
-module.exports = { buildNightlyHealerSlackPayload };
+module.exports = { buildNightlyHealerSlackPayload, escapeMrkdwn };

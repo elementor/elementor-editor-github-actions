@@ -1,9 +1,48 @@
+const { loadProfile } = require('../scripts/profile');
 const {
 	buildGrepPattern,
+	filterHealableArtifactNames,
 	parsePlaywrightListTotal,
 	resolveShardCommand,
 	shardIndexFromArtifactName,
 } = require('../scripts/resolve-shard-command');
+
+describe('filterHealableArtifactNames', () => {
+	it('drops the artifacts of shards the profile marks unhealable', () => {
+		// Arrange
+		const names = [
+			'playwright-test-results-7-chromium',
+			'playwright-test-results-elements-regression-core-chromium',
+			'playwright-test-results-elements-regression-atomic-chromium',
+			'playwright-test-results-plugin_tester_container_1-chromium',
+		];
+
+		// Act
+		const healable = filterHealableArtifactNames(
+			names,
+			loadProfile('core'),
+		);
+
+		// Assert
+		expect(healable).toEqual([
+			'playwright-test-results-7-chromium',
+			'playwright-test-results-plugin_tester_container_1-chromium',
+		]);
+	});
+
+	it('keeps every artifact for a profile with no unhealable shards', () => {
+		// Arrange
+		const names = [
+			'playwright-test-results-nightly-27',
+			'playwright-test-results-taxonomy_filter_1',
+		];
+
+		// Act & Assert
+		expect(filterHealableArtifactNames(names, loadProfile('pro'))).toEqual(
+			names,
+		);
+	});
+});
 
 describe('shardIndexFromArtifactName', () => {
 	it('reads a numeric shard index', () => {

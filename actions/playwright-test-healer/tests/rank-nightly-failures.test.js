@@ -463,7 +463,7 @@ describe('selectHealCandidate skips', () => {
 	];
 	const recentVerdict = {
 		testName: 'Check Mega Menu icons',
-		outcome: 'verification-not-reproducible',
+		outcome: 'verification-failed',
 		recordedAt: new Date().toISOString(),
 		runUrl: 'https://github.com/o/r/actions/runs/1',
 	};
@@ -485,7 +485,7 @@ describe('selectHealCandidate skips', () => {
 			{
 				testName: 'Check Mega Menu icons',
 				reason: 'recent-verdict',
-				outcome: 'verification-not-reproducible',
+				outcome: 'verification-failed',
 				runUrl: recentVerdict.runUrl,
 				recordedAt: recentVerdict.recordedAt,
 			},

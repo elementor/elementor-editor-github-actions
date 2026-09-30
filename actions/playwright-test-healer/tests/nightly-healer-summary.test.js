@@ -118,7 +118,9 @@ describe('buildNightlyHealerSummary', () => {
 		const outcomes = [
 			'healed',
 			'verification-failed',
-			'verification-not-reproducible',
+			'verification-baseline-neighbour-failed',
+			'pr-open-failed',
+			'unreproduced-pr-limit',
 			'verified-branch',
 			'verification-infra-failed',
 			'verification-scope-violation',
@@ -146,7 +148,7 @@ describe('buildNightlyHealerSummary', () => {
 			{
 				testName: 'Check Mega Menu icons',
 				reason: 'recent-verdict',
-				outcome: 'verification-not-reproducible',
+				outcome: 'verification-failed',
 				recordedAt: '2026-09-28T02:00:00Z',
 				runUrl: 'https://github.com/o/r/actions/runs/1',
 			},
@@ -165,11 +167,48 @@ describe('buildNightlyHealerSummary', () => {
 
 		// Assert
 		expect(summary).toContain(
-			'`Check Mega Menu icons` — `verification-not-reproducible`',
+			'`Check Mega Menu icons` — `verification-failed`',
 		);
 		expect(summary).toContain(
 			'`Search Result Visibility` — open PR https://github.com/o/r/pull/7682',
 		);
+	});
+
+	it('names the branch left behind when the PR could not be opened', () => {
+		// Act
+		const summary = buildNightlyHealerSummary({
+			outcome: 'pr-open-failed',
+			details: { testName: 't', branch: 'heal/x-1' },
+		});
+
+		// Assert
+		expect(summary).toContain('could not be opened');
+		expect(summary).toContain('`heal/x-1` is left for manual pickup');
+	});
+
+	it('says a baseline stopped by another test is not a verdict', () => {
+		// Act
+		const summary = buildNightlyHealerSummary({
+			outcome: 'verification-baseline-neighbour-failed',
+			details: { testName: 't', branch: 'heal/x-1' },
+		});
+
+		// Assert
+		expect(summary).toContain(
+			'Another test in the file failed before the target during the baseline run, so the fix was not run. This is not a verdict on the test or the fix.',
+		);
+	});
+
+	it('names the branch left behind at the unreproduced draft limit', () => {
+		// Act
+		const summary = buildNightlyHealerSummary({
+			outcome: 'unreproduced-pr-limit',
+			details: { testName: 't', branch: 'heal/x-1' },
+		});
+
+		// Assert
+		expect(summary).toContain('max_unreproduced_prs');
+		expect(summary).toContain('`heal/x-1` is left for manual pickup');
 	});
 
 	it('says how to switch the healer on', () => {

@@ -1,5 +1,6 @@
 const {
 	COOLDOWN_DAYS,
+	COOLDOWN_OUTCOMES,
 	buildHealBranchName,
 	buildHealBranchSlug,
 	findOpenPrForTest,
@@ -141,7 +142,7 @@ describe('findRecentVerdict', () => {
 			},
 			{
 				testName: TEST_NAME,
-				outcome: 'verification-not-reproducible',
+				outcome: 'agent-escalated',
 				recordedAt: daysAgo(1),
 			},
 		];
@@ -150,7 +151,7 @@ describe('findRecentVerdict', () => {
 		const verdict = findRecentVerdict(TEST_NAME, attempts, NOW);
 
 		// Assert
-		expect(verdict.outcome).toBe('verification-not-reproducible');
+		expect(verdict.outcome).toBe('agent-escalated');
 	});
 
 	it('lets the test back in once the cooldown has passed', () => {
@@ -179,6 +180,44 @@ describe('findRecentVerdict', () => {
 
 		// Act & Assert
 		expect(findRecentVerdict(TEST_NAME, attempts, NOW)).toBeNull();
+	});
+
+	it('does not hold a baseline stopped by another test against the test', () => {
+		// Arrange
+		const attempts = [
+			{
+				testName: TEST_NAME,
+				outcome: 'verification-baseline-neighbour-failed',
+				recordedAt: daysAgo(1),
+			},
+		];
+
+		// Act & Assert
+		expect(
+			COOLDOWN_OUTCOMES.has('verification-baseline-neighbour-failed'),
+		).toBe(false);
+		expect(findRecentVerdict(TEST_NAME, attempts, NOW)).toBeNull();
+	});
+
+	it('cools down a test whose unreproduced fix hit the draft limit', () => {
+		// Arrange
+		const attempts = [
+			{
+				testName: TEST_NAME,
+				outcome: 'unreproduced-pr-limit',
+				recordedAt: daysAgo(1),
+			},
+		];
+
+		// Act
+		const verdict = findRecentVerdict(TEST_NAME, attempts, NOW);
+
+		// Assert
+		expect(verdict.outcome).toBe('unreproduced-pr-limit');
+	});
+
+	it('never cools down a PR that could not be opened', () => {
+		expect(COOLDOWN_OUTCOMES.has('pr-open-failed')).toBe(false);
 	});
 });
 

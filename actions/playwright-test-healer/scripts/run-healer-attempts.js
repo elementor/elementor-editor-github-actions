@@ -20,10 +20,12 @@ const { parsePlaywrightListTotal } = require('./resolve-shard-command');
 const SCOPE_TEST = 'test';
 const SCOPE_FILE = 'file';
 
-// Failing on the Nth run means a failure rate of about 1/N. A fix that does
-// nothing then passes 3N runs in a row with probability (1 - 1/N)^3N, which
-// is about e^-3, 5%, whatever N is.
+// Failing on the Nth run hints at a failure rate near 1/N, but one baseline
+// is a noisy estimate: a test usually fails on run 1 whatever its real rate.
+// At a 20% rate a fix that does nothing still passes 3 runs in a row about
+// half the time, so a single test needs the floor however quickly it failed.
 const FIX_RUNS_PER_BASELINE_RUN = 3;
+const MIN_FIX_REPEAT = { [SCOPE_TEST]: 10, [SCOPE_FILE]: 3 };
 const MAX_FIX_REPEAT = { [SCOPE_TEST]: 30, [SCOPE_FILE]: 10 };
 // Kept low enough that 3N never reaches the file cap: a whole file is slow.
 const MAX_BASELINE_FILE_REPEAT = 3;
@@ -126,6 +128,7 @@ function assertTestsRan(report, summary, scope) {
 function requiredFixRepeat({ runsToFailure, floor, scope }) {
 	const wanted = Math.max(
 		Number(floor) || 1,
+		MIN_FIX_REPEAT[scope],
 		FIX_RUNS_PER_BASELINE_RUN * runsToFailure,
 	);
 	return Math.min(wanted, MAX_FIX_REPEAT[scope]);
@@ -137,7 +140,11 @@ function requiredFixRepeat({ runsToFailure, floor, scope }) {
  * that it breaks nothing, not that it removes the flake.
  */
 function unreproducedFixRepeat({ baselinePasses, floor, scope }) {
-	const wanted = Math.max(Number(floor) || 1, Number(baselinePasses) || 0);
+	const wanted = Math.max(
+		Number(floor) || 1,
+		MIN_FIX_REPEAT[scope],
+		Number(baselinePasses) || 0,
+	);
 	return Math.min(wanted, MAX_FIX_REPEAT[scope]);
 }
 
@@ -338,6 +345,7 @@ if (require.main === module) {
 
 module.exports = {
 	MAX_FIX_REPEAT,
+	MIN_FIX_REPEAT,
 	SCOPE_FILE,
 	SCOPE_TEST,
 	assertTestsRan,

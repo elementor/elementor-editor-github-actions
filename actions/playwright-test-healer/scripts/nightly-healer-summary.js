@@ -87,15 +87,32 @@ const OUTCOME_BUILDERS = {
 			? ['', `It was re-run against ${details.buildDescription}.`]
 			: []),
 	],
-	'verification-not-reproducible': (details) => [
-		'### 🤷 Failure did not reproduce — no PR opened',
+	'verification-baseline-neighbour-failed': (details) => [
+		'### 🧰 Could not verify — another test failed first',
 		'',
 		...contextLines(details),
 		'',
-		"The test passed on every run without the agent's fix, so a pass with it would not show the fix does anything. Either something else already fixed it, or it only fails on code other than what was rebuilt. The branch is left in place.",
+		'Another test in the file failed before the target during the baseline run, so the fix was not run. This is not a verdict on the test or the fix. The branch is left in place.',
 		...(details.buildDescription
-			? ['', `Both runs used ${details.buildDescription}.`]
+			? ['', `The baseline run used ${details.buildDescription}.`]
 			: []),
+	],
+	'pr-open-failed': (details) => [
+		'### ⚠️ Fix verified — but the PR could not be opened',
+		'',
+		...contextLines(details),
+		'',
+		`The fix verified, but the PR could not be opened; branch \`${details.branch}\` is left for manual pickup. The Open PR job log says why.`,
+		...(details.buildDescription
+			? ['', `It was verified against ${details.buildDescription}.`]
+			: []),
+	],
+	'unreproduced-pr-limit': (details) => [
+		'### ⏸️ Unreproduced draft limit reached — no PR opened',
+		'',
+		...contextLines(details),
+		'',
+		`The fix passed, but the failure did not reproduce, and the open \`test-healer-unreproduced\` drafts are already at \`max_unreproduced_prs\`. No draft PR or Jira task was created; branch \`${details.branch}\` is left for manual pickup.`,
 	],
 	'verification-infra-failed': (details) => [
 		'### 🧰 Could not verify — healer infrastructure failed',
@@ -109,7 +126,7 @@ const OUTCOME_BUILDERS = {
 		'',
 		...contextLines(details),
 		'',
-		"The agent's branch changes files outside `tests/playwright/` or snapshot baselines, so none of it was run. The verify job log lists the files. The branch is left in place for review.",
+		"The agent's branch changes files outside `tests/playwright/`, snapshot baselines, or environment config, so none of it was run. The verify job log lists the files. The branch is left in place for review.",
 	],
 	'agent-escalated': (details) => [
 		'### 🚨 Escalated as a possible product bug — no PR opened',

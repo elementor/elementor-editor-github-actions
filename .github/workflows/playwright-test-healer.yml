@@ -18,6 +18,11 @@ name: Playwright Test Healer
 #
 # The caller's job must grant contents: read, actions: write, and
 # pull-requests: write, and pass its secrets.
+#
+# Repository variables the caller's repo can set:
+#   TEST_HEALER_ENABLED       off (default), manual, or all; see Resolve input.
+#   TEST_HEALER_JIRA_ENABLED  false skips creating a Jira task per PR, and the
+#                             PR title uses jira_parent_key instead.
 
 on:
     workflow_call:
@@ -51,7 +56,7 @@ on:
                 type: string
                 default: ''
             verify_repeat:
-                description: 'The fewest consecutive passes the fix must produce. It must also pass three times as many runs as the test took to fail without it, so rare flakes need more.'
+                description: 'The fewest consecutive passes the fix must produce. A test verified on its own, rather than with its whole file, needs at least 10 whatever this says. The fix must also pass three times as many runs as it took to fail without the fix, so rare flakes need more.'
                 required: false
                 type: string
                 default: '3'
@@ -60,6 +65,11 @@ on:
                 required: false
                 type: string
                 default: '2'
+            max_unreproduced_prs:
+                description: 'Auto mode only: the most open test-healer-unreproduced draft PRs. At the limit, an unreproduced fix gets no PR or Jira task and its branch is left for manual pickup.'
+                required: false
+                type: string
+                default: '3'
             attempt:
                 description: 'Set by the healer when it retries itself.'
                 required: false
@@ -368,7 +378,12 @@ jobs:
                   mkdir -p test-results
 
                   NAMES=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}/artifacts" --paginate \
-                    --jq '.artifacts[] | select(.expired == false) | select(.name | startswith("playwright-test-results-")) | .name')
+                    --jq '.artifacts[] | select(.expired == false) | select(.name | startswith("playwright-test-results-")) | .name' |
+                    node -e "
+                      const { filterHealableArtifactNames } = require('./' + process.env.HEALER_DIR + '/scripts/resolve-shard-command');
+                      const names = require('fs').readFileSync(0, 'utf8').split('\n').filter(Boolean);
+                      process.stdout.write(filterHealableArtifactNames(names).join('\n'));
+                    ")
 
                   for NAME in $NAMES; do
                     gh run download "${SOURCE_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n "$NAME" -D "test-results/$NAME" || true
@@ -1148,7 +1163,7 @@ jobs:
                   elif [ "$BASELINE" != "success" ]; then
                     STAGE="baseline"
                   elif [ "$REPRODUCED" != "true" ] && [ "$RUN_TEST" = "skipped" ]; then
-                    STAGE="not-reproducible"
+                    STAGE="baseline-neighbour-failed"
                   elif [ "$RUN_TEST_INFRA_ERROR" = "true" ]; then
                     STAGE="verify-run"
                   elif [ "$RUN_TEST" != "success" ]; then
@@ -1190,6 +1205,7 @@ jobs:
             pr_url: ${{ steps.open.outputs.pr_url }}
             jira_url: ${{ steps.jira.outputs.jira_url }}
             duplicate_pr_url: ${{ steps.duplicate.outputs.existing_pr_url }}
+            unreproduced_limit_reached: ${{ steps.unreproduced-limit.outputs.unreproduced_limit_reached }}
         steps:
             # The title builder lives in the healer — never the agent's branch.
             - name: Check out the healer
@@ -1239,11 +1255,38 @@ jobs:
                     exit 1
                   fi
 
+            # Most nightly failures do not reproduce, so without a limit the
+            # unattended run could leave a new draft every night. A person who
+            # dispatched the run asked for this test, so manual mode is not limited.
+            - name: Check the open unreproduced drafts are under the limit
+              id: unreproduced-limit
+              if: >-
+                  steps.duplicate.outputs.existing_pr_url == '' &&
+                  needs.verify-fix.outputs.reproduced != 'true' &&
+                  needs.resolve-input.outputs.mode == 'auto'
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  MAX_UNREPRODUCED_PRS: ${{ inputs.max_unreproduced_prs }}
+              run: |
+                  set -euo pipefail
+                  if ! printf '%s' "$MAX_UNREPRODUCED_PRS" | grep -qE '^[0-9]+$'; then
+                    echo "::error::max_unreproduced_prs must be a whole number, got '${MAX_UNREPRODUCED_PRS}'."
+                    exit 1
+                  fi
+                  OPEN=$(gh pr list --repo "$GITHUB_REPOSITORY" --label "$UNREPRODUCED_LABEL" --state open --limit 100 --json number --jq 'length')
+                  if [ "$OPEN" -ge "$MAX_UNREPRODUCED_PRS" ]; then
+                    echo "::notice::${OPEN} open ${UNREPRODUCED_LABEL} PRs, limit ${MAX_UNREPRODUCED_PRS} — not opening another."
+                    echo "unreproduced_limit_reached=true" >> "$GITHUB_OUTPUT"
+                  fi
+
             # Non-fatal: a Jira outage or missing credentials must not lose a
             # verified fix, so the PR falls back to the epic key.
             - name: Create the Jira task
               id: jira
-              if: steps.duplicate.outputs.existing_pr_url == ''
+              if: >-
+                  steps.duplicate.outputs.existing_pr_url == '' &&
+                  steps.unreproduced-limit.outputs.unreproduced_limit_reached != 'true' &&
+                  vars.TEST_HEALER_JIRA_ENABLED != 'false'
               continue-on-error: true
               env:
                   JIRA_API_EMAIL: ${{ secrets.JIRA_API_EMAIL }}
@@ -1259,7 +1302,7 @@ jobs:
 
             - name: Create the PR
               id: open
-              if: steps.duplicate.outputs.existing_pr_url == ''
+              if: steps.duplicate.outputs.existing_pr_url == '' && steps.unreproduced-limit.outputs.unreproduced_limit_reached != 'true'
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
                   TEST_NAME: ${{ needs.find-candidate.outputs.test_name }}
@@ -1302,7 +1345,7 @@ jobs:
 
                   PR_FLAGS=()
                   if [ "$REPRODUCED" = "true" ]; then
-                    VERIFIED="Verified by running ${RAN}: without the fix it failed on run ${RUNS_TO_FAILURE}, and with it the test passed ${FIX_REPEAT}x in a row — at least three times as many runs as the failure took, so a fix that did nothing would pass only about 5% of the time."
+                    VERIFIED="Verified by running ${RAN}: without the fix it failed on run ${RUNS_TO_FAILURE}; with it the test passed ${FIX_REPEAT}x in a row on the same builds."
                   else
                     VERIFIED="⚠️ **The failure did not reproduce.** The test failed in the evidence run, but ${RAN} passed every re-run without the fix. With the fix it passed ${FIX_REPEAT}x in a row, which shows the fix breaks nothing — not that it removes the flake, so judge it by the agent's root cause below."
                     gh label create "$UNREPRODUCED_LABEL" --repo "$REPO" --color FBCA04 --description "Test healer fix whose failure did not reproduce during verification" 2>/dev/null || true
@@ -1320,7 +1363,7 @@ jobs:
                     "| Shard | \`${SHARD_INDEX:-default}\` |" \
                     "| Verification | https://github.com/${REPO}/actions/runs/${GITHUB_RUN_ID} |" \
                     "" \
-                    "${VERIFIED} Both on the shard's own command, against ${BUILD_DESCRIPTION}. The diff is gated to \`tests/playwright/\` with no snapshot-baseline changes." \
+                    "${VERIFIED} Both on the shard's own command, against ${BUILD_DESCRIPTION}. The diff is gated to \`tests/playwright/\` with no snapshot-baseline or environment changes." \
                     "" \
                     "**Agent summary**" \
                     "" \
@@ -1360,9 +1403,6 @@ jobs:
         if: always() && needs.resolve-input.result == 'success'
         runs-on: ubuntu-22.04
         steps:
-            - uses: actions/checkout@v6
-              with:
-                  persist-credentials: false
             - name: Check out the healer
               uses: actions/checkout@v6
               with:
@@ -1399,6 +1439,8 @@ jobs:
                   VERIFY_BUILD: ${{ needs.verify-fix.outputs.build_description }}
                   PR_URL: ${{ needs.open-pr.outputs.pr_url }}
                   JIRA_URL: ${{ needs.open-pr.outputs.jira_url }}
+                  OPEN_PR_RESULT: ${{ needs.open-pr.result }}
+                  UNREPRODUCED_LIMIT_REACHED: ${{ needs.open-pr.outputs.unreproduced_limit_reached }}
                   VERIFY_ONLY: ${{ needs.resolve-input.outputs.fix_branch != '' }}
                   FIND_RESULT: ${{ needs.find-candidate.result }}
                   DISPATCH_RESULT: ${{ needs.dispatch-agent.result }}
@@ -1457,6 +1499,8 @@ jobs:
                         jiraUrl: process.env.JIRA_URL,
                         duplicatePrUrl: process.env.DUPLICATE_PR_URL,
                         verifyOnly: process.env.VERIFY_ONLY,
+                        openPrResult: process.env.OPEN_PR_RESULT,
+                        unreproducedLimitReached: process.env.UNREPRODUCED_LIMIT_REACHED,
                       });
 
                       core.info(`Outcome: ${outcome}`);

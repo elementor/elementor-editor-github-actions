@@ -42,6 +42,50 @@ describe('findScopeViolations', () => {
 			'tests/playwright/global-setup.ts: Playwright config or global setup',
 		]);
 	});
+
+	it('rejects mu-plugins as environment or WordPress plugin code', () => {
+		expect(
+			findScopeViolations(['tests/playwright/mu-plugins/healer.php']),
+		).toEqual([
+			'tests/playwright/mu-plugins/healer.php: environment or WordPress plugin code',
+		]);
+	});
+
+	it('rejects Playground blueprints', () => {
+		expect(
+			findScopeViolations(['tests/playwright/blueprints/local.json']),
+		).toEqual([
+			'tests/playwright/blueprints/local.json: WordPress Playground blueprint',
+		]);
+	});
+
+	it('rejects wp-lite-env and wp-env config at any depth', () => {
+		// Arrange
+		const files = [
+			'tests/playwright/.playwright-wp-lite-env.json',
+			'tests/playwright/upgrade-test/.upgrade-test-wp-lite-env.json',
+			'tests/playwright/upgrade-test/.wp-env.json',
+			'tests/playwright/.wp-env.override.json',
+		];
+
+		// Act
+		const violations = findScopeViolations(files);
+
+		// Assert
+		expect(violations).toEqual(
+			files.map((file) => `${file}: WordPress environment config`),
+		);
+	});
+
+	it('still accepts helper and spec edits next to the environment files', () => {
+		expect(
+			findScopeViolations([
+				'tests/playwright/pages/wp-admin-page.ts',
+				'tests/playwright/pages/blueprints-helper.ts',
+				'tests/playwright/sanity/modules/search/search.test.ts',
+			]),
+		).toEqual([]);
+	});
 });
 
 describe('findWeakening', () => {
@@ -86,6 +130,53 @@ describe('findWeakening', () => {
 
 		// Assert
 		expect(findings).toHaveLength(4);
+	});
+
+	it('flags an added describeIf or testIf as a conditional skip', () => {
+		// Arrange
+		const change = diff([
+			"+describeIf( isCore335OrHigher, 'Search widget', () => {",
+			"+\ttestIf( shouldRun, 'renders', async () => {",
+		]);
+
+		// Act
+		const findings = findWeakening(change);
+
+		// Assert
+		expect(findings).toEqual([
+			"adds a conditional skip: describeIf( isCore335OrHigher, 'Search widget', () => {",
+			"adds a conditional skip: testIf( shouldRun, 'renders', async () => {",
+		]);
+	});
+
+	it('flags an empty catch as swallowing a failure', () => {
+		// Arrange
+		const change = diff([
+			'+\tawait expect( el ).toBeVisible().catch( () => {} );',
+			'+\tawait page.click( a ).catch(() => undefined);',
+			'+\tawait page.click( b ).catch( () => null );',
+		]);
+
+		// Act
+		const findings = findWeakening(change);
+
+		// Assert
+		expect(findings).toHaveLength(3);
+		expect(
+			findings.every((finding) =>
+				finding.startsWith('swallows a failure:'),
+			),
+		).toBe(true);
+	});
+
+	it('does not flag a catch that handles the error', () => {
+		// Arrange
+		const change = diff([
+			'+\tawait page.click( a ).catch( ( error ) => { throw error; } );',
+		]);
+
+		// Act & Assert
+		expect(findWeakening(change)).toEqual([]);
 	});
 
 	it('flags a removed assertion', () => {

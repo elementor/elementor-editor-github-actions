@@ -15,6 +15,21 @@ const ALLOWED_PREFIX = 'tests/playwright/';
 const SNAPSHOT_FILE = /\.(?:png|jpe?g|webp)$/i;
 const RUNNER_FILE =
 	/^tests\/playwright\/(?:[^/]*\.config|global-(?:setup|teardown))\.[cm]?[jt]s$/;
+const FORBIDDEN_PATHS = [
+	{
+		pattern: /^tests\/playwright\/mu-plugins\//,
+		reason: 'environment or WordPress plugin code',
+	},
+	{
+		pattern: /^tests\/playwright\/blueprints\//,
+		reason: 'WordPress Playground blueprint',
+	},
+	{
+		pattern:
+			/^tests\/playwright\/(?:.*\/)?\.(?:[^/]*wp-lite-env|wp-env[^/]*)\.json$/,
+		reason: 'WordPress environment config',
+	},
+];
 const DIFF_FILE_HEADER = /^(?:\+\+\+|---) (?:[ab]\/|\/dev\/null)/;
 const ASSERTION = /\bexpect\s*\(/g;
 const WEAKENING_PATTERNS = [
@@ -22,6 +37,14 @@ const WEAKENING_PATTERNS = [
 		pattern:
 			/\b(?:test|it)(?:\.describe)?\.(?:skip|fixme|fail|only|slow)\b/,
 		reason: 'skips, marks, or narrows tests',
+	},
+	{
+		pattern: /\b(?:describeIf|testIf)\s*\(/,
+		reason: 'adds a conditional skip',
+	},
+	{
+		pattern: /\.catch\(\s*\(\s*\)\s*=>\s*(?:\{\s*\}|undefined|null)\s*\)/,
+		reason: 'swallows a failure',
 	},
 	{ pattern: /\bretries\s*:/, reason: 'adds retries' },
 	{ pattern: /\bexpect\.soft\b/, reason: 'turns an assertion soft' },
@@ -45,7 +68,11 @@ function findScopeViolations(files) {
 			return [`${file}: Playwright config or global setup`];
 		}
 
-		return [];
+		const forbidden = FORBIDDEN_PATHS.find(({ pattern }) =>
+			pattern.test(file),
+		);
+
+		return forbidden ? [`${file}: ${forbidden.reason}`] : [];
 	});
 }
 

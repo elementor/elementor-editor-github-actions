@@ -161,6 +161,70 @@ describe('buildNightlyHealerSlackPayload', () => {
 		expect(payload.text).toContain('switched off');
 	});
 
+	it('names the branch left behind when the PR could not be opened', () => {
+		// Act
+		const payload = buildNightlyHealerSlackPayload({
+			outcome: 'pr-open-failed',
+			details: { testName: 'renders correctly', branch: 'heal/x-1' },
+		});
+
+		// Assert
+		expect(payload.blocks[0].text.text).toContain('could not be opened');
+		expect(payload.blocks[0].text.text).toContain('`heal/x-1`');
+		expect(payload.blocks[0].text.text).not.toContain('View PR');
+	});
+
+	it('says a baseline stopped by another test is not a verdict', () => {
+		// Act
+		const payload = buildNightlyHealerSlackPayload({
+			outcome: 'verification-baseline-neighbour-failed',
+			details: { testName: 'renders correctly', branch: 'heal/x-1' },
+		});
+
+		// Assert
+		expect(payload.blocks[0].text.text).toContain(
+			'Another test in the file failed before the target during the baseline run, so the fix',
+		);
+		expect(payload.blocks[0].text.text).toContain(
+			'This is not a verdict on the test or the fix.',
+		);
+	});
+
+	it('names the branch left behind at the unreproduced draft limit', () => {
+		// Act
+		const payload = buildNightlyHealerSlackPayload({
+			outcome: 'unreproduced-pr-limit',
+			details: { testName: 'renders correctly', branch: 'heal/x-1' },
+		});
+
+		// Assert
+		expect(payload.blocks[0].text.text).toContain('`heal/x-1`');
+		expect(payload.blocks[0].text.text).toContain('manual pickup');
+	});
+
+	it('escapes mrkdwn in free text but keeps the healer-built links', () => {
+		// Act
+		const payload = buildNightlyHealerSlackPayload({
+			outcome: 'healed',
+			details: {
+				prUrl: 'https://github.com/o/r/pull/2',
+				jiraUrl: 'https://elementor.atlassian.net/browse/ED-1',
+				testName: 'Renders <b> & <i> tags',
+				rca: 'Fixed it <!channel>',
+			},
+		});
+		const text = payload.blocks.map((block) => block.text.text).join('\n');
+
+		// Assert
+		expect(text).toContain('Renders &lt;b&gt; &amp; &lt;i&gt; tags');
+		expect(text).toContain('Fixed it &lt;!channel&gt;');
+		expect(text).not.toContain('<!channel>');
+		expect(text).toContain('<https://github.com/o/r/pull/2|View PR>');
+		expect(text).toContain(
+			'<https://elementor.atlassian.net/browse/ED-1|Jira ticket>',
+		);
+	});
+
 	it('throws for an unknown outcome', () => {
 		expect(() =>
 			buildNightlyHealerSlackPayload({

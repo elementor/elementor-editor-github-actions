@@ -31,15 +31,16 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const MAX_OPEN_PRS = 500;
 
 /**
- * Outcomes that are a verdict on the test, so a rerun on the same failure
- * would spend another agent run to reach the same answer. Infrastructure and
- * agent errors are not here: they say nothing about the test.
+ * Outcomes that are a verdict on the test, or that left a fix branch waiting
+ * for a person, so a rerun on the same failure would spend another agent run
+ * to reach the same answer. Infrastructure and agent errors are not here: they
+ * say nothing about the test.
  */
 const COOLDOWN_OUTCOMES = new Set([
 	'agent-baseline-drift',
 	'agent-escalated',
+	'unreproduced-pr-limit',
 	'verification-failed',
-	'verification-not-reproducible',
 ]);
 
 /**

@@ -82,6 +82,7 @@ npx playwright test <test file> -g "<exact title>" --retries=0 --repeat-each=3 -
 
 - Never change what the test asserts, weaken an assertion, add `test.skip`, or touch snapshot files (`*.png`, `*.jpeg`, `*-linux.*`, …).
 - Never touch product/module PHP or JS code. Only files under `tests/playwright/`.
+- Never touch the WordPress environment either: `tests/playwright/mu-plugins/`, `tests/playwright/blueprints/`, and any `.wp-env*.json` or `*wp-lite-env.json`. Never add `describeIf` / `testIf`, and never swallow a failure with an empty `.catch( () => {} )`.
 - **Never invent a selector.** Every locator you add must be one you saw in the trace's DOM snapshot, in the component source, or in a passing sibling test.
 - Use named constants from `config/timeouts.ts`, never magic-number timeouts.
 - Do not open a pull request and do not create or modify any Jira ticket. Do not put a Jira key in your commit message.

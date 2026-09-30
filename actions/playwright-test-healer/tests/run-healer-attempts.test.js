@@ -1,5 +1,6 @@
 const {
 	MAX_FIX_REPEAT,
+	MIN_FIX_REPEAT,
 	SCOPE_FILE,
 	SCOPE_TEST,
 	assertTestsRan,
@@ -230,6 +231,33 @@ describe('unreproducedFixRepeat', () => {
 		).toBe(3);
 	});
 
+	it('never asks a single test for fewer than the scope minimum', () => {
+		expect(
+			unreproducedFixRepeat({
+				baselinePasses: 1,
+				floor: 3,
+				scope: SCOPE_TEST,
+			}),
+		).toBe(MIN_FIX_REPEAT[SCOPE_TEST]);
+		expect(
+			unreproducedFixRepeat({
+				baselinePasses: 1,
+				floor: 1,
+				scope: SCOPE_FILE,
+			}),
+		).toBe(MIN_FIX_REPEAT[SCOPE_FILE]);
+	});
+
+	it('caps a single test at the scope maximum', () => {
+		expect(
+			unreproducedFixRepeat({
+				baselinePasses: 50,
+				floor: 3,
+				scope: SCOPE_TEST,
+			}),
+		).toBe(MAX_FIX_REPEAT[SCOPE_TEST]);
+	});
+
 	it('caps the runs at the scope maximum', () => {
 		expect(
 			unreproducedFixRepeat({
@@ -260,6 +288,40 @@ describe('requiredFixRepeat', () => {
 				scope: SCOPE_TEST,
 			}),
 		).toBe(10);
+	});
+
+	it('asks a test that failed on its first run for the scope minimum', () => {
+		expect(
+			requiredFixRepeat({
+				runsToFailure: 1,
+				floor: 3,
+				scope: SCOPE_TEST,
+			}),
+		).toBe(MIN_FIX_REPEAT[SCOPE_TEST]);
+		expect(
+			requiredFixRepeat({
+				runsToFailure: 1,
+				floor: 3,
+				scope: SCOPE_FILE,
+			}),
+		).toBe(MIN_FIX_REPEAT[SCOPE_FILE]);
+	});
+
+	it('asks a test that failed on its tenth run for three passes per run, up to the cap', () => {
+		expect(
+			requiredFixRepeat({
+				runsToFailure: 10,
+				floor: 3,
+				scope: SCOPE_TEST,
+			}),
+		).toBe(30);
+		expect(
+			requiredFixRepeat({
+				runsToFailure: 10,
+				floor: 3,
+				scope: SCOPE_FILE,
+			}),
+		).toBe(MAX_FIX_REPEAT[SCOPE_FILE]);
 	});
 
 	it('stops at the cap for the scope', () => {

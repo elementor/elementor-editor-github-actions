@@ -63,6 +63,12 @@ function isHealableShard(shardIndex, profile = loadProfile()) {
 	return !profile.unhealableShards.includes(String(shardIndex));
 }
 
+function filterHealableArtifactNames(artifactNames, profile = loadProfile()) {
+	return artifactNames.filter((name) =>
+		isHealableShard(shardIndexFromArtifactName(name, profile), profile),
+	);
+}
+
 /**
  * An unknown or empty shard index falls back to the default command. That is
  * the correct default: the numeric shards all run the same way, and a
@@ -153,6 +159,7 @@ if (require.main === module) {
 module.exports = {
 	buildGrepPattern,
 	escapeRegExp,
+	filterHealableArtifactNames,
 	isHealableShard,
 	isNamedShard,
 	parsePlaywrightListTotal,

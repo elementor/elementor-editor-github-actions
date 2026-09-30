@@ -181,20 +181,99 @@ describe('resolveHealerOutcome', () => {
 		}
 	});
 
-	it('does not credit a fix for a test that already passed without it', () => {
+	it('reports a baseline stopped by another test as its own outcome, not a verdict', () => {
 		// Act
 		const { outcome, details } = resolveHealerOutcome({
 			...candidate,
 			agentStatus: 'FINISHED',
 			agentBranch: 'heal/x-1',
-			verifyStage: 'not-reproducible',
+			verifyStage: 'baseline-neighbour-failed',
 			verifyPassed: 'false',
 			buildDescription:
 				'the Pro 4.2.0 with Core 4.3.0 build restored from the evidence run',
 		});
 
 		// Assert
-		expect(outcome).toBe('verification-not-reproducible');
+		expect(outcome).toBe('verification-baseline-neighbour-failed');
+		expect(details.branch).toBe('heal/x-1');
+	});
+
+	it('reports a verified fix whose Open PR job failed as pr-open-failed', () => {
+		// Act
+		const { outcome, details } = resolveHealerOutcome({
+			...candidate,
+			agentStatus: 'FINISHED',
+			agentBranch: 'heal/x-1',
+			verifyPassed: 'true',
+			openPrResult: 'failure',
+			prUrl: 'https://github.com/o/r/pull/2',
+			buildDescription: 'the Core build restored from the evidence run',
+		});
+
+		// Assert
+		expect(outcome).toBe('pr-open-failed');
+		expect(details).toMatchObject({
+			branch: 'heal/x-1',
+			buildDescription: 'the Core build restored from the evidence run',
+		});
+	});
+
+	it('reports a verified fix without a PR link as pr-open-failed', () => {
+		// Act
+		const { outcome } = resolveHealerOutcome({
+			...candidate,
+			agentStatus: 'FINISHED',
+			agentBranch: 'heal/x-1',
+			verifyPassed: 'true',
+			openPrResult: 'success',
+			prUrl: '',
+		});
+
+		// Assert
+		expect(outcome).toBe('pr-open-failed');
+	});
+
+	it('keeps verify-only and duplicate outcomes when no PR was opened', () => {
+		// Arrange
+		const verified = {
+			...candidate,
+			agentStatus: 'FINISHED',
+			agentBranch: 'heal/x-1',
+			verifyPassed: 'true',
+			prUrl: '',
+		};
+
+		// Act
+		const verifyOnly = resolveHealerOutcome({
+			...verified,
+			verifyOnly: 'true',
+			openPrResult: 'skipped',
+		});
+		const duplicate = resolveHealerOutcome({
+			...verified,
+			duplicatePrUrl: 'https://github.com/o/r/pull/7682',
+			openPrResult: 'success',
+		});
+
+		// Assert
+		expect(verifyOnly.outcome).toBe('verified-branch');
+		expect(duplicate.outcome).toBe('test-has-open-pr');
+	});
+
+	it('reports an unreproduced fix held back by the draft limit', () => {
+		// Act
+		const { outcome, details } = resolveHealerOutcome({
+			...candidate,
+			agentStatus: 'FINISHED',
+			agentBranch: 'heal/x-1',
+			verifyPassed: 'true',
+			verifyReproduced: 'false',
+			openPrResult: 'success',
+			unreproducedLimitReached: 'true',
+		});
+
+		// Assert
+		expect(outcome).toBe('unreproduced-pr-limit');
 		expect(details.branch).toBe('heal/x-1');
 	});
 

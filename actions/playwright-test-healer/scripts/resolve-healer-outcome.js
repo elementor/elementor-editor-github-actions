@@ -17,7 +17,7 @@ const VERIFY_INFRA_STAGES = new Set([
 	'baseline',
 	'verify-run',
 ]);
-const NOT_REPRODUCIBLE_STAGE = 'not-reproducible';
+const BASELINE_NEIGHBOUR_FAILED_STAGE = 'baseline-neighbour-failed';
 const SCOPE_STAGE = 'scope';
 const CRASHED_VERIFY_STAGE = 'verify-job';
 const HANDOFF_OUTCOMES = {
@@ -64,6 +64,8 @@ function resolveHealerOutcome(state) {
 		jiraUrl,
 		duplicatePrUrl,
 		verifyOnly,
+		openPrResult,
+		unreproducedLimitReached,
 	} = state;
 
 	const base = {
@@ -152,9 +154,9 @@ function resolveHealerOutcome(state) {
 
 	const build = text(buildDescription);
 
-	if (NOT_REPRODUCIBLE_STAGE === stage) {
+	if (BASELINE_NEIGHBOUR_FAILED_STAGE === stage) {
 		return {
-			outcome: 'verification-not-reproducible',
+			outcome: 'verification-baseline-neighbour-failed',
 			details: { ...base, branch, buildDescription: build },
 		};
 	}
@@ -184,6 +186,20 @@ function resolveHealerOutcome(state) {
 				buildDescription: build,
 				existingPrUrl: text(duplicatePrUrl),
 			},
+		};
+	}
+
+	if (isTrue(unreproducedLimitReached)) {
+		return {
+			outcome: 'unreproduced-pr-limit',
+			details: { ...base, branch, buildDescription: build },
+		};
+	}
+
+	if ('failure' === text(openPrResult) || !text(prUrl)) {
+		return {
+			outcome: 'pr-open-failed',
+			details: { ...base, branch, buildDescription: build },
 		};
 	}
 
