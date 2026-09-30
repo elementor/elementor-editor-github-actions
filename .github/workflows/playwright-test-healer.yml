@@ -90,6 +90,11 @@ on:
                 required: false
                 type: string
                 default: 'ED-22856'
+            slack_channel:
+                description: 'Slack channel ID the run outcome is posted to. Empty posts nothing.'
+                required: false
+                type: string
+                default: ''
         secrets:
             CURSOR_APIKEY:
                 description: 'Cursor Cloud Agents API key. Needed unless fix_branch is given.'
@@ -105,8 +110,7 @@ on:
             JIRA_API_TOKEN:
                 required: false
             SLACK_TOKEN:
-                required: false
-            TEST_AUTOMATION_RESULTS:
+                description: 'Slack bot token for slack_channel. The bot must be a member of that channel.'
                 required: false
 
 permissions:
@@ -120,7 +124,6 @@ env:
     NIGHTLY_LABEL: nightly-test-healer
     MANUAL_LABEL: test-healer-manual
     UNREPRODUCED_LABEL: test-healer-unreproduced
-    HEALER_SLACK_ENABLED: 'false'
     BASELINE_MAX_REPEAT: '10'
 
 jobs:
@@ -1482,13 +1485,28 @@ jobs:
                   path: healer-attempt.json
                   retention-days: 30
 
-            - name: Notify Slack
-              if: env.HEALER_SLACK_ENABLED == 'true'
-              uses: ./.github/workflows/post-to-slack
-              with:
-                  SLACK_BOT_TOKEN: ${{ secrets.SLACK_TOKEN }}
-                  SLACK_TAG_CHANNELS: ${{ secrets.TEST_AUTOMATION_RESULTS }}
+            # A switched-off healer still runs every night; posting that each time
+            # would bury the outcomes that need someone.
+            - name: Prepare the Slack message
+              id: slack-payload
+              if: inputs.slack_channel != '' && steps.outcome.outputs.outcome != 'disabled'
+              env:
                   PAYLOAD: ${{ steps.outcome.outputs.payload }}
+                  SLACK_CHANNEL: ${{ inputs.slack_channel }}
+              run: |
+                  set -euo pipefail
+                  FILE="$RUNNER_TEMP/healer-slack-payload.json"
+                  printf '%s' "$PAYLOAD" | jq --arg channel "$SLACK_CHANNEL" '. + {channel: $channel}' > "$FILE"
+                  echo "file=$FILE" >> "$GITHUB_OUTPUT"
+
+            - name: Notify Slack
+              if: steps.slack-payload.outcome == 'success'
+              continue-on-error: true
+              uses: slackapi/slack-github-action@0d95c9a7becc1e6e297d76df9bc735c44f4cbcbc # v3
+              with:
+                  method: chat.postMessage
+                  token: ${{ secrets.SLACK_TOKEN }}
+                  payload-file-path: ${{ steps.slack-payload.outputs.file }}
 
     retry:
         name: Retry the fix
