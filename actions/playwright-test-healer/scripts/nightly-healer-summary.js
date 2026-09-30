@@ -113,7 +113,7 @@ const OUTCOME_BUILDERS = {
 		...contextLines(details),
 		...(details.summary ? ['', `> ${details.summary}`] : []),
 		'',
-		'The UI renders differently now rather than racing, so no wait would have fixed it. Completing this needs a version-gated snapshot — one of the `expectScreenshot*`/`expectMatchSnapshot*` helpers in `tests/playwright/assets/test-helper.ts` — plus a new fallback baseline image, and the healer is not allowed to add baseline images.',
+		'The UI renders differently now rather than racing, so no wait would have fixed it. Completing this needs a version-gated snapshot plus a new fallback baseline image, and the healer is not allowed to add baseline images.',
 	],
 	'agent-error': (details) => [
 		'### ❌ Cloud agent run failed',
@@ -172,6 +172,10 @@ const OUTCOME_BUILDERS = {
 function describeSkip(skip) {
 	if ('open-pr' === skip.reason) {
 		return `open PR ${skip.prUrl}`;
+	}
+
+	if ('unhealable-shard' === skip.reason) {
+		return `shard \`${skip.shardIndex}\` runs tests outside \`tests/playwright/\`, which a fix may not touch`;
 	}
 
 	return `\`${skip.outcome}\` on ${skip.recordedAt} (${skip.runUrl}), retried after ${COOLDOWN_DAYS} days`;

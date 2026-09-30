@@ -85,7 +85,7 @@ describe('buildNightlyHealerSummary', () => {
 			},
 		});
 
-		expect(summary).toContain('test-helper.ts');
+		expect(summary).toContain('version-gated snapshot');
 		expect(summary).toContain('not allowed to add baseline images');
 	});
 

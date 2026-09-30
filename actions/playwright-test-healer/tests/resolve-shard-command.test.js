@@ -56,9 +56,10 @@ describe('resolveShardCommand', () => {
 	});
 
 	it('requires the data import for the plugin tester shard', () => {
-		expect(resolveShardCommand('plugin_tester').requiresTestSetup).toBe(
-			true,
-		);
+		expect(resolveShardCommand('plugin_tester')).toMatchObject({
+			requiresTestSetup: true,
+			testSetupScript: 'test:setup',
+		});
 	});
 
 	it('requires the expert plan for import/export customization', () => {

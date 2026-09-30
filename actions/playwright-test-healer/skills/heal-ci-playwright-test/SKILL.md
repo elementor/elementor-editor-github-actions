@@ -1,6 +1,6 @@
 ---
 name: heal-ci-playwright-test
-description: Run the fix-playwright-test skill unattended on exactly one Playwright CI failure handed over by the nightly-test-healer GitHub Actions workflow. Push a fix to a specific branch or hand off with an exact marker line; never open a PR, never create a Jira ticket, never touch more than the one named test. Use only when dispatched by that workflow's prompt.
+description: Run the fix-playwright-test skill unattended on exactly one Playwright CI failure handed over by the Playwright test healer GitHub Actions workflow (Elementor Core or Pro). Push a fix to a specific branch or hand off with an exact marker line; never open a PR, never create a Jira ticket, never touch more than the one named test. Use only when dispatched by that workflow's prompt.
 ---
 
 # Heal CI Playwright Test (unattended)
@@ -30,11 +30,11 @@ Exactly one failing test, from one evidence run. Do not explore or fix other fai
 
 After Phase 3, decide which of these it is — before changing anything:
 
-| Cause                      | What it looks like                                                                                                                                                                                                                   | What you do                                               |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------- |
-| **Race** (the common case) | The test asserted before the UI settled. Output varies between retries; the failure screenshot shows a missing, empty, or half-painted element.                                                                                      | **Fix it** — wait for the deterministic state, then push. |
-| **Baseline drift**         | The UI genuinely renders differently now, usually because the run paired a different Core version with Pro. The diff is _stable and identical across every retry_ and shows real, finished UI that simply differs from the baseline. | **Hand off** — do not push a wait.                        |
-| **Product bug**            | The app is broken: uncaught PHP/JS exception overlay, HTTP 5xx for the action under test, editor crash.                                                                                                                              | **Escalate** — do not push.                               |
+| Cause                      | What it looks like                                                                                                                                                                                                                                                           | What you do                                               |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| **Race** (the common case) | The test asserted before the UI settled. Output varies between retries; the failure screenshot shows a missing, empty, or half-painted element.                                                                                                                              | **Fix it** — wait for the deterministic state, then push. |
+| **Baseline drift**         | The UI genuinely renders differently now, usually because the run tested another Core, Pro, or WordPress version than the baseline was captured on. The diff is _stable and identical across every retry_ and shows real, finished UI that simply differs from the baseline. | **Hand off** — do not push a wait.                        |
+| **Product bug**            | The app is broken: uncaught PHP/JS exception overlay, HTTP 5xx for the action under test, editor crash.                                                                                                                                                                      | **Escalate** — do not push.                               |
 
 Most candidates are races, and a race is never fixed by accepting a new screenshot, skipping, or weakening an assertion. But do not force every candidate into that box: a wait-based fix for baseline drift verifies green and hides a real rendering difference, which is worse than doing nothing.
 
@@ -45,15 +45,15 @@ Most candidates are races, and a race is never fixed by accepting a new screensh
 - **Race** — the diff varies between retries, or the actual shows something unfinished: a missing element, blank area, spinner, half-drawn dropdown, text in a fallback font, an animation mid-flight. Wait for the specific state that differs, reusing existing helpers, then take the screenshot.
 - **Baseline drift** — every retry's actual is byte-identical, fully rendered, and simply different from the baseline: a changed icon, a new control, different spacing, a renamed label. Before concluding:
 
-  - What Core version did the run use, and when was the baseline last captured (`git log`)?
-  - Does the area already version-gate its snapshots? `tests/playwright/assets/test-helper.ts` exports a family of helpers for baselines that legitimately differ by Core version — `expectScreenshotWithFallback`, `expectScreenshotWithFallbackByVersion`, `expectMatchSnapshotWithFallbackByVersion`, and `expectScreenshotByVersionThresholds`, in two shapes: `(target, baseName, minVersion, options)` and a `{ minVersion, snapshotName }[]` threshold list. **Grep the area for the whole family, not one name.** Do not grep for `getCoreVersion()`: ~40 files use it to gate test _logic_, which is a different thing.
+  - What versions did the run use, and when was the baseline last captured (`git log`)?
+  - Does the area already version-gate its snapshots? The prompt's _Repository notes_ name this repository's version-gating helpers and variables. **Grep the area for all of them, not one name.**
   - A bare `toMatchSnapshot` / `toHaveScreenshot` in an area where siblings version-gate is the usual tell that drift reached an ungated test.
 
   The complete fix for drift is a version-gated snapshot plus a new fallback baseline image, and you may not add images. Hand off.
 
 ## Evidence
 
-Evidence lives in the **failed shard's GitHub artifact**, not in a folder named after the Allure title. Failed Playwright jobs upload `test-results/` as `playwright-test-results-{shardIndex}` — job `Playwright - {shardIndex}` (custom-core) or `Nightly Full - Shard {shardIndex}` / `RC Full ... - Shard {shardIndex}`. Nightly/RC prefixes: `playwright-test-results-nightly-27`, `playwright-test-results-rc-27`. Named shards keep their suffix (`playwright-test-results-taxonomy_filter_1`). Download the one the prompt names:
+Evidence lives in the **failed shard's GitHub artifact**, not in a folder named after the Allure title. Failed Playwright jobs upload `test-results/` as a `playwright-test-results-*` artifact; the prompt's _Repository notes_ say how this repository names those artifacts and jobs. Download the one the prompt names:
 
 ```bash
 gh api repos/<org>/<repo>/actions/runs/<run_id>/artifacts --jq '.artifacts[] | {name,id}'
@@ -67,15 +67,15 @@ Output folders are truncated and hashed (`modules-search-search-infr-364a4-Searc
 
 ## Local run
 
-Phase 5, unattended. Run the one test locally before pushing whenever the environment allows it, following `AGENTS.md`: Core must be built at `../elementor`, then start `npm run wp-playground` in the background and run
+Phase 5, unattended. Run the one test locally before pushing whenever the environment allows it. Set up the environment as the prompt's _Repository notes_ describe, then run
 
 ```bash
 npx playwright test <test file> -g "<exact title>" --retries=0 --repeat-each=3 --config=tests/playwright/playwright.config.ts
 ```
 
 - **A local failure on something you added is proof the fix is wrong.** A locator you introduced that never resolves, a wait that times out, a new assertion that fails — fix it before pushing. Pushing it only wastes a CI verification run.
-- **A local pass is not proof the fix is right.** The playground stack (PHP 8.3, SQLite, latest WordPress, no Pro licence) is not the CI stack. CI verification against the real build decides.
-- **If the environment cannot run the test** — Core is not built, the playground will not start within about 10 minutes, or the test needs a Pro licence you do not have — do not fight it. Say so in one line of your report and continue. The whole assignment has a 45-minute budget.
+- **A local pass is not proof the fix is right.** The local stack is not the CI stack. CI verification against the real build decides.
+- **If the environment cannot run the test** — the plugin is not built, the environment will not start within about 10 minutes, or the test needs a licence or service you do not have — do not fight it. Say so in one line of your report and continue. The whole assignment has a 45-minute budget.
 - If three local attempts in a row fail on the _original_ error, that is evidence against a race. Reconsider drift or product bug before pushing a fourth wait.
 
 ## Hard constraints
@@ -92,7 +92,7 @@ A run is complete in exactly one of three ways, and only these three:
 
 1. **You pushed a fix** — a race. Commit only files under `tests/playwright/` and push to the exact branch name you were given. A separate CI job re-runs the test against the real build and opens the PR only if it passes; it hard-fails any diff outside `tests/playwright/` or touching an image.
 2. **Baseline drift** — do not push. The last line of your report must be exactly:
-   `📸 Baseline drift: [what differs] on Core [version]. No fix pushed — needs a versioned baseline.`
+   `📸 Baseline drift: [what differs] on [versions]. No fix pushed — needs a versioned baseline.`
 3. **Product bug** — only when the trace shows the product itself is broken and a wait cannot help. Do not push. The last line must be exactly:
    `🚨 Possible product bug: [what's wrong]. No fix pushed — escalating.`
 

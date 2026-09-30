@@ -16,13 +16,16 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
+const { loadProfile } = require('./profile');
 const { matchResultDirectories } = require('./rank-nightly-failures');
-const { shardIndexFromArtifactName } = require('./resolve-shard-command');
+const {
+	isHealableShard,
+	shardIndexFromArtifactName,
+} = require('./resolve-shard-command');
 
 const SHARD_ARTIFACT_PREFIX = 'playwright-test-results-';
-const EVIDENCE_WORKFLOWS = ['playwright-custom-core.yml'];
 const MAX_RUNS_TO_SCAN = 15;
-const MAX_ARTIFACTS_PER_RUN = 12;
+const RUNS_TO_LIST_PER_WORKFLOW = 100;
 
 function isShardArtifact(artifact) {
 	return Boolean(
@@ -103,22 +106,58 @@ function gh(args) {
 	});
 }
 
-function listShardArtifacts(repo, runId) {
+/**
+ * A product that uploads results from every shard, failed or not, has more
+ * shard artifacts than are worth downloading. Failing shards carry traces
+ * and screenshots, so the largest are tried first.
+ */
+function pickShardArtifacts(artifacts, profile = loadProfile()) {
+	return (artifacts || [])
+		.filter(isShardArtifact)
+		.filter((artifact) =>
+			isHealableShard(
+				shardIndexFromArtifactName(artifact.name, profile),
+				profile,
+			),
+		)
+		.sort((a, b) => (b.size_in_bytes || 0) - (a.size_in_bytes || 0))
+		.slice(0, profile.maxShardArtifactsPerRun);
+}
+
+function listShardArtifacts(repo, runId, profile) {
 	const output = gh([
 		'api',
 		`repos/${repo}/actions/runs/${runId}/artifacts`,
 		'--paginate',
 	]);
-	const parsed = JSON.parse(output);
-	return (parsed.artifacts || [])
-		.filter(isShardArtifact)
-		.slice(0, MAX_ARTIFACTS_PER_RUN);
+	return pickShardArtifacts(JSON.parse(output).artifacts, profile);
 }
 
-function listRecentRunIds(repo) {
+/**
+ * The runs API's `event` filter serves a stale index — it has returned only
+ * weeks-old scheduled runs while newer ones existed — so runs are listed
+ * unfiltered and narrowed to the profile's evidence events here.
+ */
+function pickEvidenceRuns(runs, profile = loadProfile()) {
+	const events = profile.evidenceEvents;
+	const matching = (runs || []).filter(
+		(run) => 0 === events.length || events.includes(run.event),
+	);
+
+	return newestMainFirst(matching.slice(0, MAX_RUNS_TO_SCAN));
+}
+
+function newestMainFirst(runs) {
+	return [
+		...runs.filter((run) => 'main' === run.headBranch),
+		...runs.filter((run) => 'main' !== run.headBranch),
+	];
+}
+
+function listRecentRunIds(repo, profile) {
 	const runIds = [];
 
-	for (const workflow of EVIDENCE_WORKFLOWS) {
+	for (const workflow of profile.evidenceWorkflows) {
 		let runs = [];
 		try {
 			const output = gh([
@@ -131,21 +170,18 @@ function listRecentRunIds(repo) {
 				'--status',
 				'completed',
 				'--limit',
-				String(MAX_RUNS_TO_SCAN),
+				String(RUNS_TO_LIST_PER_WORKFLOW),
 				'--json',
-				'databaseId,headBranch,createdAt',
+				'databaseId,headBranch,createdAt,event',
 			]);
 			runs = JSON.parse(output);
 		} catch {
 			continue;
 		}
 
-		const mainFirst = [
-			...runs.filter((run) => 'main' === run.headBranch),
-			...runs.filter((run) => 'main' !== run.headBranch),
-		];
-
-		runIds.push(...mainFirst.map((run) => run.databaseId));
+		runIds.push(
+			...pickEvidenceRuns(runs, profile).map((run) => run.databaseId),
+		);
 	}
 
 	return runIds;
@@ -217,8 +253,8 @@ function hasTraceInDirectory(dirPath) {
 	return false;
 }
 
-function findEvidenceInRun(repo, runId, testName) {
-	const artifacts = listShardArtifacts(repo, runId);
+function findEvidenceInRun(repo, runId, testName, profile) {
+	const artifacts = listShardArtifacts(repo, runId, profile);
 
 	if (0 === artifacts.length) {
 		return null;
@@ -252,12 +288,15 @@ function main() {
 		throw new Error('GITHUB_REPOSITORY and HEAL_TEST_NAME are required.');
 	}
 
-	const runIds = requestedRunId ? [requestedRunId] : listRecentRunIds(repo);
+	const profile = loadProfile();
+	const runIds = requestedRunId
+		? [requestedRunId]
+		: listRecentRunIds(repo, profile);
 	let evidence = null;
 
 	for (const runId of runIds) {
 		console.log(`Looking for "${testName}" evidence in run ${runId}`);
-		evidence = findEvidenceInRun(repo, runId, testName);
+		evidence = findEvidenceInRun(repo, runId, testName, profile);
 
 		if (evidence) {
 			break;
@@ -301,5 +340,8 @@ module.exports = {
 	buildEvidenceCandidates,
 	findEvidenceInResultDirs,
 	isShardArtifact,
+	newestMainFirst,
 	pickBestEvidence,
+	pickEvidenceRuns,
+	pickShardArtifacts,
 };

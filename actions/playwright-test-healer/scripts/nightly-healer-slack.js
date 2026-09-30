@@ -33,7 +33,7 @@ const OUTCOME_BUILDERS = {
 		text: 'Nightly Test Healer: no hard failures — green night',
 		blocks: [
 			section(
-				"✅ *Nightly Test Healer*\nNo hard test failures found in last night's Main Core + Main Pro run. Nothing to heal.",
+				'✅ *Nightly Test Healer*\nNo hard test failures found in the evidence run. Nothing to heal.',
 			),
 		],
 	}),

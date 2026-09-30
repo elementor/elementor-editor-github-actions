@@ -2,92 +2,82 @@
 
 /**
  * Maps a Playwright shard index back to the exact command, npm script, and
- * environment that `playwright-custom-core-suite.yml` used to run it.
+ * environment the product's CI used to run it.
  *
- * The healer must re-run a single test the same way the nightly ran it.
- * Named shards are not interchangeable with the default numeric shards:
- * `template_tests_*` use a different Playwright config, `plugin_tester`
- * needs `npm run test:setup` first, and `import_export_customization`
- * needs an `expert` Pro plan. Running such a test with the plain default
- * command either finds nothing or fails for environment reasons, which
- * would look like "the fix did not verify".
+ * The healer must re-run a single test the same way CI ran it. Named shards
+ * are not interchangeable with the default numeric shards: they can use a
+ * different Playwright config, need a data import first, or need a specific
+ * Pro plan. Running such a test with the plain default command either finds
+ * nothing or fails for environment reasons, which would look like "the fix
+ * did not verify". Each product's shards are listed in its profile.
  */
 
+const { loadProfile } = require('./profile');
+
 const ARTIFACT_NAME_PREFIX = 'playwright-test-results-';
-const ARTIFACT_RUN_PREFIXES = ['nightly-', 'rc-'];
-
-const DEFAULT_NPM_SCRIPT = 'test:playwright';
-const TEMPLATE_TESTS_NPM_SCRIPT = 'test:playwright:template-tests';
-
-const NAMED_SHARDS = {
-	template_tests_1: {
-		npmScript: TEMPLATE_TESTS_NPM_SCRIPT,
-		tag: '@template_test_1',
-	},
-	template_tests_2: {
-		npmScript: TEMPLATE_TESTS_NPM_SCRIPT,
-		tag: '@template_test_2',
-	},
-	plugin_tester: { tag: '@pluginTester', requiresTestSetup: true },
-	loop_taxonomy: { tag: '@loop_taxonomy' },
-	taxonomy_filter_1: { tag: '@taxonomyFilter-1' },
-	taxonomy_filter_2: { tag: '@taxonomyFilter-2' },
-	taxonomy_filter_3: { tag: '@taxonomyFilter-3' },
-	wc_archive_styling_1: { tag: '@woocommerce-archive-1' },
-	wc_archive_styling_2: { tag: '@woocommerce-archive-2' },
-	wc_product_styling_1: { tag: '@woocommerce-product-1' },
-	wc_product_styling_2: { tag: '@woocommerce-product-2' },
-	import_export_customization: {
-		tag: '@import_export_customization',
-		proPlan: 'expert',
-	},
-};
 
 /**
  * `playwright-test-results-27`, `playwright-test-results-nightly-27`, and
- * `playwright-test-results-rc-taxonomy_filter_1` all carry the shard index
- * as the suffix. Returns '' for anything that is not a shard artifact.
+ * `playwright-test-results-7-chromium` all carry the shard index between the
+ * profile's run prefixes and browser suffixes. Returns '' for anything that
+ * is not a shard artifact.
  */
-function shardIndexFromArtifactName(artifactName) {
+function shardIndexFromArtifactName(artifactName, profile = loadProfile()) {
 	const name = String(artifactName || '');
 
 	if (!name.startsWith(ARTIFACT_NAME_PREFIX)) {
 		return '';
 	}
 
-	let suffix = name.slice(ARTIFACT_NAME_PREFIX.length);
+	let shardIndex = name.slice(ARTIFACT_NAME_PREFIX.length);
 
-	for (const runPrefix of ARTIFACT_RUN_PREFIXES) {
-		if (suffix.startsWith(runPrefix)) {
-			suffix = suffix.slice(runPrefix.length);
-			break;
-		}
+	const runPrefix = profile.artifactRunPrefixes.find((prefix) =>
+		shardIndex.startsWith(prefix),
+	);
+	if (runPrefix) {
+		shardIndex = shardIndex.slice(runPrefix.length);
 	}
 
-	return suffix;
+	const suffix = profile.artifactSuffixes.find((candidate) =>
+		shardIndex.endsWith(candidate),
+	);
+	if (suffix) {
+		shardIndex = shardIndex.slice(0, -suffix.length);
+	}
+
+	return shardIndex;
 }
 
-function isNamedShard(shardIndex) {
+function isNamedShard(shardIndex, profile = loadProfile()) {
 	return Object.prototype.hasOwnProperty.call(
-		NAMED_SHARDS,
+		profile.namedShards,
 		String(shardIndex),
 	);
 }
 
 /**
+ * Some shards run tests from outside `tests/playwright/`, the only place a
+ * fix may touch, so a failure there cannot be healed.
+ */
+function isHealableShard(shardIndex, profile = loadProfile()) {
+	return !profile.unhealableShards.includes(String(shardIndex));
+}
+
+/**
  * An unknown or empty shard index falls back to the default command. That is
- * the correct default: the 50 numeric shards all run the same way, and a
+ * the correct default: the numeric shards all run the same way, and a
  * manually fed test with no shard evidence is most likely one of them.
  */
-function resolveShardCommand(shardIndex) {
-	const named = NAMED_SHARDS[String(shardIndex)] || {};
+function resolveShardCommand(shardIndex, profile = loadProfile()) {
+	const named = profile.namedShards[String(shardIndex)] || {};
 
 	return {
 		shardIndex: String(shardIndex || ''),
-		isNamedShard: isNamedShard(shardIndex),
-		npmScript: named.npmScript || DEFAULT_NPM_SCRIPT,
+		isNamedShard: isNamedShard(shardIndex, profile),
+		npmScript: named.npmScript || profile.defaultNpmScript,
 		tag: named.tag || '',
 		requiresTestSetup: Boolean(named.requiresTestSetup),
+		testSetupScript: profile.testSetupScript,
 		proPlan: named.proPlan || '',
 	};
 }
@@ -145,6 +135,7 @@ function main() {
 	setOutput('npm_script', shard.npmScript);
 	setOutput('grep_pattern', grepPattern);
 	setOutput('requires_test_setup', String(shard.requiresTestSetup));
+	setOutput('test_setup_script', shard.testSetupScript);
 	setOutput('pro_plan', shard.proPlan);
 	setOutput('shard_tag', shard.tag);
 	setOutput('is_named_shard', String(shard.isNamedShard));
@@ -160,11 +151,9 @@ if (require.main === module) {
 }
 
 module.exports = {
-	DEFAULT_NPM_SCRIPT,
-	NAMED_SHARDS,
-	TEMPLATE_TESTS_NPM_SCRIPT,
 	buildGrepPattern,
 	escapeRegExp,
+	isHealableShard,
 	isNamedShard,
 	parsePlaywrightListTotal,
 	resolveShardCommand,

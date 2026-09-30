@@ -5,7 +5,11 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
+const { loadProfile } = require('./profile');
+
 const CORE_BUILD_ARTIFACT_NAME = 'elementor-core-build';
+const CORE_PLUGIN_ARTIFACT_NAME = /^elementor-\d+\.\d+\.\d+/;
+const CORE_PLUGIN_DIRECTORY = 'build';
 const CORE_ZIP_FILE_NAME = 'elementor.zip';
 const HELLO_ARTIFACT_PREFIX = 'hello-elementor.';
 const LOCAL_HELLO_THEME_PATH = './hello-elementor';
@@ -240,16 +244,59 @@ function setOutput(name, value) {
 	fs.appendFileSync(process.env.GITHUB_OUTPUT, `${name}=${value}\n`);
 }
 
-function main() {
-	const repo = process.env.GITHUB_REPOSITORY;
-	const runId = process.env.SOURCE_RUN_ID;
+/**
+ * A Core run uploads the plugin it built as `elementor-<version>-<date>`,
+ * holding the plugin files themselves, and its Playwright jobs mount that as
+ * `./build`. It is kept for 3 days; past that the caller rebuilds the run's
+ * commit.
+ */
+function planCoreBuildRestore(artifacts) {
+	const plugin = (artifacts || [])
+		.filter(isUsableArtifact)
+		.find((artifact) => CORE_PLUGIN_ARTIFACT_NAME.test(artifact.name));
 
-	if (!repo || !runId) {
-		throw new Error(
-			'GITHUB_REPOSITORY and SOURCE_RUN_ID are required to restore nightly Playwright builds.',
+	return {
+		source: plugin ? BUILD_SOURCE_EVIDENCE : BUILD_SOURCE_FRESH,
+		coreArtifactName: plugin ? plugin.name : '',
+	};
+}
+
+function restoreCoreEvidenceBuild({ repo, runId, plan, workspaceDir }) {
+	if (!plan.coreArtifactName) {
+		return;
+	}
+
+	downloadArtifact(
+		repo,
+		runId,
+		plan.coreArtifactName,
+		path.join(workspaceDir, CORE_PLUGIN_DIRECTORY),
+	);
+}
+
+function restoreCore(repo, runId) {
+	const plan = planCoreBuildRestore(listRunArtifacts(repo, runId));
+
+	restoreCoreEvidenceBuild({
+		repo,
+		runId,
+		plan,
+		workspaceDir: process.cwd(),
+	});
+
+	if (plan.coreArtifactName) {
+		console.log(`Restored from run ${runId}: ${plan.coreArtifactName}`);
+	} else {
+		console.log(
+			`::notice::Run ${runId} no longer has its plugin build (kept for 3 days). Rebuilding the commit the run tested.`,
 		);
 	}
 
+	setOutput('build_source', plan.source);
+	setOutput('core_restored', plan.coreArtifactName ? 'true' : 'false');
+}
+
+function restorePro(repo, runId) {
 	const plan = planBuildRestore(listRunArtifacts(repo, runId));
 
 	restoreEvidenceBuilds({ repo, runId, plan, workspaceDir: process.cwd() });
@@ -273,6 +320,24 @@ function main() {
 	setOutput('pro_restored', plan.proArtifactName ? 'true' : 'false');
 }
 
+function main() {
+	const repo = process.env.GITHUB_REPOSITORY;
+	const runId = process.env.SOURCE_RUN_ID;
+
+	if (!repo || !runId) {
+		throw new Error(
+			'GITHUB_REPOSITORY and SOURCE_RUN_ID are required to restore nightly Playwright builds.',
+		);
+	}
+
+	if ('core' === loadProfile().product) {
+		restoreCore(repo, runId);
+		return;
+	}
+
+	restorePro(repo, runId);
+}
+
 if (require.main === module) {
 	try {
 		main();
@@ -287,4 +352,5 @@ module.exports = {
 	BUILD_SOURCE_FRESH,
 	CORE_BUILD_ARTIFACT_NAME,
 	planBuildRestore,
+	planCoreBuildRestore,
 };

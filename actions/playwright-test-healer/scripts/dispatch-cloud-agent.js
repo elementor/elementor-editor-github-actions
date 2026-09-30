@@ -3,6 +3,8 @@
 const fs = require('fs');
 const path = require('path');
 
+const { loadProfile } = require('./profile');
+
 const MAX_DISPATCH_ATTEMPTS = 4;
 const SKILLS_DIR = path.join(__dirname, '..', 'skills');
 const HEALER_SKILL_NAMES = ['heal-ci-playwright-test'];
@@ -95,6 +97,7 @@ function buildPrompt({
 	previousBranch = HEAL_PREVIOUS_BRANCH,
 	previousRunId = HEAL_PREVIOUS_RUN_ID,
 	skills = readHealerSkills(),
+	profile = loadProfile(),
 } = {}) {
 	const attemptNumber = Number(attempt) || 1;
 	const attemptTotal = Number(maxAttempts) || 1;
@@ -131,17 +134,22 @@ function buildPrompt({
 		`Failing test: "${testName}"`,
 		`Evidence run: ${runUrl}`,
 		shardIndex
-			? `Failed shard: ${shardIndex} — the evidence is in that run's "playwright-test-results-${shardIndex}" artifact. Download that one; do not guess from the Allure title.`
+			? `Failed shard: ${shardIndex} — the evidence is in that run's playwright-test-results artifact for this shard ("playwright-test-results-${shardIndex}", named as the Repository notes describe). Download that one; do not guess from the Allure title.`
 			: 'Failed shard: unknown — find the failed job in that run and download its playwright-test-results-* artifact.',
 		`Matching test-results directories inside that artifact to inspect for error-context.md/trace.zip: ${matchedDirs}`,
 		'',
 		`Commit and push your fix to a new branch named exactly "${branchName}", starting from git ref "${baseRef}" (the PR base, not the failing CI run). Only commit files under tests/playwright/. Do not commit healer workflow or skill files. Do NOT open a pull request — a separate CI job verifies the fix and opens the PR.`,
 		'Decide race vs baseline drift vs product bug before changing anything; the skill has the decision table.',
 		'Locator timeout: first confirm the element exists in that DOM state — a locator that never resolved usually means it does not, and a wait will not help. If it exists and its request already returned 200, it is a race: wait in tests/playwright/ for the locator the test already expects, then push. Empty preview or a missing results list after a 200 is a race, not a product bug.',
-		'Screenshot diffs: if the actual varies between retries or shows unfinished UI, it is a race — wait for the settled state and push. If every retry is byte-identical and shows fully rendered UI that simply differs from the baseline, that is Core-version baseline drift: do not push a wait, and print exactly "📸 Baseline drift: ... No fix pushed — needs a versioned baseline." Never update, replace, or add snapshot images in either case.',
+		'Screenshot diffs: if the actual varies between retries or shows unfinished UI, it is a race — wait for the settled state and push. If every retry is byte-identical and shows fully rendered UI that simply differs from the baseline, that is version baseline drift: do not push a wait, and print exactly "📸 Baseline drift: ... No fix pushed — needs a versioned baseline." Never update, replace, or add snapshot images in either case.',
 		'Hand off without a push only if you print exactly "🚨 Possible product bug: ..." AND the trace shows a crash, PHP/JS exception overlay, or HTTP 5xx.',
 		"Before pushing, run the test locally as the skill's Local run section describes; a locator you added that never resolves locally must be fixed, not pushed.",
 		...retryLines,
+		'',
+		`Repository notes (${profile.displayName}):`,
+		`- Evidence: ${profile.agent.evidence}`,
+		`- Local run: ${profile.agent.localRun}`,
+		`- Baseline drift: ${profile.agent.baselineDrift}`,
 		...skillSections,
 	].join('\n');
 }

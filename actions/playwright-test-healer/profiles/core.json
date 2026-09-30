@@ -1,0 +1,27 @@
+{
+	"product": "core",
+	"displayName": "Elementor Core",
+	"evidenceWorkflows": ["playwright.yml"],
+	"evidenceEvents": ["schedule"],
+	"artifactRunPrefixes": [],
+	"artifactSuffixes": ["-chromium", "-firefox", "-webkit"],
+	"maxShardArtifactsPerRun": 30,
+	"defaultNpmScript": "test:playwright",
+	"testSetupScript": "test:setup:playwright",
+	"namedShards": {
+		"plugin_tester_container_1": { "tag": "@plugin_tester_container" },
+		"plugin_tester_container_2": { "tag": "@plugin_tester_container" },
+		"plugin_tester_section_1": { "tag": "@plugin_tester_section" },
+		"plugin_tester_section_2": { "tag": "@plugin_tester_section" },
+		"import_export_customization": { "tag": "@import_export_customization" }
+	},
+	"unhealableShards": [
+		"elements-regression-core",
+		"elements-regression-atomic"
+	],
+	"agent": {
+		"evidence": "Every Playwright shard uploads `test-results/` as `playwright-test-results-{shardIndex}-{browser}`, failed or not — for example `playwright-test-results-7-chromium` or `playwright-test-results-plugin_tester_container_1-chromium` — from the job `Playwright Suite / Playwright test - {shardIndex} on PHP ({version})`. Take the named shard's artifact; the others are from shards that may have passed.",
+		"localRun": "Follow `AGENTS.md`: `SKIP_CONFIRMATION=true npm run env:setup` gives the CI-parity Docker stack on ports 8888 and 8889; `npm run wp-playground` is quicker, but its PHP and WordPress differ from CI. Scheduled runs update WordPress to nightly and export `WP_VERSION=nightly` and `WP_MAJOR_VERSION`; export the same values when the test's snapshot names depend on them.",
+		"baselineDrift": "Drift here usually means WordPress nightly changed the rendering. Scheduled runs set `WP_VERSION=nightly` and `WP_MAJOR_VERSION`, and some snapshot names depend on them — see `tests/playwright/utils/screenshot-name.ts` and the helpers that read `process.env.WP_VERSION`. Grep the area for both before concluding."
+	}
+}

@@ -2,9 +2,10 @@
 
 /**
  * Works out which Pro and Core an evidence run tested, so the fix is branched
- * from and verified against the same thing that failed.
+ * from and verified against the same thing that failed. A Core run tests its
+ * own commit; see resolve-core-evidence-build.js.
  *
- * The Custom Core suite is dispatched with any Pro branch and any Core branch
+ * Pro's Custom Core suite is dispatched with any Pro branch and any Core branch
  * or release, so the run's own branch says nothing about either: a run on
  * `main` can test Pro 4.02 against Core `release/beta`. The reusable
  * workflow's inputs, and the `elementor-pro-<pro>-core-<core>` name of the
@@ -15,6 +16,8 @@
 const { execFileSync } = require('child_process');
 const fs = require('fs');
 const { fetchJobLog } = require('./fetch-job-log');
+const { loadProfile } = require('./profile');
+const { resolveCoreEvidenceBuild } = require('./resolve-core-evidence-build');
 
 const MAX_LOG_BYTES = 64 * 1024 * 1024;
 const TIMESTAMP_PREFIX = /^\d{4}-\d{2}-\d{2}T[\d:.]+Z ?/;
@@ -243,14 +246,54 @@ function setOutput(name, value) {
 	}
 }
 
-function main() {
-	const repo = process.env.GITHUB_REPOSITORY;
-	const runId = process.env.SOURCE_RUN_ID;
+function fetchCoreRunFacts(repo, runId) {
+	const run = JSON.parse(gh(['api', `repos/${repo}/actions/runs/${runId}`]));
+	const jobs = gh([
+		'api',
+		`repos/${repo}/actions/runs/${runId}/jobs?per_page=100`,
+		'--paginate',
+		'--jq',
+		'.jobs[] | {name, steps: [.steps[]? | {name, conclusion}]} | tojson',
+	])
+		.split('\n')
+		.filter(Boolean)
+		.map((line) => JSON.parse(line));
 
-	if (!repo || !runId) {
-		throw new Error('GITHUB_REPOSITORY and SOURCE_RUN_ID are required.');
-	}
+	return { run, jobs };
+}
 
+function readCoreVersionAt(repo, sha) {
+	const packageJson = gh([
+		'api',
+		`repos/${repo}/contents/package.json?ref=${sha}`,
+		'-H',
+		'Accept: application/vnd.github.raw+json',
+	]);
+	return JSON.parse(packageJson).version || '';
+}
+
+function resolveCoreRun(repo, runId) {
+	const { run, jobs } = fetchCoreRunFacts(repo, runId);
+	const build = resolveCoreEvidenceBuild({
+		runId,
+		run,
+		jobs,
+		coreVersion: run?.head_sha ? readCoreVersionAt(repo, run.head_sha) : '',
+		requestedBaseRef: process.env.REQUESTED_BASE_REF || '',
+	});
+
+	console.log(
+		`Run ${runId} tested Core ${build.coreVersion} from ${build.baseRef} at ${build.coreSha} on PHP ${build.phpVersion || '(unknown)'}${build.wpNightly ? ' with WordPress nightly' : ''}.`,
+	);
+
+	setOutput('base_ref', build.baseRef);
+	setOutput('core_sha', build.coreSha);
+	setOutput('core_version', build.coreVersion);
+	setOutput('php_version', build.phpVersion);
+	setOutput('wp_nightly', String(build.wpNightly));
+}
+
+function resolveProRun(repo, runId) {
 	const builds = resolveEvidenceBuilds({
 		runId,
 		requestedBaseRef: process.env.REQUESTED_BASE_REF || '',
@@ -290,6 +333,22 @@ function main() {
 	setOutput('core_release_tag', builds.coreReleaseTag);
 	setOutput('pro_version', builds.proVersion);
 	setOutput('core_version', builds.coreVersion);
+}
+
+function main() {
+	const repo = process.env.GITHUB_REPOSITORY;
+	const runId = process.env.SOURCE_RUN_ID;
+
+	if (!repo || !runId) {
+		throw new Error('GITHUB_REPOSITORY and SOURCE_RUN_ID are required.');
+	}
+
+	if ('core' === loadProfile().product) {
+		resolveCoreRun(repo, runId);
+		return;
+	}
+
+	resolveProRun(repo, runId);
 }
 
 if (require.main === module) {

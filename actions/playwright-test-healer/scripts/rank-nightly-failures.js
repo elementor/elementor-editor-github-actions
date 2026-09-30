@@ -5,7 +5,11 @@ const path = require('path');
 
 const { DEFAULT_HARD_FAILURES_PATH } = require('./collect-log-hard-failures');
 const { findSkipReason, readSkipSources } = require('./healer-skips');
-const { shardIndexFromArtifactName } = require('./resolve-shard-command');
+const { loadProfile } = require('./profile');
+const {
+	isHealableShard,
+	shardIndexFromArtifactName,
+} = require('./resolve-shard-command');
 
 const MIN_CONFIDENCE_SCORE = 1;
 const TRACE_EVIDENCE_SCORE = 2;
@@ -179,9 +183,19 @@ function readResultDirs(root) {
  * The shard the evidence came from, preferring a trace-backed directory so
  * the reported shard matches the evidence the agent will actually read.
  */
-function shardIndexForMatchedDirs(matchedDirs) {
+function shardIndexForMatchedDirs(matchedDirs, profile = loadProfile()) {
 	const preferred = matchedDirs.find((dir) => dir.hasTrace) || matchedDirs[0];
-	return preferred ? shardIndexFromArtifactName(preferred.artifactName) : '';
+	return preferred
+		? shardIndexFromArtifactName(preferred.artifactName, profile)
+		: '';
+}
+
+function findCandidateSkip(candidate, skipSources, profile) {
+	if (!isHealableShard(candidate.shardIndex, profile)) {
+		return { reason: 'unhealable-shard', shardIndex: candidate.shardIndex };
+	}
+
+	return skipSources ? findSkipReason(candidate.testName, skipSources) : null;
 }
 
 function scoreCandidate(matchedDirs) {
@@ -204,6 +218,7 @@ function selectHealCandidate({
 	hardFailureNames,
 	resultDirs,
 	skipSources,
+	profile = loadProfile(),
 }) {
 	const hardFailures = hardFailureNames
 		? hardFailureNames.map((name) => ({ name }))
@@ -226,7 +241,7 @@ function selectHealCandidate({
 			return {
 				testName: test.name,
 				matchedDirs: matchedDirs.map((dir) => dir.dirName),
-				shardIndex: shardIndexForMatchedDirs(matchedDirs),
+				shardIndex: shardIndexForMatchedDirs(matchedDirs, profile),
 				hasTrace: matchedDirs.some((dir) => dir.hasTrace),
 				score: scoreCandidate(matchedDirs),
 				hasEvidence: matchedDirs.length > 0,
@@ -253,9 +268,7 @@ function selectHealCandidate({
 
 	const skippedCandidates = [];
 	const candidate = eligible.find((test) => {
-		const skip = skipSources
-			? findSkipReason(test.testName, skipSources)
-			: null;
+		const skip = findCandidateSkip(test, skipSources, profile);
 
 		if (skip) {
 			skippedCandidates.push({ testName: test.testName, ...skip });
