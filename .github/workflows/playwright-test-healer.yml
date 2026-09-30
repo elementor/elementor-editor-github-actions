@@ -119,6 +119,7 @@ env:
     HEALER_PARENT_JIRA_KEY: ${{ inputs.jira_parent_key }}
     NIGHTLY_LABEL: nightly-test-healer
     MANUAL_LABEL: test-healer-manual
+    UNREPRODUCED_LABEL: test-healer-unreproduced
     HEALER_SLACK_ENABLED: 'false'
     BASELINE_MAX_REPEAT: '10'
 
@@ -626,6 +627,7 @@ jobs:
             test_file: ${{ steps.baseline.outputs.test_file }}
             runs_to_failure: ${{ steps.baseline.outputs.runs_to_failure }}
             fix_repeat: ${{ steps.baseline.outputs.fix_repeat }}
+            reproduced: ${{ steps.baseline.outputs.reproduced }}
             verified_sha: ${{ steps.scope.outputs.sha }}
         steps:
             # No token is left in .git/config: the agent's test code runs in this
@@ -1052,9 +1054,10 @@ jobs:
                     exit 1
                   fi
 
-            # A fix only counts if the test fails without it on the same builds. A
-            # test that is green here was fixed by something else, or never failed
-            # on this code, and a green run with the fix would prove nothing.
+            # A fix is proven only if the test fails without it on the same builds.
+            # Most nightly flakes stay green in isolation, so a failure that does not
+            # show up here still gets its fix run and a draft PR flagged unreproduced:
+            # that only proves the fix breaks nothing, and the PR says so.
             # A flake passes a few runs in a row often enough to throw good fixes
             # away, so this repeats well past verify_repeat and stops at the first
             # failure, which also keeps the usual reproducing case short. When the
@@ -1098,7 +1101,7 @@ jobs:
 
             - name: Run the test
               id: run-test
-              if: steps.baseline.outcome == 'success' && steps.baseline.outputs.reproduced == 'true'
+              if: steps.baseline.outcome == 'success' && steps.baseline.outputs.fix_repeat != ''
               continue-on-error: true
               env:
                   NPM_SCRIPT: ${{ steps.cmd.outputs.npm_script }}
@@ -1141,7 +1144,7 @@ jobs:
                     STAGE="grep"
                   elif [ "$BASELINE" != "success" ]; then
                     STAGE="baseline"
-                  elif [ "$REPRODUCED" != "true" ]; then
+                  elif [ "$REPRODUCED" != "true" ] && [ "$RUN_TEST" = "skipped" ]; then
                     STAGE="not-reproducible"
                   elif [ "$RUN_TEST_INFRA_ERROR" = "true" ]; then
                     STAGE="verify-run"
@@ -1248,6 +1251,7 @@ jobs:
                   HEAL_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ needs.find-candidate.outputs.source_run_id }}
                   HEAL_VERIFICATION_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
                   HEAL_BRANCH: ${{ needs.wait-for-agent.outputs.branch }}
+                  HEAL_REPRODUCED: ${{ needs.verify-fix.outputs.reproduced }}
               run: node "$HEALER_DIR/scripts/create-jira-heal-ticket.js"
 
             - name: Create the PR
@@ -1265,6 +1269,7 @@ jobs:
                   TEST_FILE: ${{ needs.verify-fix.outputs.test_file }}
                   RUNS_TO_FAILURE: ${{ needs.verify-fix.outputs.runs_to_failure }}
                   FIX_REPEAT: ${{ needs.verify-fix.outputs.fix_repeat }}
+                  REPRODUCED: ${{ needs.verify-fix.outputs.reproduced }}
                   SOURCE_RUN_ID: ${{ needs.find-candidate.outputs.source_run_id }}
                   RESULT_TEXT: ${{ needs.wait-for-agent.outputs.result_text }}
                   BUILD_DESCRIPTION: ${{ needs.verify-fix.outputs.build_description }}
@@ -1292,6 +1297,15 @@ jobs:
                     RAN="this one test"
                   fi
 
+                  PR_FLAGS=()
+                  if [ "$REPRODUCED" = "true" ]; then
+                    VERIFIED="Verified by running ${RAN}: without the fix it failed on run ${RUNS_TO_FAILURE}, and with it the test passed ${FIX_REPEAT}x in a row — at least three times as many runs as the failure took, so a fix that did nothing would pass only about 5% of the time."
+                  else
+                    VERIFIED="⚠️ **The failure did not reproduce.** The test failed in the evidence run, but ${RAN} passed every re-run without the fix. With the fix it passed ${FIX_REPEAT}x in a row, which shows the fix breaks nothing — not that it removes the flake, so judge it by the agent's root cause below."
+                    gh label create "$UNREPRODUCED_LABEL" --repo "$REPO" --color FBCA04 --description "Test healer fix whose failure did not reproduce during verification" 2>/dev/null || true
+                    PR_FLAGS=(--draft --label "$UNREPRODUCED_LABEL")
+                  fi
+
                   BODY=$(printf '%s\n' \
                     "Automated test-healer fix for \`${TEST_NAME}\`." \
                     "" \
@@ -1303,7 +1317,7 @@ jobs:
                     "| Shard | \`${SHARD_INDEX:-default}\` |" \
                     "| Verification | https://github.com/${REPO}/actions/runs/${GITHUB_RUN_ID} |" \
                     "" \
-                    "Verified by running ${RAN}: without the fix it failed on run ${RUNS_TO_FAILURE}, and with it the test passed ${FIX_REPEAT}x in a row — at least three times as many runs as the failure took, so a fix that did nothing would pass only about 5% of the time. Both on the shard's own command, against ${BUILD_DESCRIPTION}. The diff is gated to \`tests/playwright/\` with no snapshot-baseline changes." \
+                    "${VERIFIED} Both on the shard's own command, against ${BUILD_DESCRIPTION}. The diff is gated to \`tests/playwright/\` with no snapshot-baseline changes." \
                     "" \
                     "**Agent summary**" \
                     "" \
@@ -1315,7 +1329,8 @@ jobs:
                     --head "$BRANCH" \
                     --title "$TITLE" \
                     --body "$BODY" \
-                    --label "$LABEL")
+                    --label "$LABEL" \
+                    "${PR_FLAGS[@]}")
 
                   echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
                   echo "Opened $PR_URL"
@@ -1375,6 +1390,7 @@ jobs:
                   AGENT_RESULT: ${{ needs.wait-for-agent.outputs.result_text }}
                   AGENT_HANDOFF: ${{ needs.wait-for-agent.outputs.handoff }}
                   VERIFY_PASSED: ${{ needs.verify-fix.outputs.passed }}
+                  VERIFY_REPRODUCED: ${{ needs.verify-fix.outputs.reproduced }}
                   VERIFY_STAGE: ${{ needs.verify-fix.outputs.stage }}
                   VERIFY_JOB_RESULT: ${{ needs.verify-fix.result }}
                   VERIFY_BUILD: ${{ needs.verify-fix.outputs.build_description }}
@@ -1430,6 +1446,7 @@ jobs:
                         agentResult: process.env.AGENT_RESULT,
                         agentHandoff: process.env.AGENT_HANDOFF,
                         verifyPassed: process.env.VERIFY_PASSED,
+                        verifyReproduced: process.env.VERIFY_REPRODUCED,
                         verifyStage: process.env.VERIFY_STAGE,
                         verifyJobResult: process.env.VERIFY_JOB_RESULT,
                         buildDescription: process.env.VERIFY_BUILD,

@@ -42,6 +42,21 @@ describe('buildNightlyHealerSlackPayload', () => {
 		expect(JSON.stringify(payload.blocks)).toContain(details.rca);
 	});
 
+	it('marks a healed PR whose failure did not reproduce', () => {
+		// Act
+		const payload = buildNightlyHealerSlackPayload({
+			outcome: 'healed',
+			details: {
+				prUrl: 'https://github.com/elementor/elementor-pro/pull/2',
+				testName: 'renders correctly',
+				reproduced: false,
+			},
+		});
+
+		// Assert
+		expect(JSON.stringify(payload.blocks)).toContain('did not reproduce');
+	});
+
 	it('builds a no-artifact-evidence message listing the ranked failures', () => {
 		// Arrange
 		const details = { rankedFailures: ['test a', 'test b'] };

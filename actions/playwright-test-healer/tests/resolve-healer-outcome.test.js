@@ -275,6 +275,52 @@ describe('resolveHealerOutcome', () => {
 		});
 	});
 
+	it('reports a fix that passed although the failure never reproduced as healed, flagged unreproduced', () => {
+		// Act
+		const { outcome, details } = resolveHealerOutcome({
+			...candidate,
+			agentStatus: 'FINISHED',
+			agentBranch: 'heal/x-1',
+			verifyPassed: 'true',
+			verifyReproduced: 'false',
+			prUrl: 'https://github.com/o/r/pull/2',
+		});
+
+		// Assert
+		expect(outcome).toBe('healed');
+		expect(details.reproduced).toBe(false);
+	});
+
+	it('treats a verification that does not report reproduction as reproduced', () => {
+		// Act
+		const { details } = resolveHealerOutcome({
+			...candidate,
+			agentStatus: 'FINISHED',
+			agentBranch: 'heal/x-1',
+			verifyPassed: 'true',
+			prUrl: 'https://github.com/o/r/pull/2',
+		});
+
+		// Assert
+		expect(details.reproduced).toBe(true);
+	});
+
+	it('flags a verify-only branch that passed without the failure reproducing', () => {
+		// Act
+		const { outcome, details } = resolveHealerOutcome({
+			...candidate,
+			agentStatus: 'FINISHED',
+			agentBranch: 'heal/x-1',
+			verifyPassed: 'true',
+			verifyReproduced: 'false',
+			verifyOnly: 'true',
+		});
+
+		// Assert
+		expect(outcome).toBe('verified-branch');
+		expect(details.reproduced).toBe(false);
+	});
+
 	it('reports a verified fix as a duplicate when a PR for the test appeared meanwhile', () => {
 		// Act
 		const { outcome, details } = resolveHealerOutcome({

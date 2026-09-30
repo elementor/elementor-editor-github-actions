@@ -43,11 +43,19 @@ function contextLines({ testName, shardIndex, repo, sourceRunId, branch }) {
 
 const OUTCOME_BUILDERS = {
 	healed: (details) => [
-		'### ✅ Fix verified — PR opened',
+		false === details.reproduced
+			? '### ⚠️ Draft PR opened — the failure did not reproduce'
+			: '### ✅ Fix verified — PR opened',
 		'',
 		`### 👉 ${details.prUrl}`,
 		'',
 		...(details.jiraUrl ? [`Jira: ${details.jiraUrl}`, ''] : []),
+		...(false === details.reproduced
+			? [
+					'The test failed in CI but passed every re-run without the fix, so the fix could only be shown to break nothing, not to remove the flake. Review the RCA before merging.',
+					'',
+				]
+			: []),
 		...contextLines(details),
 		...(details.buildDescription
 			? [
@@ -62,7 +70,9 @@ const OUTCOME_BUILDERS = {
 		'',
 		...contextLines(details),
 		'',
-		`The test failed without \`${details.branch}\`'s changes and passed with them.`,
+		false === details.reproduced
+			? `The failure did not reproduce without \`${details.branch}\`'s changes; with them the test kept passing, so the branch breaks nothing.`
+			: `The test failed without \`${details.branch}\`'s changes and passed with them.`,
 		...(details.buildDescription
 			? ['', `Both runs used ${details.buildDescription}.`]
 			: []),

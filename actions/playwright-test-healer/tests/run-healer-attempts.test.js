@@ -6,6 +6,7 @@ const {
 	parseTestFile,
 	requiredFixRepeat,
 	summarizeReport,
+	unreproducedFixRepeat,
 } = require('../scripts/run-healer-attempts');
 
 const TARGET = 'Check Mega Menu icons';
@@ -205,6 +206,38 @@ describe('assertTestsRan', () => {
 
 		// Assert
 		expect(act).not.toThrow();
+	});
+});
+
+describe('unreproducedFixRepeat', () => {
+	it('asks the fix to pass as many runs as the test passed without it', () => {
+		expect(
+			unreproducedFixRepeat({
+				baselinePasses: 10,
+				floor: 3,
+				scope: SCOPE_TEST,
+			}),
+		).toBe(10);
+	});
+
+	it('never asks for fewer than verify_repeat', () => {
+		expect(
+			unreproducedFixRepeat({
+				baselinePasses: 2,
+				floor: 3,
+				scope: SCOPE_FILE,
+			}),
+		).toBe(3);
+	});
+
+	it('caps the runs at the scope maximum', () => {
+		expect(
+			unreproducedFixRepeat({
+				baselinePasses: 50,
+				floor: 3,
+				scope: SCOPE_FILE,
+			}),
+		).toBe(MAX_FIX_REPEAT[SCOPE_FILE]);
 	});
 });
 

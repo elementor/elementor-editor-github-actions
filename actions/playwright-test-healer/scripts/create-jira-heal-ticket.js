@@ -11,6 +11,7 @@ const {
 	HEAL_RUN_URL,
 	HEAL_VERIFICATION_RUN_URL,
 	HEAL_BRANCH,
+	HEAL_REPRODUCED,
 	JIRA_PARENT_KEY,
 	JIRA_HEALER_ASSIGNEE_EMAIL,
 } = process.env;
@@ -136,6 +137,7 @@ async function main() {
 		verificationRunUrl: HEAL_VERIFICATION_RUN_URL,
 		branch: HEAL_BRANCH,
 		parentKey: JIRA_PARENT_KEY,
+		reproduced: 'false' !== HEAL_REPRODUCED,
 	});
 
 	const accountId = await findAssigneeAccountId(

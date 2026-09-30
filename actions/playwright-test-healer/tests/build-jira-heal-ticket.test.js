@@ -89,6 +89,20 @@ describe('buildJiraIssuePayload', () => {
 		expect(description).toContain(params.branch);
 	});
 
+	it('says so when the failure did not reproduce during verification', () => {
+		// Act
+		const payload = buildJiraIssuePayload({
+			testName: 'renders correctly',
+			runUrl: 'https://example.com/run/1',
+			reproduced: false,
+		});
+
+		// Assert
+		const description = JSON.stringify(payload.fields.description);
+		expect(description).toContain('did not reproduce');
+		expect(description).not.toContain('failed without the change');
+	});
+
 	it('omits the parent when no parent key is given', () => {
 		// Act
 		const payload = buildJiraIssuePayload({

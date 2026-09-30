@@ -131,6 +131,16 @@ function requiredFixRepeat({ runsToFailure, floor, scope }) {
 	return Math.min(wanted, MAX_FIX_REPEAT[scope]);
 }
 
+/**
+ * A failure that never showed up leaves nothing to measure a fix against, so
+ * the fix is only asked to pass as often as the test did without it — proof
+ * that it breaks nothing, not that it removes the flake.
+ */
+function unreproducedFixRepeat({ baselinePasses, floor, scope }) {
+	const wanted = Math.max(Number(floor) || 1, Number(baselinePasses) || 0);
+	return Math.min(wanted, MAX_FIX_REPEAT[scope]);
+}
+
 function runPlaywright({
 	npmScript,
 	selector,
@@ -258,23 +268,28 @@ function baseline(env) {
 	setOutput('scope', scope);
 	setOutput('test_file', common.testFile);
 	setOutput('runs_to_failure', reproduced ? String(runsToFailure) : '');
-	setOutput(
-		'fix_repeat',
-		reproduced
-			? String(
-					requiredFixRepeat({
-						runsToFailure,
-						floor: env.VERIFY_REPEAT,
-						scope,
-					}),
-				)
-			: '',
-	);
+	// A neighbour that fails without the fix fails with it too, and would be
+	// read as the fix failing; only a clean pass run is worth checking against.
+	let fixRepeat = '';
+	if (reproduced) {
+		fixRepeat = requiredFixRepeat({
+			runsToFailure,
+			floor: env.VERIFY_REPEAT,
+			scope,
+		});
+	} else if (!summary.otherFailed) {
+		fixRepeat = unreproducedFixRepeat({
+			baselinePasses: summary.targetPasses,
+			floor: env.VERIFY_REPEAT,
+			scope,
+		});
+	}
+	setOutput('fix_repeat', String(fixRepeat));
 
 	if (!reproduced) {
 		const why = summary.otherFailed
-			? 'another test in the file failed first'
-			: `it passed ${summary.targetPasses}x`;
+			? 'another test in the file failed first, so the fix is not run'
+			: `it passed ${summary.targetPasses}x; the fix is still run, to show it breaks nothing`;
 		console.log(
 			`::warning::The failure does not reproduce without the fix: ${why}.`,
 		);
@@ -329,4 +344,5 @@ module.exports = {
 	parseTestFile,
 	requiredFixRepeat,
 	summarizeReport,
+	unreproducedFixRepeat,
 };

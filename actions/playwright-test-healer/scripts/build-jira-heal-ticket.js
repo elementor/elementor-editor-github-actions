@@ -77,7 +77,11 @@ function buildJiraIssuePayload({
 	branch,
 	parentKey,
 	projectKey = DEFAULT_PROJECT_KEY,
+	reproduced = true,
 }) {
+	const verification = reproduced
+		? 'The fix failed without the change and passed repeatedly with it on the builds the failure ran on'
+		: 'The failure did not reproduce during verification, so the fix was only shown to pass repeatedly on the builds the failure ran on, not to remove the flake; review it before merging';
 	return {
 		fields: {
 			project: { key: projectKey },
@@ -89,7 +93,7 @@ function buildJiraIssuePayload({
 				type: 'doc',
 				content: [
 					paragraph(
-						`The Playwright test healer fixed a flaky test: "${testName}". The fix failed without the change and passed repeatedly with it on the builds the failure ran on, and a PR referencing this ticket is being opened from branch ${branch || '(unknown)'}.`,
+						`The Playwright test healer fixed a flaky test: "${testName}". ${verification}, and a PR referencing this ticket is being opened from branch ${branch || '(unknown)'}.`,
 					),
 					linkParagraph('Failing run', runUrl),
 					...(verificationRunUrl

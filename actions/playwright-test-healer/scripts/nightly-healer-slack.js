@@ -117,16 +117,20 @@ const OUTCOME_BUILDERS = {
 			),
 		],
 	}),
-	healed: ({ prUrl, testName, shardIndex, jiraUrl, rca }) => {
+	healed: ({ prUrl, testName, shardIndex, jiraUrl, rca, reproduced }) => {
 		const links = [`<${prUrl}|View PR>`];
 
 		if (jiraUrl) {
 			links.push(`<${jiraUrl}|Jira ticket>`);
 		}
 
+		const headline =
+			false === reproduced
+				? '⚠️ *Test Healer: opened a draft PR — the failure did not reproduce, so the fix is unproven*'
+				: '✅ *Test Healer: opened a PR*';
 		const blocks = [
 			section(
-				`✅ *Test Healer: opened a PR*\nTest: *${testName}*${shardIndex ? `\nShard: \`${shardIndex}\`` : ''}\n${links.join(' · ')}`,
+				`${headline}\nTest: *${testName}*${shardIndex ? `\nShard: \`${shardIndex}\`` : ''}\n${links.join(' · ')}`,
 			),
 		];
 

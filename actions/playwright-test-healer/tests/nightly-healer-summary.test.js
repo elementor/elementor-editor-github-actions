@@ -42,6 +42,21 @@ describe('buildNightlyHealerSummary', () => {
 		);
 	});
 
+	it('warns that an unreproduced fix only proved it breaks nothing', () => {
+		// Act
+		const summary = buildNightlyHealerSummary({
+			outcome: 'healed',
+			details: {
+				prUrl: 'https://github.com/o/r/pull/2',
+				reproduced: false,
+			},
+		});
+
+		// Assert
+		expect(summary).toContain('did not reproduce');
+		expect(summary).not.toContain('Fix verified');
+	});
+
 	it('says which build the fix was verified against', () => {
 		const summary = buildNightlyHealerSummary({
 			outcome: 'healed',

@@ -56,6 +56,7 @@ function resolveHealerOutcome(state) {
 		agentResult,
 		agentHandoff,
 		verifyPassed,
+		verifyReproduced,
 		verifyStage,
 		verifyJobResult,
 		buildDescription,
@@ -165,10 +166,12 @@ function resolveHealerOutcome(state) {
 		};
 	}
 
+	const reproduced = 'false' !== text(verifyReproduced);
+
 	if (isTrue(verifyOnly)) {
 		return {
 			outcome: 'verified-branch',
-			details: { ...base, branch, buildDescription: build },
+			details: { ...base, branch, buildDescription: build, reproduced },
 		};
 	}
 
@@ -190,6 +193,7 @@ function resolveHealerOutcome(state) {
 			...base,
 			branch,
 			buildDescription: build,
+			reproduced,
 			prUrl: text(prUrl),
 			jiraUrl: text(jiraUrl),
 			rca: text(agentResult),
