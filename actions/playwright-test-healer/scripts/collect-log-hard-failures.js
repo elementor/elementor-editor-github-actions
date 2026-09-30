@@ -10,12 +10,11 @@
  * the hard-failure list.
  */
 
-const { execFileSync } = require('child_process');
 const fs = require('fs');
 const { fetchJobLog } = require('./fetch-job-log');
+const { gh } = require('./gh');
 
 const DEFAULT_HARD_FAILURES_PATH = 'log-hard-failures.json';
-const MAX_LOG_BYTES = 64 * 1024 * 1024;
 const TIMESTAMP_PREFIX = /^\d{4}-\d{2}-\d{2}T[\d:.]+Z ?/;
 const FAILED_HEADER = /^\s+\d+ failed\s*$/;
 const LISTED_TEST = /^\s{4}(?:\[[^\]]+\] › )?\S+:\d+:\d+ › (.+?)\s*$/;
@@ -53,13 +52,6 @@ function parseHardFailureTitles(log) {
 	}
 
 	return [...new Set(titles)];
-}
-
-function gh(args) {
-	return execFileSync('gh', args, {
-		encoding: 'utf8',
-		maxBuffer: MAX_LOG_BYTES,
-	});
 }
 
 function listFailedJobIds(repo, runId) {

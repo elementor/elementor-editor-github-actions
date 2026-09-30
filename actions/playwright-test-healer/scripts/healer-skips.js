@@ -18,6 +18,7 @@ const { execFileSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { gh } = require('./gh');
 
 const ATTEMPT_ARTIFACT_NAME = 'healer-attempt';
 const ATTEMPT_RECORD_FILE = 'healer-attempt.json';
@@ -142,13 +143,6 @@ function readSkipSources(
 		openPrs: JSON.parse(fs.readFileSync(openPrsPath, 'utf8')),
 		attempts: JSON.parse(fs.readFileSync(attemptsPath, 'utf8')),
 	};
-}
-
-function gh(args) {
-	return execFileSync('gh', args, {
-		encoding: 'utf8',
-		maxBuffer: 64 * 1024 * 1024,
-	});
 }
 
 function listOpenPrs(repo) {

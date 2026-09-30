@@ -16,6 +16,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
+const { gh } = require('./gh');
 const { loadProfile } = require('./profile');
 const { matchResultDirectories } = require('./rank-nightly-failures');
 const {
@@ -97,13 +98,6 @@ function buildEvidenceCandidates(testName, resultDirs) {
 
 function findEvidenceInResultDirs(testName, resultDirs) {
 	return pickBestEvidence(buildEvidenceCandidates(testName, resultDirs));
-}
-
-function gh(args) {
-	return execFileSync('gh', args, {
-		encoding: 'utf8',
-		maxBuffer: 64 * 1024 * 1024,
-	});
 }
 
 /**

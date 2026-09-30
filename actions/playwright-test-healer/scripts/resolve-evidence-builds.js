@@ -13,13 +13,12 @@
  * log is kept for 90 days; the artifact, and its listing, for one.
  */
 
-const { execFileSync } = require('child_process');
 const fs = require('fs');
 const { fetchJobLog } = require('./fetch-job-log');
+const { gh } = require('./gh');
 const { loadProfile } = require('./profile');
 const { resolveCoreEvidenceBuild } = require('./resolve-core-evidence-build');
 
-const MAX_LOG_BYTES = 64 * 1024 * 1024;
 const TIMESTAMP_PREFIX = /^\d{4}-\d{2}-\d{2}T[\d:.]+Z ?/;
 const INPUTS_GROUP = /^##\[group\]\s*Inputs\s*$/;
 const INPUT_LINE = /^ {2}([a-z_]+):(?: (.*))?$/;
@@ -200,13 +199,6 @@ function resolveCoreCommitAt(branch, clonedAt) {
 		'--jq',
 		'.[0].sha // ""',
 	]).trim();
-}
-
-function gh(args) {
-	return execFileSync('gh', args, {
-		encoding: 'utf8',
-		maxBuffer: MAX_LOG_BYTES,
-	});
 }
 
 function fetchRunFacts(repo, runId) {
