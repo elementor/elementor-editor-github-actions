@@ -158,12 +158,17 @@ function layoutProArtifact(downloadDir, workspaceDir) {
 
 function patchWpEnvHelloTheme(workspaceDir) {
 	const wpEnvPath = path.join(workspaceDir, '.wp-env.json');
-	if (!fs.existsSync(wpEnvPath)) {
-		throw new Error(
-			'Cannot patch Hello theme path: .wp-env.json is missing.',
-		);
+	let wpEnv;
+	try {
+		wpEnv = fs.readFileSync(wpEnvPath, 'utf8');
+	} catch (error) {
+		if (error.code === 'ENOENT') {
+			throw new Error(
+				'Cannot patch Hello theme path: .wp-env.json is missing.',
+			);
+		}
+		throw error;
 	}
-	const wpEnv = fs.readFileSync(wpEnvPath, 'utf8');
 	if (!wpEnv.includes(WP_ORG_HELLO_THEME_ZIP)) {
 		throw new Error(
 			'Cannot patch Hello theme path: .wp-env.json does not reference the wordpress.org Hello zip.',

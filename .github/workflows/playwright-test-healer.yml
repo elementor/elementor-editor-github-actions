@@ -313,7 +313,7 @@ jobs:
                   set -euo pipefail
 
                   for _ in $(seq 1 120); do
-                    STATUS=$(gh api "repos/${{ github.repository }}/actions/runs/${SOURCE_RUN_ID}" --jq '.status')
+                    STATUS=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}" --jq '.status')
                     if [ "$STATUS" = "completed" ]; then
                       echo "Evidence run ${SOURCE_RUN_ID} is completed."
                       exit 0
@@ -336,14 +336,14 @@ jobs:
 
                   # The report is kept for 1 day. An older run is ranked from its job
                   # logs instead, which are kept for 90.
-                  if ! gh api "repos/${{ github.repository }}/actions/runs/${SOURCE_RUN_ID}/artifacts" --paginate \
+                  if ! gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}/artifacts" --paginate \
                       --jq '.artifacts[] | select(.expired == false) | .name' | grep -qx 'allure-report'; then
                     echo "::notice::Run ${SOURCE_RUN_ID} has no unexpired allure-report artifact — ranking from job logs."
                     echo "available=false" >> "$GITHUB_OUTPUT"
                     exit 0
                   fi
 
-                  gh run download "${SOURCE_RUN_ID}" --repo "${{ github.repository }}" -n allure-report -D allure-report
+                  gh run download "${SOURCE_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n allure-report -D allure-report
                   echo "available=true" >> "$GITHUB_OUTPUT"
 
             - name: Collect hard failures from job logs
@@ -363,11 +363,11 @@ jobs:
                   set -euo pipefail
                   mkdir -p test-results
 
-                  NAMES=$(gh api "repos/${{ github.repository }}/actions/runs/${SOURCE_RUN_ID}/artifacts" --paginate \
+                  NAMES=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}/artifacts" --paginate \
                     --jq '.artifacts[] | select(.expired == false) | select(.name | startswith("playwright-test-results-")) | .name')
 
                   for NAME in $NAMES; do
-                    gh run download "${SOURCE_RUN_ID}" --repo "${{ github.repository }}" -n "$NAME" -D "test-results/$NAME" || true
+                    gh run download "${SOURCE_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n "$NAME" -D "test-results/$NAME" || true
                   done
 
             # Manual mode: the human named the test, so all that is missing is a
@@ -577,7 +577,7 @@ jobs:
                   FIX_BRANCH: ${{ needs.resolve-input.outputs.fix_branch }}
               run: |
                   set -euo pipefail
-                  gh api "repos/${{ github.repository }}/branches/${FIX_BRANCH}" --silent
+                  gh api "repos/${GITHUB_REPOSITORY}/branches/${FIX_BRANCH}" --silent
                   echo "status=FINISHED" >> "$GITHUB_OUTPUT"
                   echo "branch=${FIX_BRANCH}" >> "$GITHUB_OUTPUT"
                   echo "Verify-only run: skipping the agent and verifying ${FIX_BRANCH}."
@@ -711,7 +711,7 @@ jobs:
 
             - name: Install PHP for the Core build
               if: inputs.product == 'core' && steps.restore-builds.outputs.build_source == 'fresh' && steps.core-plugin-cache.outputs.cache-hit != 'true'
-              uses: shivammathur/setup-php@v2
+              uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
               with:
                   php-version: '7.4'
 
@@ -1225,7 +1225,7 @@ jobs:
                   VERIFIED_SHA: ${{ needs.verify-fix.outputs.verified_sha }}
               run: |
                   set -euo pipefail
-                  HEAD_SHA=$(gh api "repos/${{ github.repository }}/branches/${BRANCH}" --jq '.commit.sha')
+                  HEAD_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/branches/${BRANCH}" --jq '.commit.sha')
                   if [ -z "$VERIFIED_SHA" ] || [ "$HEAD_SHA" != "$VERIFIED_SHA" ]; then
                     echo "::error::${BRANCH} is at ${HEAD_SHA}, but verification ran on ${VERIFIED_SHA:-an unknown commit}. Not opening a PR for unverified code."
                     exit 1
@@ -1272,7 +1272,7 @@ jobs:
               run: |
                   set -euo pipefail
 
-                  REPO="${{ github.repository }}"
+                  REPO="${GITHUB_REPOSITORY}"
 
                   TITLE=$(node -e "
                     const { buildHealPrTitle } = require('./' + process.env.HEALER_DIR + '/scripts/build-jira-heal-ticket');
@@ -1299,7 +1299,7 @@ jobs:
                     "| Trigger | ${MODE} |" \
                     "| Evidence run | https://github.com/${REPO}/actions/runs/${SOURCE_RUN_ID} |" \
                     "| Shard | \`${SHARD_INDEX:-default}\` |" \
-                    "| Verification | https://github.com/${REPO}/actions/runs/${{ github.run_id }} |" \
+                    "| Verification | https://github.com/${REPO}/actions/runs/${GITHUB_RUN_ID} |" \
                     "" \
                     "Verified by running ${RAN}: without the fix it failed on run ${RUNS_TO_FAILURE}, and with it the test passed ${FIX_REPEAT}x in a row — at least three times as many runs as the failure took, so a fix that did nothing would pass only about 5% of the time. Both on the shard's own command, against ${BUILD_DESCRIPTION}. The diff is gated to \`tests/playwright/\` with no snapshot-baseline changes." \
                     "" \
