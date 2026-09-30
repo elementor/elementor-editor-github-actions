@@ -12,6 +12,9 @@ CONFIG=./tests/playwright/.playwright-wp-lite-env.json
 WP_NIGHTLY_ZIP=https://wordpress.org/nightly-builds/wordpress-latest.zip
 HELLO_THEME_ZIP=https://downloads.wordpress.org/theme/hello-elementor.zip
 PORTS=(8888 8889)
+# apt-get inside `playwright install --with-deps` can stall on a runner's
+# package mirror with no output; a bounded retry beats a six-hour hang.
+BROWSER_INSTALL_TIMEOUT=10m
 
 wp_cli() {
 	local port="$1"
@@ -45,5 +48,12 @@ if [ "${WP_NIGHTLY:-false}" = "true" ]; then
 	echo "WP_MAJOR_VERSION=${WP_MAJOR_VERSION}" >> "$GITHUB_ENV"
 fi
 
+install_browser() {
+	timeout "$BROWSER_INSTALL_TIMEOUT" npx playwright install --with-deps chromium
+}
+
 npm run test:setup:playwright
-npx playwright install --with-deps chromium
+if ! install_browser; then
+	echo "::warning::Playwright browser install failed or stalled; retrying once."
+	install_browser
+fi

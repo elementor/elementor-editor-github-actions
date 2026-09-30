@@ -978,6 +978,7 @@ jobs:
               id: setup-pro
               if: inputs.product == 'pro' && steps.builds.outcome == 'success'
               continue-on-error: true
+              timeout-minutes: 30
               uses: ./.github/actions/playwright-test-setup
               with:
                   wp_core_version: 'latest'
@@ -996,6 +997,7 @@ jobs:
               id: setup-core
               if: inputs.product == 'core' && steps.setup-core-node.outcome == 'success'
               continue-on-error: true
+              timeout-minutes: 30
               env:
                   PHP_VERSION: ${{ needs.find-candidate.outputs.php_version }}
                   WP_NIGHTLY: ${{ needs.find-candidate.outputs.wp_nightly }}
