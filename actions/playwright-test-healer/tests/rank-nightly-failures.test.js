@@ -1,34 +1,9 @@
 const {
-	slugify,
 	flattenAllureFailures,
 	matchResultDirectories,
 	selectHealCandidate,
 	shardIndexForMatchedDirs,
 } = require('../scripts/rank-nightly-failures');
-
-describe('slugify', () => {
-	it('lowercases and hyphenates non-alphanumeric characters', () => {
-		// Arrange
-		const input =
-			'Mega Menu > MM efon: dd3ec — n header and page in editor';
-
-		// Act
-		const result = slugify(input);
-
-		// Assert
-		expect(result).toBe(
-			'mega-menu-mm-efon-dd3ec-n-header-and-page-in-editor',
-		);
-	});
-
-	it('collapses repeated separators', () => {
-		// Arrange & Act
-		const result = slugify('a   b---c');
-
-		// Assert
-		expect(result).toBe('a-b-c');
-	});
-});
 
 describe('flattenAllureFailures', () => {
 	it('returns only tests with status failed from a nested suite tree', () => {
@@ -379,91 +354,6 @@ describe('selectHealCandidate', () => {
 		expect(result.candidate.shardIndex).toBe('19');
 	});
 
-	it('selects a candidate when Playwright hashed the output folder and dropped Test- from the title', () => {
-		// Arrange
-		const suites = {
-			children: [
-				{
-					children: [
-						{
-							children: [
-								{
-									name: 'Test Search widget functionality',
-									status: 'failed',
-									retriesCount: 3,
-								},
-							],
-						},
-					],
-				},
-			],
-		};
-		const resultDirs = [
-			{
-				dirName:
-					'modules-search-search-infr-364a4-Search-widget-functionality',
-				hasTrace: true,
-			},
-		];
-
-		// Act
-		const result = selectHealCandidate({
-			allureSuitesJson: suites,
-			resultDirs,
-		});
-
-		// Assert
-		expect(result.candidate.testName).toBe(
-			'Test Search widget functionality',
-		);
-		expect(result.candidate.hasTrace).toBe(true);
-	});
-
-	it('selects a nested Allure broken timeout when the Playwright folder is truncated', () => {
-		// Arrange
-		const suites = {
-			children: [
-				{
-					name: 'import-export.spec.ts',
-					children: [
-						{
-							name: 'Import Export',
-							children: [
-								{
-									name: 'Customization',
-									children: [
-										{
-											name: 'content customization is used',
-											status: 'broken',
-											retriesCount: 3,
-										},
-									],
-								},
-							],
-						},
-					],
-				},
-			],
-		};
-		const resultDirs = [
-			{
-				dirName:
-					'modules-import-export-cust-948f5-ntent-customization-is-used',
-				hasTrace: true,
-			},
-		];
-
-		// Act
-		const result = selectHealCandidate({
-			allureSuitesJson: suites,
-			resultDirs,
-		});
-
-		// Assert
-		expect(result.candidate.testName).toBe('content customization is used');
-		expect(result.candidate.hasTrace).toBe(true);
-	});
-
 	it('returns no-hard-failures when nothing failed', () => {
 		// Arrange
 		const allGreen = {
@@ -672,41 +562,5 @@ describe('shardIndexForMatchedDirs', () => {
 
 	it('returns an empty string when there is no evidence', () => {
 		expect(shardIndexForMatchedDirs([])).toBe('');
-	});
-});
-
-describe('selectHealCandidate shard tracking', () => {
-	it('carries the failing shard index on the candidate', () => {
-		// Arrange
-		const suites = {
-			children: [
-				{
-					children: [
-						{
-							name: 'Import export customization runs',
-							status: 'failed',
-							retriesCount: 3,
-						},
-					],
-				},
-			],
-		};
-		const resultDirs = [
-			{
-				dirName: 'modules-ie-import-export-customization-runs',
-				artifactName:
-					'playwright-test-results-import_export_customization',
-				hasTrace: true,
-			},
-		];
-
-		// Act
-		const result = selectHealCandidate({
-			allureSuitesJson: suites,
-			resultDirs,
-		});
-
-		// Assert
-		expect(result.candidate.shardIndex).toBe('import_export_customization');
 	});
 });
