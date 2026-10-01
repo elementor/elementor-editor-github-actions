@@ -389,6 +389,7 @@ if (require.main === module) {
 
 module.exports = {
 	flattenAllureFailures,
+	hasTraceInDirectory,
 	matchResultDirectories,
 	selectHealCandidate,
 	shardIndexForMatchedDirs,

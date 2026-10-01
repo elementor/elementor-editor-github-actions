@@ -20,7 +20,10 @@ const { isHealableBase } = require('./evidence-run');
 const { gh } = require('./gh');
 const { setOutput } = require('./github-output');
 const { loadProfile } = require('./profile');
-const { matchResultDirectories } = require('./rank-nightly-failures');
+const {
+	hasTraceInDirectory,
+	matchResultDirectories,
+} = require('./rank-nightly-failures');
 const {
 	isHealableShard,
 	shardIndexFromArtifactName,
@@ -274,26 +277,6 @@ function readArtifactResultDirs(repo, runId, artifactName) {
 	} finally {
 		fs.rmSync(downloadDir, { recursive: true, force: true });
 	}
-}
-
-/**
- * Playwright nests retries as `<dir>/retry1/trace.zip`, so a top-level-only
- * check under-reports trace evidence.
- */
-function hasTraceInDirectory(dirPath) {
-	for (const entry of fs.readdirSync(dirPath, { withFileTypes: true })) {
-		if (entry.isFile() && 'trace.zip' === entry.name) {
-			return true;
-		}
-		if (
-			entry.isDirectory() &&
-			hasTraceInDirectory(path.join(dirPath, entry.name))
-		) {
-			return true;
-		}
-	}
-
-	return false;
 }
 
 function findEvidenceInRun(repo, runId, testName, profile) {
