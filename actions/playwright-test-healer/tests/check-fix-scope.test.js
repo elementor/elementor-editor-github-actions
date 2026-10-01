@@ -193,7 +193,130 @@ describe('findWeakening', () => {
 		const findings = findWeakening(change);
 
 		// Assert
-		expect(findings).toEqual(['removes 1 expect() assertion(s)']);
+		expect(findings).toEqual([
+			'removes 1 expect() assertion(s) in tests/playwright/sanity/a.test.ts',
+		]);
+	});
+});
+
+describe('findWeakening, harder cases', () => {
+	it.each([
+		"+\ttest['skip']( true, 'flaky' );",
+		'+\tconst { skip } = test;',
+		'+\tconst t = test;',
+		"+\ttestInfo.skip( isCI, 'flaky' );",
+		'+\ttest.info().fixme();',
+		"+\ttest.step.skip( 'opens', async () => {} );",
+		"+test.describe.serial.only( 'Panel', () => {",
+		'+\tif ( process.env.CI ) return;',
+		'+\tawait el.click().catch( async () => {} );',
+		'+\tawait el.click().catch( () => false );',
+		'+\tawait el.click().catch( ( e ) => true );',
+		'+\ttry { await expect( el ).toBeVisible(); } catch {}',
+		'+\ttest.setTimeout( 0 );',
+	])('flags %s', (line) => {
+		// Act
+		const findings = findWeakening(diff([line]));
+
+		// Assert
+		expect(findings).toHaveLength(1);
+	});
+
+	it('counts expect.poll as an assertion, so a race rewrite passes', () => {
+		// Arrange
+		const change = diff([
+			'-\tawait expect( widget ).toHaveCSS( "background-color", red );',
+			'+\tawait expect.poll( () => getBackground( widget ) ).toBe( red );',
+		]);
+
+		// Act & Assert
+		expect(findWeakening(change)).toEqual([]);
+	});
+
+	it('counts an assertion split across lines as one', () => {
+		// Arrange
+		const change = diff([
+			'-\tawait expect( widget ).toHaveCSS( "background-color", red );',
+			'+\tawait expect',
+			'+\t\t.poll( () => getBackground( widget ) )',
+			'+\t\t.toBe( red );',
+		]);
+
+		// Act & Assert
+		expect(findWeakening(change)).toEqual([]);
+	});
+
+	it('does not let a commented-out expect balance a removed one', () => {
+		// Arrange
+		const change = diff([
+			"-\tawait expect( title ).toHaveText( 'Saved' );",
+			"+\t// await expect( title ).toHaveText( 'Saved' );",
+		]);
+
+		// Act & Assert
+		expect(findWeakening(change)).toEqual([
+			'removes 1 expect() assertion(s) in tests/playwright/sanity/a.test.ts',
+		]);
+	});
+
+	it('flags an await dropped from an assertion', () => {
+		// Arrange
+		const change = diff([
+			"-\tawait expect( title ).toHaveText( 'Saved' );",
+			"+\texpect( title ).toHaveText( 'Saved' );",
+		]);
+
+		// Act & Assert
+		expect(findWeakening(change)).toEqual([
+			'drops await from 1 expect() assertion(s) in tests/playwright/sanity/a.test.ts, so they no longer wait or fail the test',
+		]);
+	});
+
+	it('counts assertions per file, so a dummy one elsewhere does not balance', () => {
+		// Arrange
+		const change = [
+			'--- a/tests/playwright/sanity/a.test.ts',
+			'+++ b/tests/playwright/sanity/a.test.ts',
+			'@@ -1 +1 @@',
+			"-\tawait expect( title ).toHaveText( 'Saved' );",
+			'--- a/tests/playwright/sanity/b.test.ts',
+			'+++ b/tests/playwright/sanity/b.test.ts',
+			'@@ -1 +1 @@',
+			'+\texpect( true ).toBe( true );',
+		].join('\n');
+
+		// Act & Assert
+		expect(findWeakening(change)).toEqual([
+			'removes 1 expect() assertion(s) in tests/playwright/sanity/a.test.ts',
+		]);
+	});
+
+	it('does not flag a catch that waits for an optional popup and rethrows the rest', () => {
+		// Arrange
+		const change = diff([
+			"+\tawait page.locator( '#popup' ).waitFor( { timeout: 2000 } ).catch( ( error ) => { if ( ! isTimeout( error ) ) { throw error; } } );",
+		]);
+
+		// Act & Assert
+		expect(findWeakening(change)).toEqual([]);
+	});
+});
+
+describe('findScopeViolations, snapshots', () => {
+	it('rejects any baseline under a snapshots directory and aria snapshots', () => {
+		// Act
+		const violations = findScopeViolations([
+			'tests/playwright/sanity/a.test.ts-snapshots/a-linux.txt',
+			'tests/playwright/sanity/__snapshots__/a.json',
+			'tests/playwright/sanity/panel.aria.yml',
+		]);
+
+		// Assert
+		expect(violations).toEqual([
+			'tests/playwright/sanity/a.test.ts-snapshots/a-linux.txt: snapshot baseline',
+			'tests/playwright/sanity/__snapshots__/a.json: snapshot baseline',
+			'tests/playwright/sanity/panel.aria.yml: snapshot baseline',
+		]);
 	});
 });
 
@@ -255,7 +378,7 @@ describe('git attributes', () => {
 		// Assert
 		expect(findings).toEqual([
 			"skips, marks, or narrows tests: test.skip('a', async () => {",
-			'removes 1 expect() assertion(s)',
+			'removes 1 expect() assertion(s) in tests/playwright/sanity/a.test.ts',
 		]);
 	});
 });

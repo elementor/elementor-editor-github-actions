@@ -97,6 +97,25 @@ describe('resolveCoreEvidenceBuild', () => {
 		).toThrow('Re-run with base_ref=main');
 	});
 
+	it('refuses a pull request run, whose branch is not a base to fix', () => {
+		// Act & Assert
+		expect(() =>
+			resolveCoreEvidenceBuild({
+				runId: RUN_ID,
+				repo: 'elementor/elementor',
+				run: {
+					...run,
+					head_branch: 'feature/x',
+					event: 'pull_request',
+					head_repository: { full_name: 'someone/elementor' },
+				},
+				jobs: JOBS,
+				coreVersion: '4.4.0',
+				requestedBaseRef: '',
+			}),
+		).toThrow('pull_request run');
+	});
+
 	it('refuses a run with no head commit', () => {
 		// Act & Assert
 		expect(() =>

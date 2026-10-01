@@ -15,7 +15,10 @@ const {
 const MIN_CONFIDENCE_SCORE = 1;
 const TRACE_EVIDENCE_SCORE = 2;
 const LOG_ONLY_EVIDENCE_SCORE = 1;
-const MIN_TRUNCATED_TITLE_TOKENS = 3;
+const MIN_TRUNCATED_TAIL_LENGTH = 10;
+const RETRY_SUFFIX = /-retry\d+$/;
+const PROJECT_SUFFIX = /-(?:chromium|firefox|webkit)$/;
+const TRUNCATION_HASH = /-[0-9a-f]{5}-/g;
 
 /**
  * Lowercases and hyphenates a string the same way Playwright slugs test
@@ -73,30 +76,43 @@ function flattenAllureFailures(allureSuitesJson) {
 	return failures;
 }
 
-function directoryMatchesTestSlug(dirSlug, testSlug) {
-	if (!dirSlug || !testSlug) {
+function endsWithWord(text, suffix) {
+	return text === suffix || text.endsWith(`-${suffix}`);
+}
+
+/**
+ * Playwright names a result dir `{spec}-{describe}-{title}`, then
+ * `-{project}` and `-retry{n}`. A long name keeps only its start and end
+ * around a 5-character hash, so the end can begin mid-word. Matching is
+ * anchored to the end of the title: a plain substring would let `Heading 1`
+ * claim `Heading 10`'s directory.
+ */
+function directoryMatchesTestName(dirName, testName) {
+	const testSlug = slugify(testName);
+
+	if (!dirName || !testSlug) {
 		return false;
 	}
 
-	if (dirSlug.includes(testSlug)) {
+	const titles = [testSlug];
+	if (testSlug.startsWith('test-') && testSlug.length > 'test-'.length) {
+		titles.push(testSlug.slice('test-'.length));
+	}
+
+	const base = dirName.replace(RETRY_SUFFIX, '').replace(PROJECT_SUFFIX, '');
+	const baseSlug = slugify(base);
+
+	if (titles.some((title) => endsWithWord(baseSlug, title))) {
 		return true;
 	}
 
-	const tokens = testSlug.split('-').filter(Boolean);
+	for (const match of base.matchAll(TRUNCATION_HASH)) {
+		const tail = slugify(base.slice(match.index + match[0].length));
 
-	if (tokens[0] === 'test' && tokens.length > 1) {
-		const withoutTestPrefix = tokens.slice(1).join('-');
-		if (dirSlug.includes(withoutTestPrefix)) {
-			return true;
-		}
-	}
-
-	for (let index = 1; index < tokens.length; index++) {
-		const suffixTokens = tokens.slice(index);
-		if (suffixTokens.length < MIN_TRUNCATED_TITLE_TOKENS) {
-			break;
-		}
-		if (dirSlug.includes(suffixTokens.join('-'))) {
+		if (
+			tail.length >= MIN_TRUNCATED_TAIL_LENGTH &&
+			titles.some((title) => title.endsWith(tail))
+		) {
 			return true;
 		}
 	}
@@ -104,21 +120,13 @@ function directoryMatchesTestSlug(dirSlug, testSlug) {
 	return false;
 }
 
-/**
- * Playwright output dirs are `{spec}-{hash}-{title}` and often truncate the
- * title, so the Allure name slug is not always a substring. A directory
- * matches when its slug contains the full test slug, the slug without a
- * leading `test-`, or a trailing title of at least three tokens.
- */
 function matchResultDirectories(testName, resultDirs) {
-	const testSlug = slugify(testName);
-
-	if (!testSlug) {
+	if (!slugify(testName)) {
 		return [];
 	}
 
 	return resultDirs.filter((dir) =>
-		directoryMatchesTestSlug(slugify(dir.dirName), testSlug),
+		directoryMatchesTestName(dir.dirName, testName),
 	);
 }
 

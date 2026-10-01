@@ -2,6 +2,7 @@ const {
 	buildEvidenceCandidates,
 	findEvidenceInResultDirs,
 	isShardArtifact,
+	listEvidenceRuns,
 	pickBestEvidence,
 } = require('../scripts/find-test-evidence');
 
@@ -128,5 +129,63 @@ describe('findEvidenceInResultDirs', () => {
 		);
 
 		expect(evidence).toMatchObject({ shardIndex: '12', hasTrace: true });
+	});
+});
+
+describe('listEvidenceRuns', () => {
+	const profile = { evidenceEvents: ['schedule'] };
+	const page = (event, count) =>
+		Array.from({ length: count }, (_, index) => ({
+			databaseId: index,
+			headBranch: 'main',
+			event,
+		}));
+
+	it('reads further pages while pull request runs crowd out the nightlies', () => {
+		// Arrange
+		const pages = [
+			[...page('pull_request', 99), ...page('schedule', 1)],
+			[...page('pull_request', 90), ...page('schedule', 10)],
+			[...page('pull_request', 80), ...page('schedule', 20)],
+		];
+		const requested = [];
+		const fetchPage = (repo, workflow, number) => {
+			requested.push(number);
+			return pages[number - 1] || [];
+		};
+
+		// Act
+		const runs = listEvidenceRuns(
+			'o/r',
+			'playwright.yml',
+			profile,
+			fetchPage,
+		);
+
+		// Assert
+		expect(requested).toEqual([1, 2, 3]);
+		expect(runs).toHaveLength(31);
+		expect(runs.every((run) => 'schedule' === run.event)).toBe(true);
+	});
+
+	it('stops at a short page', () => {
+		// Arrange
+		const requested = [];
+		const fetchPage = (repo, workflow, number) => {
+			requested.push(number);
+			return page('schedule', 3);
+		};
+
+		// Act
+		const runs = listEvidenceRuns(
+			'o/r',
+			'playwright.yml',
+			profile,
+			fetchPage,
+		);
+
+		// Assert
+		expect(requested).toEqual([1]);
+		expect(runs).toHaveLength(3);
 	});
 });

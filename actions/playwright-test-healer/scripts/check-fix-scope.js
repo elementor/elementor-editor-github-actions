@@ -34,21 +34,65 @@ const FORBIDDEN_PATHS = [
 		reason: 'WordPress environment config',
 	},
 ];
+const SNAPSHOT_PATH = /(?:-snapshots|__snapshots__)\/|\.aria\.ya?ml$/i;
 const DIFF_FILE_HEADER = /^(?:\+\+\+|---) (?:[ab]\/|\/dev\/null)/;
-const ASSERTION = /\bexpect\s*\(/g;
+const NEW_FILE_HEADER = /^\+\+\+ b\/(.+)$/;
+const ASSERTION = /\bexpect(?:\.poll)?\s*(?:\(|$)/g;
+const AWAITED_ASSERTION = /\bawait\s+expect\b/g;
+const LINE_COMMENT = /(^|[^:])\/\/.*$/;
+const BLOCK_COMMENT_LINE = /^\s*(?:\/\*|\*)/;
+const SKIP_MARKS = '(?:skip|fixme|fail|only|slow)';
+const SWALLOWED_VALUE =
+	'(?:\\{\\s*\\}|undefined|null|true|false|0|\'\'|""|\\[\\s*\\])';
+
+/**
+ * Regexes over a diff narrow what a fix can get away with; they cannot prove
+ * a test still checks what it did. Verification and review cover the rest.
+ */
 const WEAKENING_PATTERNS = [
 	{
-		pattern:
-			/\b(?:test|it)(?:\.describe)?\.(?:skip|fixme|fail|only|slow)\b/,
+		pattern: new RegExp(
+			`\\b(?:test|it|testInfo|test\\.info\\(\\))(?:\\.(?:describe|step)(?:\\.serial|\\.parallel)?)?\\.${SKIP_MARKS}\\b`,
+		),
 		reason: 'skips, marks, or narrows tests',
+	},
+	{
+		pattern: new RegExp(
+			`\\b(?:test|it|testInfo)\\s*\\[\\s*['"\`]${SKIP_MARKS}['"\`]\\s*\\]`,
+		),
+		reason: 'skips, marks, or narrows tests',
+	},
+	{
+		pattern: new RegExp(
+			`\\{[^}]*\\b${SKIP_MARKS}\\b[^}]*\\}\\s*=\\s*(?:test|testInfo)\\b`,
+		),
+		reason: 'skips, marks, or narrows tests',
+	},
+	{
+		pattern: /=\s*test\s*;?\s*$/,
+		reason: 'aliases test, which hides later skips from this check',
 	},
 	{
 		pattern: /\b(?:describeIf|testIf)\s*\(/,
 		reason: 'adds a conditional skip',
 	},
 	{
-		pattern: /\.catch\(\s*\(\s*\)\s*=>\s*(?:\{\s*\}|undefined|null)\s*\)/,
+		pattern: /\bprocess\.env\.\w+.*\)\s*\{?\s*return\b/,
+		reason: 'returns early on an environment condition',
+	},
+	{
+		pattern: new RegExp(
+			`\\.catch\\(\\s*(?:async\\s*)?(?:\\(\\s*[\\w$]*\\s*\\)|[\\w$]+)\\s*=>\\s*${SWALLOWED_VALUE}\\s*\\)`,
+		),
 		reason: 'swallows a failure',
+	},
+	{
+		pattern: /\bcatch\s*(?:\(\s*[\w$]*\s*\))?\s*\{\s*\}/,
+		reason: 'swallows a failure',
+	},
+	{
+		pattern: /\.setTimeout\s*\(\s*0\s*\)/,
+		reason: 'removes the test timeout',
 	},
 	{ pattern: /\bretries\s*:/, reason: 'adds retries' },
 	{ pattern: /\bexpect\.soft\b/, reason: 'turns an assertion soft' },
@@ -64,7 +108,7 @@ function findScopeViolations(files) {
 			return [`${file}: outside ${ALLOWED_PREFIX}`];
 		}
 
-		if (SNAPSHOT_FILE.test(file)) {
+		if (SNAPSHOT_FILE.test(file) || SNAPSHOT_PATH.test(file)) {
 			return [`${file}: snapshot baseline`];
 		}
 
@@ -80,50 +124,84 @@ function findScopeViolations(files) {
 	});
 }
 
-function parseDiffLines(diff) {
-	const added = [];
-	const removed = [];
+/**
+ * Groups changed lines by file, so an assertion removed from the failing
+ * test cannot be balanced by a trivial one added somewhere else.
+ */
+function parseDiffFiles(diff) {
+	const files = new Map();
+	let current = { added: [], removed: [] };
+	files.set('', current);
 
 	for (const line of String(diff || '').split('\n')) {
+		const header = NEW_FILE_HEADER.exec(line);
+
+		if (header) {
+			current = files.get(header[1]) || { added: [], removed: [] };
+			files.set(header[1], current);
+			continue;
+		}
+
 		if (DIFF_FILE_HEADER.test(line)) {
 			continue;
 		}
 
 		if (line.startsWith('+')) {
-			added.push(line.slice(1));
+			current.added.push(line.slice(1));
 		} else if (line.startsWith('-')) {
-			removed.push(line.slice(1));
+			current.removed.push(line.slice(1));
 		}
 	}
 
-	return { added, removed };
+	return files;
 }
 
-function countAssertions(lines) {
+function withoutComment(line) {
+	return BLOCK_COMMENT_LINE.test(line)
+		? ''
+		: line.replace(LINE_COMMENT, '$1');
+}
+
+function count(lines, pattern) {
 	return lines.reduce(
-		(total, line) => total + (line.match(ASSERTION) || []).length,
+		(total, line) =>
+			total + (withoutComment(line).match(pattern) || []).length,
 		0,
 	);
 }
 
 function findWeakening(diff) {
-	const { added, removed } = parseDiffLines(diff);
 	const findings = [];
 
-	for (const line of added) {
-		const hit = WEAKENING_PATTERNS.find(({ pattern }) =>
-			pattern.test(line),
-		);
+	for (const [file, { added, removed }] of parseDiffFiles(diff)) {
+		for (const line of added) {
+			const hit = WEAKENING_PATTERNS.find(({ pattern }) =>
+				pattern.test(withoutComment(line)),
+			);
 
-		if (hit) {
-			findings.push(`${hit.reason}: ${line.trim()}`);
+			if (hit) {
+				findings.push(`${hit.reason}: ${line.trim()}`);
+			}
 		}
-	}
 
-	const lostAssertions = countAssertions(removed) - countAssertions(added);
+		const where = file ? ` in ${file}` : '';
+		const lostAssertions =
+			count(removed, ASSERTION) - count(added, ASSERTION);
 
-	if (lostAssertions > 0) {
-		findings.push(`removes ${lostAssertions} expect() assertion(s)`);
+		if (lostAssertions > 0) {
+			findings.push(
+				`removes ${lostAssertions} expect() assertion(s)${where}`,
+			);
+		}
+
+		const lostAwaits =
+			count(removed, AWAITED_ASSERTION) - count(added, AWAITED_ASSERTION);
+
+		if (lostAwaits > 0 && lostAssertions <= 0) {
+			findings.push(
+				`drops await from ${lostAwaits} expect() assertion(s)${where}, so they no longer wait or fail the test`,
+			);
+		}
 	}
 
 	return findings;

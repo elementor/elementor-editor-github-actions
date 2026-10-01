@@ -14,6 +14,7 @@
  */
 
 const { fetchJobLog } = require('./fetch-job-log');
+const { assertHealableEvidenceRun } = require('./evidence-run');
 const { gh } = require('./gh');
 const { setOutput } = require('./github-output');
 const { loadProfile } = require('./profile');
@@ -135,8 +136,11 @@ function releaseLine(version) {
 
 function resolveEvidenceBuilds({
 	runId,
+	repo,
 	buildLog,
 	headBranch,
+	event,
+	headRepository,
 	requestedBaseRef,
 }) {
 	const inputs = parseReusableWorkflowInputs(buildLog);
@@ -156,6 +160,14 @@ function resolveEvidenceBuilds({
 			`Could not tell which Pro and Core versions run ${runId} tested: its build job never uploaded an elementor-pro-<pro>-core-<core> artifact.`,
 		);
 	}
+
+	assertHealableEvidenceRun({
+		runId,
+		repo,
+		event,
+		headRepository,
+		baseRef: proRef,
+	});
 
 	if (requestedBaseRef && requestedBaseRef !== proRef) {
 		throw new Error(
@@ -202,12 +214,14 @@ function resolveCoreCommitAt(branch, clonedAt) {
 }
 
 function fetchRunFacts(repo, runId) {
-	const headBranch = gh([
-		'api',
-		`repos/${repo}/actions/runs/${runId}`,
-		'--jq',
-		'.head_branch',
-	]).trim();
+	const run = JSON.parse(
+		gh([
+			'api',
+			`repos/${repo}/actions/runs/${runId}`,
+			'--jq',
+			'{head_branch, event, head_repository: .head_repository.full_name}',
+		]),
+	);
 
 	const buildJobId = gh([
 		'api',
@@ -227,7 +241,9 @@ function fetchRunFacts(repo, runId) {
 	}
 
 	return {
-		headBranch,
+		headBranch: run.head_branch,
+		event: run.event,
+		headRepository: run.head_repository,
 		buildLog: fetchJobLog(repo, buildJobId),
 	};
 }
@@ -262,6 +278,7 @@ function resolveCoreRun(repo, runId) {
 	const { run, jobs } = fetchCoreRunFacts(repo, runId);
 	const build = resolveCoreEvidenceBuild({
 		runId,
+		repo,
 		run,
 		jobs,
 		coreVersion: run?.head_sha ? readCoreVersionAt(repo, run.head_sha) : '',
@@ -282,6 +299,7 @@ function resolveCoreRun(repo, runId) {
 function resolveProRun(repo, runId) {
 	const builds = resolveEvidenceBuilds({
 		runId,
+		repo,
 		requestedBaseRef: process.env.REQUESTED_BASE_REF || '',
 		...fetchRunFacts(repo, runId),
 	});

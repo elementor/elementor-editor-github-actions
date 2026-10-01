@@ -1,5 +1,7 @@
 'use strict';
 
+const { assertHealableEvidenceRun } = require('./evidence-run');
+
 /**
  * Works out what a Core Playwright run tested, so the fix is branched from and
  * verified against the same thing that failed.
@@ -39,6 +41,7 @@ function ranOnWordPressNightly(jobs) {
 
 function resolveCoreEvidenceBuild({
 	runId,
+	repo,
 	run,
 	jobs,
 	coreVersion,
@@ -52,6 +55,14 @@ function resolveCoreEvidenceBuild({
 			`Could not tell which Core commit run ${runId} tested: it has no head branch or commit.`,
 		);
 	}
+
+	assertHealableEvidenceRun({
+		runId,
+		repo,
+		event: run.event,
+		headRepository: run.head_repository?.full_name,
+		baseRef,
+	});
 
 	if (requestedBaseRef && requestedBaseRef !== baseRef) {
 		throw new Error(

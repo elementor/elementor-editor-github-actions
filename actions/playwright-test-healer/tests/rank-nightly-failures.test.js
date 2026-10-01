@@ -224,6 +224,60 @@ describe('matchResultDirectories', () => {
 		// Assert
 		expect(result).toHaveLength(2);
 	});
+
+	it('matches real Core directories, retries included, and not the neighbouring test', () => {
+		// Arrange
+		const resultDirs = [
+			'modules-v4-tests-global-cl-e6d30-n-another-page-is-published',
+			'modules-v4-tests-global-cl-e6d30-n-another-page-is-published-retry1',
+			'modules-v4-tests-global-cl-a6565--requires-proper-capability',
+		].map((dirName) => ({ dirName, hasTrace: true }));
+
+		// Act
+		const result = matchResultDirectories(
+			'keeps a preview-only class when another page is published',
+			resultDirs,
+		);
+
+		// Assert
+		expect(result.map((dir) => dir.dirName)).toEqual([
+			'modules-v4-tests-global-cl-e6d30-n-another-page-is-published',
+			'modules-v4-tests-global-cl-e6d30-n-another-page-is-published-retry1',
+		]);
+	});
+
+	it.each([
+		['Heading 1', 'widgets-heading-Heading-10-chromium'],
+		['Button', 'widgets-button-Button-hover-color'],
+		[
+			'Panel: open the panel',
+			'editor-panel-Should-not-open-the-panel-retry1',
+		],
+	])(
+		'does not give %s the directory of a test whose title only contains it',
+		(testName, dirName) => {
+			// Act
+			const result = matchResultDirectories(testName, [
+				{ dirName, hasTrace: true },
+			]);
+
+			// Assert
+			expect(result).toEqual([]);
+		},
+	);
+
+	it('matches a title that ends the directory name, with the project and retry stripped', () => {
+		// Act
+		const result = matchResultDirectories('Heading 1', [
+			{
+				dirName: 'widgets-heading-Heading-1-chromium-retry2',
+				hasTrace: true,
+			},
+		]);
+
+		// Assert
+		expect(result).toHaveLength(1);
+	});
 });
 
 describe('selectHealCandidate', () => {

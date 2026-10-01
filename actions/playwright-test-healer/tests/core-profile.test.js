@@ -136,17 +136,29 @@ describe('Core evidence lookup', () => {
 		expect(picked.map((run) => run.databaseId)).toEqual([3, 2]);
 	});
 
-	it('keeps every run when the profile names no events', () => {
+	it('keeps Pro nightly and release runs, not pull requests or feature branches', () => {
 		// Arrange
 		const runs = [
 			{ databaseId: 1, headBranch: 'main', event: 'workflow_dispatch' },
+			{ databaseId: 2, headBranch: '4.03', event: 'workflow_dispatch' },
+			{ databaseId: 3, headBranch: '4.01', event: 'push' },
+			{
+				databaseId: 4,
+				headBranch: 'cherry-pick-pr7686_to_4_01',
+				event: 'pull_request',
+			},
+			{
+				databaseId: 5,
+				headBranch: 'Internal/ED-25542-x',
+				event: 'workflow_dispatch',
+			},
 		];
 
 		// Act
 		const picked = pickEvidenceRuns(runs, loadProfile('pro'));
 
 		// Assert
-		expect(picked).toEqual(runs);
+		expect(picked.map((run) => run.databaseId)).toEqual([1, 2, 3]);
 	});
 
 	it('orders main runs first without reordering within a branch', () => {

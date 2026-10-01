@@ -19,6 +19,12 @@ name: Playwright Test Healer
 # The caller's job must grant contents: read, actions: write, and
 # pull-requests: write, and pass its secrets.
 #
+# A fix that fails verification is retried by dispatching the caller's
+# workflow again, so the caller must declare these workflow_dispatch inputs
+# and forward them: test_name, source_run_id, base_ref, verify_repeat,
+# max_fix_attempts, attempt, previous_branch, previous_run_id,
+# allow_duplicate_pr and trigger_mode.
+#
 # Repository variables the caller's repo can set:
 #   TEST_HEALER_ENABLED       off (default), manual, or all; see Resolve input.
 #   TEST_HEALER_JIRA_ENABLED  false skips creating a Jira task per PR, and the
@@ -85,6 +91,11 @@ on:
                 required: false
                 type: string
                 default: ''
+            trigger_mode:
+                description: 'Set by the healer when it retries itself: auto when the first attempt was unattended, so the retry keeps the auto label and limits. Leave empty.'
+                required: false
+                type: string
+                default: ''
             scheduled:
                 description: "True only for the caller's daily trigger. `TEST_HEALER_ENABLED=manual` runs everything a person dispatches, including the ranking path, but refuses runs marked scheduled."
                 required: false
@@ -144,6 +155,7 @@ jobs:
             enabled: ${{ steps.set.outputs.enabled }}
             switch: ${{ steps.set.outputs.switch }}
             mode: ${{ steps.set.outputs.mode }}
+            trigger: ${{ steps.set.outputs.trigger }}
             test_name: ${{ steps.set.outputs.test_name }}
             source_run_id: ${{ steps.set.outputs.source_run_id }}
             base_ref: ${{ steps.set.outputs.base_ref }}
@@ -169,6 +181,7 @@ jobs:
                   IN_SCHEDULED: ${{ inputs.scheduled }}
                   IN_ATTEMPT: ${{ inputs.attempt }}
                   IN_MAX_FIX_ATTEMPTS: ${{ inputs.max_fix_attempts }}
+                  IN_TRIGGER_MODE: ${{ inputs.trigger_mode }}
               run: |
                   set -euo pipefail
 
@@ -182,18 +195,34 @@ jobs:
 
                   TEST_NAME="$(printf '%s' "${IN_TEST_NAME}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
 
+                  # mode is how the test is found: ranked from a run, or named.
+                  # trigger is who asked: a retry of an unattended run names its
+                  # test but keeps the auto label, duplicate rule and draft limit.
                   if [ -n "$TEST_NAME" ]; then
                     MODE=manual
-                    LABEL="${MANUAL_LABEL}"
-                    ALLOW_DUPLICATE_PR="${IN_ALLOW_DUPLICATE_PR:-false}"
                   else
                     MODE=auto
-                    LABEL="${NIGHTLY_LABEL}"
-                    ALLOW_DUPLICATE_PR=false
                     if [ -z "${IN_SOURCE_RUN_ID}" ]; then
                       echo "::error::source_run_id is required when no test_name is given — there is nothing to rank without an evidence run."
                       exit 1
                     fi
+                  fi
+
+                  case "${IN_TRIGGER_MODE}" in
+                    auto) TRIGGER=auto ;;
+                    manual|'') TRIGGER="$MODE" ;;
+                    *)
+                      echo "::error::trigger_mode must be auto, manual or empty, got '${IN_TRIGGER_MODE}'."
+                      exit 1
+                      ;;
+                  esac
+
+                  if [ "$TRIGGER" = "auto" ]; then
+                    LABEL="${NIGHTLY_LABEL}"
+                    ALLOW_DUPLICATE_PR=false
+                  else
+                    LABEL="${MANUAL_LABEL}"
+                    ALLOW_DUPLICATE_PR="${IN_ALLOW_DUPLICATE_PR:-false}"
                   fi
 
                   FIX_BRANCH="$(printf '%s' "${IN_FIX_BRANCH}" | tr -d '[:space:]')"
@@ -258,6 +287,7 @@ jobs:
                     echo "enabled=$ENABLED"
                     echo "switch=$SWITCH"
                     echo "mode=$MODE"
+                    echo "trigger=$TRIGGER"
                     echo "source_run_id=${IN_SOURCE_RUN_ID}"
                     echo "base_ref=${IN_BASE_REF}"
                     echo "fix_branch=$FIX_BRANCH"
@@ -268,7 +298,7 @@ jobs:
 
                   printf 'test_name<<HEAL_EOF\n%s\nHEAL_EOF\n' "$TEST_NAME" >> "$GITHUB_OUTPUT"
 
-                  echo "Mode: $MODE${TEST_NAME:+ (test: $TEST_NAME)}${FIX_BRANCH:+; verify-only: $FIX_BRANCH}; scheduled: ${IN_SCHEDULED:-false}; switch: $SWITCH; enabled: $ENABLED"
+                  echo "Mode: $MODE; trigger: $TRIGGER${TEST_NAME:+ (test: $TEST_NAME)}${FIX_BRANCH:+; verify-only: $FIX_BRANCH}; scheduled: ${IN_SCHEDULED:-false}; switch: $SWITCH; enabled: $ENABLED"
 
     # There is no cap on open healer PRs: a test is skipped only when it has an
     # open PR of its own, so one unmerged fix does not stop every other failure
@@ -1264,7 +1294,7 @@ jobs:
               if: >-
                   steps.duplicate.outputs.existing_pr_url == '' &&
                   needs.verify-fix.outputs.reproduced != 'true' &&
-                  needs.resolve-input.outputs.mode == 'auto'
+                  needs.resolve-input.outputs.trigger == 'auto'
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
                   MAX_UNREPRODUCED_PRS: ${{ inputs.max_unreproduced_prs }}
@@ -1311,7 +1341,7 @@ jobs:
                   BRANCH: ${{ needs.wait-for-agent.outputs.branch }}
                   BASE_REF: ${{ needs.find-candidate.outputs.base_ref }}
                   LABEL: ${{ needs.resolve-input.outputs.label }}
-                  MODE: ${{ needs.resolve-input.outputs.mode }}
+                  MODE: ${{ needs.resolve-input.outputs.trigger }}
                   SCOPE: ${{ needs.verify-fix.outputs.scope }}
                   TEST_FILE: ${{ needs.verify-fix.outputs.test_file }}
                   RUNS_TO_FAILURE: ${{ needs.verify-fix.outputs.runs_to_failure }}
@@ -1353,6 +1383,10 @@ jobs:
                     PR_FLAGS=(--draft --label "$UNREPRODUCED_LABEL")
                   fi
 
+                  # Agent text in a code block: GitHub links no issues, mentions or
+                  # closing keywords ("Fixes #123") there, and renders no markdown.
+                  SAFE_RESULT_TEXT=$(printf '%s' "$RESULT_TEXT" | sed 's/~~~/~ ~ ~/g')
+
                   BODY=$(printf '%s\n' \
                     "Automated test-healer fix for \`${TEST_NAME}\`." \
                     "" \
@@ -1368,7 +1402,9 @@ jobs:
                     "" \
                     "**Agent summary**" \
                     "" \
-                    "> ${RESULT_TEXT}")
+                    "~~~text" \
+                    "${SAFE_RESULT_TEXT}" \
+                    "~~~")
 
                   PR_URL=$(gh pr create \
                     --repo "$REPO" \
@@ -1417,7 +1453,7 @@ jobs:
               id: outcome
               uses: actions/github-script@v8
               env:
-                  MODE: ${{ needs.resolve-input.outputs.mode }}
+                  MODE: ${{ needs.resolve-input.outputs.trigger }}
                   HEALER_ENABLED: ${{ needs.resolve-input.outputs.enabled }}
                   HEALER_SWITCH: ${{ needs.resolve-input.outputs.switch }}
                   EXISTING_PR_URL: ${{ needs.find-candidate.outputs.existing_pr_url }}
@@ -1583,6 +1619,7 @@ jobs:
                   VERIFY_REPEAT: ${{ needs.resolve-input.outputs.verify_repeat }}
                   FAILED_BRANCH: ${{ needs.wait-for-agent.outputs.branch }}
                   ALLOW_DUPLICATE_PR: ${{ needs.resolve-input.outputs.allow_duplicate_pr }}
+                  TRIGGER: ${{ needs.resolve-input.outputs.trigger }}
                   CALLER_WORKFLOW_REF: ${{ github.workflow_ref }}
               with:
                   github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -1614,6 +1651,7 @@ jobs:
                           previous_branch: process.env.FAILED_BRANCH,
                           previous_run_id: String(context.runId),
                           allow_duplicate_pr: process.env.ALLOW_DUPLICATE_PR || 'false',
+                          trigger_mode: process.env.TRIGGER,
                         },
                       });
 

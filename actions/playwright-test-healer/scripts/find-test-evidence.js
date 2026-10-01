@@ -16,6 +16,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
+const { isHealableBase } = require('./evidence-run');
 const { gh } = require('./gh');
 const { setOutput } = require('./github-output');
 const { loadProfile } = require('./profile');
@@ -28,6 +29,9 @@ const {
 const SHARD_ARTIFACT_PREFIX = 'playwright-test-results-';
 const MAX_RUNS_TO_SCAN = 15;
 const RUNS_TO_LIST_PER_WORKFLOW = 100;
+const MAX_RUN_PAGES = 10;
+const RUN_MAX_AGE_DAYS = 30;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 function isShardArtifact(artifact) {
 	return Boolean(
@@ -141,7 +145,9 @@ function listShardArtifacts(repo, runId, profile) {
 function pickEvidenceRuns(runs, profile = loadProfile()) {
 	const events = profile.evidenceEvents;
 	const matching = (runs || []).filter(
-		(run) => 0 === events.length || events.includes(run.event),
+		(run) =>
+			(0 === events.length || events.includes(run.event)) &&
+			isHealableBase(run.headBranch),
 	);
 
 	return newestMainFirst(matching.slice(0, MAX_RUNS_TO_SCAN));
@@ -154,28 +160,65 @@ function newestMainFirst(runs) {
 	];
 }
 
+/**
+ * The runs index is sometimes served stale, months old, for a while. Bounding
+ * by creation date keeps a stale page from offering runs whose artifacts
+ * expired long ago.
+ */
+function fetchRunsPage(repo, workflow, page, now = Date.now()) {
+	const since = new Date(now - RUN_MAX_AGE_DAYS * DAY_MS)
+		.toISOString()
+		.slice(0, 10);
+	return gh([
+		'api',
+		`repos/${repo}/actions/workflows/${workflow}/runs?status=completed&created=>=${since}&per_page=${RUNS_TO_LIST_PER_WORKFLOW}&page=${page}`,
+		'--jq',
+		'.workflow_runs[] | {databaseId: .id, headBranch: .head_branch, createdAt: .created_at, event} | tojson',
+	])
+		.split('\n')
+		.filter(Boolean)
+		.map((line) => JSON.parse(line));
+}
+
+/**
+ * Pull request runs far outnumber scheduled ones (99 of Core's last 100), so
+ * pages are read until enough evidence runs are found, not just the first.
+ */
+function listEvidenceRuns(repo, workflow, profile, fetchPage = fetchRunsPage) {
+	const evidence = [];
+
+	for (let page = 1; page <= MAX_RUN_PAGES; page++) {
+		const runs = fetchPage(repo, workflow, page);
+		evidence.push(
+			...runs.filter(
+				(run) =>
+					0 === profile.evidenceEvents.length ||
+					profile.evidenceEvents.includes(run.event),
+			),
+		);
+
+		if (
+			evidence.length >= MAX_RUNS_TO_SCAN ||
+			runs.length < RUNS_TO_LIST_PER_WORKFLOW
+		) {
+			break;
+		}
+	}
+
+	return evidence;
+}
+
 function listRecentRunIds(repo, profile) {
 	const runIds = [];
 
 	for (const workflow of profile.evidenceWorkflows) {
 		let runs = [];
 		try {
-			const output = gh([
-				'run',
-				'list',
-				'--repo',
-				repo,
-				'--workflow',
-				workflow,
-				'--status',
-				'completed',
-				'--limit',
-				String(RUNS_TO_LIST_PER_WORKFLOW),
-				'--json',
-				'databaseId,headBranch,createdAt,event',
-			]);
-			runs = JSON.parse(output);
-		} catch {
+			runs = listEvidenceRuns(repo, workflow, profile);
+		} catch (error) {
+			console.log(
+				`::warning::Could not list ${workflow} runs: ${error.message}`,
+			);
 			continue;
 		}
 
@@ -334,6 +377,7 @@ module.exports = {
 	isShardArtifact,
 	newestMainFirst,
 	pickBestEvidence,
+	listEvidenceRuns,
 	pickEvidenceRuns,
 	pickShardArtifacts,
 };
