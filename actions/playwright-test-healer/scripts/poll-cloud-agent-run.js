@@ -1,6 +1,7 @@
 'use strict';
 
 const fs = require('fs');
+const { gh } = require('./gh');
 
 // Agent runs that reproduce, fix and verify have taken 6-22 minutes, so
 // checking before the first few minutes is only log noise.
@@ -46,14 +47,15 @@ function detectHandoff(result) {
 
 const BRANCH_LAG_REFETCHES = 3;
 
+const NOT_FOUND = /HTTP 404/;
+
 const {
 	CURSOR_API_KEY,
 	HEAL_AGENT_ID,
 	HEAL_AGENT_RUN_ID,
 	HEAL_BRANCH_NAME,
+	HEAL_BASE_REF,
 	GITHUB_REPOSITORY,
-	GH_TOKEN,
-	GITHUB_TOKEN,
 } = process.env;
 
 function setOutput(name, value) {
@@ -81,20 +83,30 @@ function shouldWaitForCursorBranch(run) {
 
 /**
  * Only the branch the agent was told to push counts. Any other branch it
- * reports is not the one this run named, dated, and will verify.
+ * reports is not the one this run named, dated, and will verify. A Cloud agent
+ * can create that branch without committing to it, and an empty branch is no
+ * fix, whether or not Cursor reports it.
  */
-function resolveHealerBranch({
-	cursorBranch,
-	expectedBranch,
-	githubHasExpectedBranch,
-}) {
-	if (!expectedBranch) {
-		return '';
-	}
+function resolveHealerBranch({ expectedBranch, commitsAhead }) {
+	return expectedBranch && commitsAhead > 0 ? expectedBranch : '';
+}
 
-	return cursorBranch === expectedBranch || githubHasExpectedBranch
-		? expectedBranch
-		: '';
+function countCommitsAhead({ repository, baseRef, branch }, run = gh) {
+	try {
+		return Number(
+			run([
+				'api',
+				`repos/${repository}/compare/${baseRef}...${branch}`,
+				'--jq',
+				'.ahead_by',
+			]).trim(),
+		);
+	} catch (error) {
+		if (NOT_FOUND.test(`${error.stderr || ''}\n${error.message || ''}`)) {
+			return 0;
+		}
+		throw error;
+	}
 }
 
 function withResolvedBranch(run, branch) {
@@ -144,24 +156,6 @@ async function fetchRun() {
 	return response.json();
 }
 
-async function githubBranchExists(repository, branchName, token) {
-	if (!repository || !branchName || !token) {
-		return false;
-	}
-
-	const response = await fetch(
-		`https://api.github.com/repos/${repository}/branches/${encodeURIComponent(branchName)}`,
-		{
-			headers: {
-				Authorization: `Bearer ${token}`,
-				Accept: 'application/vnd.github+json',
-			},
-		},
-	);
-
-	return response.ok;
-}
-
 async function waitForCursorBranch(run) {
 	let current = run;
 
@@ -181,9 +175,14 @@ async function waitForCursorBranch(run) {
 }
 
 async function main() {
-	if (!CURSOR_API_KEY || !HEAL_AGENT_ID || !HEAL_AGENT_RUN_ID) {
+	if (
+		!CURSOR_API_KEY ||
+		!HEAL_AGENT_ID ||
+		!HEAL_AGENT_RUN_ID ||
+		!HEAL_BASE_REF
+	) {
 		throw new Error(
-			'CURSOR_API_KEY, HEAL_AGENT_ID, and HEAL_AGENT_RUN_ID are required.',
+			'CURSOR_API_KEY, HEAL_AGENT_ID, HEAL_AGENT_RUN_ID, and HEAL_BASE_REF are required.',
 		);
 	}
 
@@ -214,16 +213,14 @@ async function main() {
 
 	run = await waitForCursorBranch(run);
 
-	const githubToken = GH_TOKEN || GITHUB_TOKEN;
-	const githubHasExpectedBranch = await githubBranchExists(
-		GITHUB_REPOSITORY,
-		HEAL_BRANCH_NAME,
-		githubToken,
-	);
+	const commitsAhead = countCommitsAhead({
+		repository: GITHUB_REPOSITORY,
+		baseRef: HEAL_BASE_REF,
+		branch: HEAL_BRANCH_NAME,
+	});
 	const branch = resolveHealerBranch({
-		cursorBranch: cursorRunBranch(run),
 		expectedBranch: HEAL_BRANCH_NAME,
-		githubHasExpectedBranch,
+		commitsAhead,
 	});
 
 	const reportedBranch = cursorRunBranch(run);
@@ -232,8 +229,14 @@ async function main() {
 		console.log(
 			`::warning::Cloud agent reported branch ${reportedBranch}, not the ${HEAL_BRANCH_NAME} it was given. It is ignored.`,
 		);
-	} else if (branch && !reportedBranch) {
-		console.log(`Cursor git.branches empty; using GitHub branch ${branch}`);
+	} else if (!branch) {
+		console.log(
+			`${HEAL_BRANCH_NAME} has no commits ahead of ${HEAL_BASE_REF}, so the agent pushed no fix.`,
+		);
+	} else if (!reportedBranch) {
+		console.log(
+			`Cursor git.branches empty; using GitHub branch ${branch} (${commitsAhead} commit(s) ahead of ${HEAL_BASE_REF})`,
+		);
 	}
 
 	const outcome = evaluateHealerAgentRun(withResolvedBranch(run, branch));
@@ -254,6 +257,7 @@ async function main() {
 module.exports = {
 	BASELINE_DRIFT_MARKER,
 	PRODUCT_BUG_ESCALATION_MARKER,
+	countCommitsAhead,
 	detectHandoff,
 	evaluateHealerAgentRun,
 	resolveHealerBranch,

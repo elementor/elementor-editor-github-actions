@@ -1,4 +1,5 @@
 const {
+	countCommitsAhead,
 	detectHandoff,
 	evaluateHealerAgentRun,
 	resolveHealerBranch,
@@ -104,52 +105,81 @@ describe('shouldWaitForCursorBranch', () => {
 });
 
 describe('resolveHealerBranch', () => {
-	it('accepts the branch Cursor reports when it is the one the agent was given', () => {
+	it('accepts the expected branch once it has commits ahead of the base', () => {
 		// Arrange & Act
 		const result = resolveHealerBranch({
-			cursorBranch: 'ED-00000-nightly-heal-search',
-			expectedBranch: 'ED-00000-nightly-heal-search',
-			githubHasExpectedBranch: false,
+			expectedBranch: 'heal/test-search-1',
+			commitsAhead: 1,
 		});
 
 		// Assert
-		expect(result).toBe('ED-00000-nightly-heal-search');
+		expect(result).toBe('heal/test-search-1');
 	});
 
-	it('ignores any other branch Cursor reports', () => {
+	it('rejects an expected branch the agent created but never committed to', () => {
 		// Arrange & Act
 		const result = resolveHealerBranch({
-			cursorBranch: 'main',
-			expectedBranch: 'ED-00000-nightly-heal-search',
-			githubHasExpectedBranch: false,
+			expectedBranch: 'heal/test-search-1',
+			commitsAhead: 0,
 		});
 
 		// Assert
 		expect(result).toBe('');
 	});
 
-	it('falls back to the expected GitHub branch when Cursor git.branches is still empty', () => {
-		// Arrange & Act
-		const result = resolveHealerBranch({
-			cursorBranch: '',
-			expectedBranch: 'ED-00000-nightly-heal-search',
-			githubHasExpectedBranch: true,
-		});
+	it('returns empty when no branch was expected', () => {
+		expect(
+			resolveHealerBranch({ expectedBranch: '', commitsAhead: 3 }),
+		).toBe('');
+	});
+});
+
+describe('countCommitsAhead', () => {
+	const target = {
+		repository: 'elementor/elementor-pro',
+		baseRef: 'main',
+		branch: 'heal/test-search-1',
+	};
+
+	it('compares the branch against the base it was started from', () => {
+		// Arrange
+		const run = vi.fn(() => '2\n');
+
+		// Act
+		const ahead = countCommitsAhead(target, run);
 
 		// Assert
-		expect(result).toBe('ED-00000-nightly-heal-search');
+		expect(ahead).toBe(2);
+		expect(run).toHaveBeenCalledWith([
+			'api',
+			'repos/elementor/elementor-pro/compare/main...heal/test-search-1',
+			'--jq',
+			'.ahead_by',
+		]);
 	});
 
-	it('returns empty when neither Cursor nor GitHub has the branch', () => {
-		// Arrange & Act
-		const result = resolveHealerBranch({
-			cursorBranch: '',
-			expectedBranch: 'ED-00000-nightly-heal-search',
-			githubHasExpectedBranch: false,
+	it('counts a branch that does not exist as zero commits ahead', () => {
+		// Arrange
+		const run = vi.fn(() => {
+			throw Object.assign(new Error('gh failed'), {
+				stderr: 'gh: Not Found (HTTP 404)',
+			});
 		});
 
-		// Assert
-		expect(result).toBe('');
+		// Act & Assert
+		expect(countCommitsAhead(target, run)).toBe(0);
+	});
+
+	it('fails on any other GitHub error rather than discarding a fix', () => {
+		// Arrange
+		const run = vi.fn(() => {
+			throw Object.assign(new Error('gh failed'), {
+				stderr: 'gh: Bad credentials (HTTP 401)',
+			});
+		});
+
+		// Act & Assert
+		expect(() => countCommitsAhead(target, run)).toThrow('gh failed');
 	});
 });
 

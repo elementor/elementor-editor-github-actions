@@ -622,6 +622,7 @@ jobs:
                   HEAL_AGENT_ID: ${{ needs.dispatch-agent.outputs.agent_id }}
                   HEAL_AGENT_RUN_ID: ${{ needs.dispatch-agent.outputs.run_id }}
                   HEAL_BRANCH_NAME: ${{ needs.dispatch-agent.outputs.branch_name }}
+                  HEAL_BASE_REF: ${{ needs.find-candidate.outputs.base_ref }}
                   GITHUB_REPOSITORY: ${{ github.repository }}
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               run: node "$HEALER_DIR/scripts/poll-cloud-agent-run.js"
