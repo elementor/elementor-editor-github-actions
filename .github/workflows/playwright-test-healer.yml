@@ -1,0 +1,1658 @@
+name: Playwright Test Healer
+
+# Reusable: Elementor Core and Pro each call this from a thin workflow of
+# their own, which owns the triggers and passes `product`. Two ways in:
+#
+#  1. Daily, unattended. The caller passes the id of its nightly Playwright
+#     run and no test name, so this ranks that run's hard failures and picks
+#     one.
+#
+#  2. On demand, with a test name. Give it any flaky test title and it finds
+#     a recent CI failure artifact for that test by itself, fixes it, verifies
+#     the fix against that run's build, and puts the PR link in the job
+#     summary. `source_run_id` is optional in this mode.
+#
+# Everything that differs between Core and Pro — evidence workflows, shard
+# commands, artifact names — lives in actions/playwright-test-healer/profiles.
+# Only how the plugin under test is rebuilt and started differs here.
+#
+# The caller's job must grant contents: read, actions: write, and
+# pull-requests: write, and pass its secrets.
+#
+# A fix that fails verification is retried by dispatching the caller's
+# workflow again, so the caller must declare these workflow_dispatch inputs
+# and forward them: test_name, source_run_id, base_ref, verify_repeat,
+# max_fix_attempts, attempt, previous_branch, previous_run_id,
+# allow_duplicate_pr and trigger_mode.
+#
+# Repository variables the caller's repo can set:
+#   TEST_HEALER_ENABLED       off (default), manual, or all; see Resolve input.
+#   TEST_HEALER_JIRA_ENABLED  false skips creating a Jira task per PR, and the
+#                             PR title uses jira_parent_key instead.
+
+on:
+    workflow_call:
+        inputs:
+            product:
+                description: 'Which repository is calling: core or pro.'
+                required: true
+                type: string
+            actions_ref:
+                description: 'Git ref of elementor-editor-github-actions to take the healer scripts from. Must match the uses: pin (e.g. main).'
+                required: true
+                type: string
+            test_name:
+                description: "Flaky test to heal — the exact test title as it appears in the Allure report. Leave empty to auto-rank the evidence run's hard failures."
+                required: false
+                type: string
+                default: ''
+            source_run_id:
+                description: 'Run ID to take failure evidence from. Required when test_name is empty; otherwise recent evidence runs are searched automatically.'
+                required: false
+                type: string
+                default: ''
+            base_ref:
+                description: 'Branch to fix and open the PR against. Leave empty to use the branch the evidence run tested; a different branch is refused.'
+                required: false
+                type: string
+                default: ''
+            fix_branch:
+                description: 'Verify this existing fix branch instead of dispatching the agent. Requires test_name. No PR is opened and no retry follows.'
+                required: false
+                type: string
+                default: ''
+            verify_repeat:
+                description: 'The fewest consecutive passes the fix must produce. A test verified on its own, rather than with its whole file, needs at least 10 whatever this says. The fix must also pass three times as many runs as it took to fail without the fix, so rare flakes need more.'
+                required: false
+                type: string
+                default: '3'
+            max_fix_attempts:
+                description: 'How many times the agent may try before the healer gives up. A fix that fails verification is re-dispatched with the failure as evidence.'
+                required: false
+                type: string
+                default: '2'
+            max_unreproduced_prs:
+                description: 'Auto mode only: the most open test-healer-unreproduced draft PRs. At the limit, an unreproduced fix gets no PR or Jira task and its branch is left for manual pickup.'
+                required: false
+                type: string
+                default: '3'
+            attempt:
+                description: 'Set by the healer when it retries itself.'
+                required: false
+                type: string
+                default: '1'
+            previous_branch:
+                description: 'Set by the healer when it retries itself.'
+                required: false
+                type: string
+                default: ''
+            previous_run_id:
+                description: 'Set by the healer when it retries itself.'
+                required: false
+                type: string
+                default: ''
+            trigger_mode:
+                description: 'Set by the healer when it retries itself: auto when the first attempt was unattended, so the retry keeps the auto label and limits. Leave empty.'
+                required: false
+                type: string
+                default: ''
+            scheduled:
+                description: "True only for the caller's daily trigger. `TEST_HEALER_ENABLED=manual` runs everything a person dispatches, including the ranking path, but refuses runs marked scheduled."
+                required: false
+                type: string
+                default: 'false'
+            allow_duplicate_pr:
+                description: 'On-demand only: heal the named test even if it already has an open PR into the same branch. Auto mode never opens a second PR for a test.'
+                required: false
+                type: boolean
+                default: false
+            jira_parent_key:
+                description: 'Epic each healer PR gets its own Jira task under. The PR title falls back to this key if the task cannot be created.'
+                required: false
+                type: string
+                default: 'ED-22856'
+            slack_channel:
+                description: 'Slack channel ID the run outcome is posted to. Empty posts nothing.'
+                required: false
+                type: string
+                default: ''
+        secrets:
+            CURSOR_APIKEY:
+                description: 'Cursor Cloud Agents API key. Needed unless fix_branch is given.'
+                required: false
+            E2E_PRO_LICENSE:
+                description: 'Pro only: licence the Playwright environment activates.'
+                required: false
+            MAINTAIN_TOKEN:
+                description: 'Pro only: downloads a Core release when the evidence run tested one.'
+                required: false
+            JIRA_API_EMAIL:
+                required: false
+            JIRA_API_TOKEN:
+                required: false
+            SLACK_TOKEN:
+                description: 'Slack bot token for slack_channel. The bot must be a member of that channel.'
+                required: false
+
+permissions:
+    contents: read
+
+env:
+    HEALER_PRODUCT: ${{ inputs.product }}
+    HEALER_DIR: .healer/actions/playwright-test-healer
+    HEALER_NODE_VERSION: '24'
+    HEALER_PARENT_JIRA_KEY: ${{ inputs.jira_parent_key }}
+    NIGHTLY_LABEL: nightly-test-healer
+    MANUAL_LABEL: test-healer-manual
+    UNREPRODUCED_LABEL: test-healer-unreproduced
+    BASELINE_MAX_REPEAT: '10'
+
+jobs:
+    resolve-input:
+        name: Resolve input
+        runs-on: ubuntu-22.04
+        outputs:
+            enabled: ${{ steps.set.outputs.enabled }}
+            switch: ${{ steps.set.outputs.switch }}
+            mode: ${{ steps.set.outputs.mode }}
+            trigger: ${{ steps.set.outputs.trigger }}
+            test_name: ${{ steps.set.outputs.test_name }}
+            source_run_id: ${{ steps.set.outputs.source_run_id }}
+            base_ref: ${{ steps.set.outputs.base_ref }}
+            fix_branch: ${{ steps.set.outputs.fix_branch }}
+            verify_repeat: ${{ steps.set.outputs.verify_repeat }}
+            attempt: ${{ steps.set.outputs.attempt }}
+            max_fix_attempts: ${{ steps.set.outputs.max_fix_attempts }}
+            previous_branch: ${{ inputs.previous_branch }}
+            previous_run_id: ${{ inputs.previous_run_id }}
+            label: ${{ steps.set.outputs.label }}
+            allow_duplicate_pr: ${{ steps.set.outputs.allow_duplicate_pr }}
+        steps:
+            - name: Resolve mode and inputs
+              id: set
+              env:
+                  IN_TEST_NAME: ${{ inputs.test_name }}
+                  IN_SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+                  IN_BASE_REF: ${{ inputs.base_ref }}
+                  IN_FIX_BRANCH: ${{ inputs.fix_branch }}
+                  IN_VERIFY_REPEAT: ${{ inputs.verify_repeat }}
+                  IN_ALLOW_DUPLICATE_PR: ${{ inputs.allow_duplicate_pr }}
+                  HEALER_SWITCH: ${{ vars.TEST_HEALER_ENABLED }}
+                  IN_SCHEDULED: ${{ inputs.scheduled }}
+                  IN_ATTEMPT: ${{ inputs.attempt }}
+                  IN_MAX_FIX_ATTEMPTS: ${{ inputs.max_fix_attempts }}
+                  IN_TRIGGER_MODE: ${{ inputs.trigger_mode }}
+              run: |
+                  set -euo pipefail
+
+                  case "${HEALER_PRODUCT}" in
+                    core|pro) ;;
+                    *)
+                      echo "::error::product must be core or pro, got '${HEALER_PRODUCT}'."
+                      exit 1
+                      ;;
+                  esac
+
+                  TEST_NAME="$(printf '%s' "${IN_TEST_NAME}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+
+                  # mode is how the test is found: ranked from a run, or named.
+                  # trigger is who asked: a retry of an unattended run names its
+                  # test but keeps the auto label, duplicate rule and draft limit.
+                  if [ -n "$TEST_NAME" ]; then
+                    MODE=manual
+                  else
+                    MODE=auto
+                    if [ -z "${IN_SOURCE_RUN_ID}" ]; then
+                      echo "::error::source_run_id is required when no test_name is given — there is nothing to rank without an evidence run."
+                      exit 1
+                    fi
+                  fi
+
+                  case "${IN_TRIGGER_MODE}" in
+                    auto) TRIGGER=auto ;;
+                    manual|'') TRIGGER="$MODE" ;;
+                    *)
+                      echo "::error::trigger_mode must be auto, manual or empty, got '${IN_TRIGGER_MODE}'."
+                      exit 1
+                      ;;
+                  esac
+
+                  if [ "$TRIGGER" = "auto" ]; then
+                    LABEL="${NIGHTLY_LABEL}"
+                    ALLOW_DUPLICATE_PR=false
+                  else
+                    LABEL="${MANUAL_LABEL}"
+                    ALLOW_DUPLICATE_PR="${IN_ALLOW_DUPLICATE_PR:-false}"
+                  fi
+
+                  FIX_BRANCH="$(printf '%s' "${IN_FIX_BRANCH}" | tr -d '[:space:]')"
+                  if [ -n "$FIX_BRANCH" ] && [ "$MODE" != "manual" ]; then
+                    echo "::error::fix_branch needs test_name — a verify-only run checks one named test."
+                    exit 1
+                  fi
+
+                  if [ -n "${IN_SOURCE_RUN_ID}" ] && ! printf '%s' "${IN_SOURCE_RUN_ID}" | grep -qE '^[0-9]+$'; then
+                    echo "::error::source_run_id must be numeric, got '${IN_SOURCE_RUN_ID}'."
+                    exit 1
+                  fi
+
+                  REPEAT="${IN_VERIFY_REPEAT:-3}"
+                  if ! printf '%s' "$REPEAT" | grep -qE '^[1-9][0-9]?$'; then
+                    echo "::error::verify_repeat must be 1-99, got '${REPEAT}'."
+                    exit 1
+                  fi
+
+                  # Kill switch. Default off, so merging this workflow arms nothing.
+                  # The gate is who triggered the run, not which mode it is in: a
+                  # person dry-running the ranking path against a real nightly run id
+                  # must not have to arm the cron to do it.
+                  #   unset / off  — nothing runs
+                  #   manual       — anything a person dispatches, ranking path included
+                  #   all          — the above, plus runs the cron marks as scheduled
+                  SWITCH="$(printf '%s' "${HEALER_SWITCH:-off}" | tr '[:upper:]' '[:lower:]')"
+
+                  case "$SWITCH" in
+                    all)
+                      ENABLED=true
+                      ;;
+                    manual)
+                      if [ "${IN_SCHEDULED:-false}" = "true" ]; then
+                        ENABLED=false
+                      else
+                        ENABLED=true
+                      fi
+                      ;;
+                    off|'')
+                      SWITCH=off
+                      ENABLED=false
+                      ;;
+                    *)
+                      echo "::error::vars.TEST_HEALER_ENABLED must be one of off, manual, all — got '${HEALER_SWITCH}'."
+                      exit 1
+                      ;;
+                  esac
+
+                  ATTEMPT="${IN_ATTEMPT:-1}"
+                  MAX_FIX_ATTEMPTS="${IN_MAX_FIX_ATTEMPTS:-2}"
+                  for N in "$ATTEMPT" "$MAX_FIX_ATTEMPTS"; do
+                    if ! printf '%s' "$N" | grep -qE '^[1-9]$'; then
+                      echo "::error::attempt and max_fix_attempts must be 1-9, got '${N}'."
+                      exit 1
+                    fi
+                  done
+
+                  {
+                    echo "attempt=$ATTEMPT"
+                    echo "max_fix_attempts=$MAX_FIX_ATTEMPTS"
+                    echo "enabled=$ENABLED"
+                    echo "switch=$SWITCH"
+                    echo "mode=$MODE"
+                    echo "trigger=$TRIGGER"
+                    echo "source_run_id=${IN_SOURCE_RUN_ID}"
+                    echo "base_ref=${IN_BASE_REF}"
+                    echo "fix_branch=$FIX_BRANCH"
+                    echo "verify_repeat=$REPEAT"
+                    echo "label=$LABEL"
+                    echo "allow_duplicate_pr=$ALLOW_DUPLICATE_PR"
+                  } >> "$GITHUB_OUTPUT"
+
+                  printf 'test_name<<HEAL_EOF\n%s\nHEAL_EOF\n' "$TEST_NAME" >> "$GITHUB_OUTPUT"
+
+                  echo "Mode: $MODE; trigger: $TRIGGER${TEST_NAME:+ (test: $TEST_NAME)}${FIX_BRANCH:+; verify-only: $FIX_BRANCH}; scheduled: ${IN_SCHEDULED:-false}; switch: $SWITCH; enabled: $ENABLED"
+
+    # There is no cap on open healer PRs: a test is skipped only when it has an
+    # open PR of its own, so one unmerged fix does not stop every other failure
+    # from being healed. At most one PR opens per night either way.
+    find-candidate:
+        name: Find a test to heal
+        needs: [resolve-input]
+        if: needs.resolve-input.outputs.enabled == 'true'
+        runs-on: ubuntu-22.04
+        permissions:
+            contents: read
+            actions: read
+            pull-requests: read
+        outputs:
+            has_candidate: ${{ steps.candidate.outputs.has_candidate }}
+            skipped_candidates: ${{ steps.candidate.outputs.skipped_candidates }}
+            existing_pr_url: ${{ steps.candidate.outputs.existing_pr_url }}
+            test_name: ${{ steps.candidate.outputs.test_name }}
+            shard_index: ${{ steps.candidate.outputs.shard_index }}
+            matched_dirs: ${{ steps.candidate.outputs.matched_dirs }}
+            source_run_id: ${{ steps.candidate.outputs.source_run_id }}
+            reason: ${{ steps.candidate.outputs.reason }}
+            ranked_failures: ${{ steps.candidate.outputs.ranked_failures }}
+            base_ref: ${{ steps.evidence-builds.outputs.base_ref }}
+            pro_sha: ${{ steps.evidence-builds.outputs.pro_sha }}
+            core_sha: ${{ steps.evidence-builds.outputs.core_sha }}
+            core_clone_ref: ${{ steps.evidence-builds.outputs.core_clone_ref }}
+            core_branch: ${{ steps.evidence-builds.outputs.core_branch }}
+            core_release_tag: ${{ steps.evidence-builds.outputs.core_release_tag }}
+            pro_version: ${{ steps.evidence-builds.outputs.pro_version }}
+            core_version: ${{ steps.evidence-builds.outputs.core_version }}
+            php_version: ${{ steps.evidence-builds.outputs.php_version }}
+            wp_nightly: ${{ steps.evidence-builds.outputs.wp_nightly }}
+        steps:
+            - name: Check out the healer
+              uses: actions/checkout@v6
+              with:
+                  repository: elementor/elementor-editor-github-actions
+                  ref: ${{ inputs.actions_ref }}
+                  path: .healer
+                  sparse-checkout: actions/playwright-test-healer
+                  persist-credentials: false
+            - uses: actions/setup-node@v6
+              with:
+                  node-version: ${{ env.HEALER_NODE_VERSION }}
+
+            # Auto mode only: the daily trigger dispatches as soon as the nightly is
+            # queued, so the merged Allure report does not exist yet. Waiting here
+            # rather than in the trigger keeps a manual re-run forgiving too.
+            - name: Wait for the evidence run to finish
+              if: needs.resolve-input.outputs.mode == 'auto'
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  SOURCE_RUN_ID: ${{ needs.resolve-input.outputs.source_run_id }}
+              run: |
+                  set -euo pipefail
+
+                  for _ in $(seq 1 120); do
+                    STATUS=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}" --jq '.status')
+                    if [ "$STATUS" = "completed" ]; then
+                      echo "Evidence run ${SOURCE_RUN_ID} is completed."
+                      exit 0
+                    fi
+                    echo "Evidence run ${SOURCE_RUN_ID} is '${STATUS}' — waiting 60s"
+                    sleep 60
+                  done
+
+                  echo "::error::Evidence run ${SOURCE_RUN_ID} did not complete within 2 hours."
+                  exit 1
+
+            - name: Download merged Allure report
+              id: allure
+              if: needs.resolve-input.outputs.mode == 'auto'
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  SOURCE_RUN_ID: ${{ needs.resolve-input.outputs.source_run_id }}
+              run: |
+                  set -euo pipefail
+
+                  # The report is kept for 1 day. An older run is ranked from its job
+                  # logs instead, which are kept for 90.
+                  if ! gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}/artifacts" --paginate \
+                      --jq '.artifacts[] | select(.expired == false) | .name' | grep -qx 'allure-report'; then
+                    echo "::notice::Run ${SOURCE_RUN_ID} has no unexpired allure-report artifact — ranking from job logs."
+                    echo "available=false" >> "$GITHUB_OUTPUT"
+                    exit 0
+                  fi
+
+                  gh run download "${SOURCE_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n allure-report -D allure-report
+                  echo "available=true" >> "$GITHUB_OUTPUT"
+
+            - name: Collect hard failures from job logs
+              if: needs.resolve-input.outputs.mode == 'auto' && steps.allure.outputs.available != 'true'
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  GITHUB_REPOSITORY: ${{ github.repository }}
+                  SOURCE_RUN_ID: ${{ needs.resolve-input.outputs.source_run_id }}
+              run: node "$HEALER_DIR/scripts/collect-log-hard-failures.js"
+
+            - name: Download per-shard failure artifacts
+              if: needs.resolve-input.outputs.mode == 'auto'
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  SOURCE_RUN_ID: ${{ needs.resolve-input.outputs.source_run_id }}
+              run: |
+                  set -euo pipefail
+                  mkdir -p test-results
+
+                  NAMES=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}/artifacts" --paginate \
+                    --jq '.artifacts[] | select(.expired == false) | select(.name | startswith("playwright-test-results-")) | .name' |
+                    node -e "
+                      const { filterHealableArtifactNames } = require('./' + process.env.HEALER_DIR + '/scripts/resolve-shard-command');
+                      const names = require('fs').readFileSync(0, 'utf8').split('\n').filter(Boolean);
+                      process.stdout.write(filterHealableArtifactNames(names).join('\n'));
+                    ")
+
+                  for NAME in $NAMES; do
+                    gh run download "${SOURCE_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n "$NAME" -D "test-results/$NAME" || true
+                  done
+
+            # Manual mode: the human named the test, so all that is missing is a
+            # real failure artifact to investigate from. With no source_run_id this
+            # searches the product's recent evidence runs newest-first.
+            - name: Find evidence for the requested test
+              id: manual
+              if: needs.resolve-input.outputs.mode == 'manual'
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  GITHUB_REPOSITORY: ${{ github.repository }}
+                  HEAL_TEST_NAME: ${{ needs.resolve-input.outputs.test_name }}
+                  SOURCE_RUN_ID: ${{ needs.resolve-input.outputs.source_run_id }}
+              run: node "$HEALER_DIR/scripts/find-test-evidence.js"
+
+            - name: Check for a failure worth healing
+              id: eligible
+              if: needs.resolve-input.outputs.mode == 'auto'
+              run: node "$HEALER_DIR/scripts/rank-nightly-failures.js" --has-eligible
+
+            # Before any agent time is spent: a fix is only worth writing on the
+            # branch that failed, and only verifiable against the same build. Resolved
+            # before ranking because that branch decides which open PRs count as
+            # already fixing a test. Every auto candidate shares the one evidence run.
+            # Skipped on a night with nothing to heal, so a green night cannot fail here.
+            - name: Resolve what the evidence run tested
+              id: evidence-builds
+              if: steps.eligible.outputs.has_eligible == 'true' || steps.manual.outputs.found == 'true'
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  GITHUB_REPOSITORY: ${{ github.repository }}
+                  SOURCE_RUN_ID: ${{ steps.manual.outputs.source_run_id || needs.resolve-input.outputs.source_run_id }}
+                  REQUESTED_BASE_REF: ${{ needs.resolve-input.outputs.base_ref }}
+              run: node "$HEALER_DIR/scripts/resolve-evidence-builds.js"
+
+            - name: Collect open PRs and recent healer verdicts
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  GITHUB_REPOSITORY: ${{ github.repository }}
+              run: node "$HEALER_DIR/scripts/healer-skips.js"
+
+            - name: Rank hard failures and pick a candidate
+              id: rank
+              if: needs.resolve-input.outputs.mode == 'auto'
+              env:
+                  HEALER_BASE_REF: ${{ steps.evidence-builds.outputs.base_ref }}
+              run: node "$HEALER_DIR/scripts/rank-nightly-failures.js"
+
+            # A person chose this test, so a recent verdict does not stop it. An
+            # open PR for it does, unless they asked for a second one. A verify-only
+            # run opens no PR, and is often checking that open PR's own branch.
+            - name: Check the requested test has no open PR
+              id: manual-open-pr
+              if: >-
+                  steps.manual.outputs.found == 'true' &&
+                  needs.resolve-input.outputs.allow_duplicate_pr != 'true' &&
+                  needs.resolve-input.outputs.fix_branch == ''
+              env:
+                  HEAL_TEST_NAME: ${{ needs.resolve-input.outputs.test_name }}
+                  HEALER_BASE_REF: ${{ steps.evidence-builds.outputs.base_ref }}
+              run: |
+                  set -euo pipefail
+                  node -e "
+                    const { findOpenPrForTest, readSkipSources } = require('./' + process.env.HEALER_DIR + '/scripts/healer-skips');
+                    const pr = findOpenPrForTest(process.env.HEAL_TEST_NAME, readSkipSources().openPrs, process.env.HEALER_BASE_REF);
+                    process.stdout.write(pr ? 'existing_pr_url=' + pr.url + '\n' : '');
+                  " >> "$GITHUB_OUTPUT"
+
+            - name: Collect candidate
+              id: candidate
+              env:
+                  MODE: ${{ needs.resolve-input.outputs.mode }}
+                  REQUESTED_TEST_NAME: ${{ needs.resolve-input.outputs.test_name }}
+                  REQUESTED_RUN_ID: ${{ needs.resolve-input.outputs.source_run_id }}
+                  AUTO_HAS_CANDIDATE: ${{ steps.rank.outputs.has_candidate }}
+                  AUTO_TEST_NAME: ${{ steps.rank.outputs.test_name }}
+                  AUTO_SHARD_INDEX: ${{ steps.rank.outputs.shard_index }}
+                  AUTO_MATCHED_DIRS: ${{ steps.rank.outputs.matched_dirs }}
+                  AUTO_REASON: ${{ steps.rank.outputs.reason }}
+                  AUTO_RANKED_FAILURES: ${{ steps.rank.outputs.ranked_failures }}
+                  AUTO_SKIPPED_CANDIDATES: ${{ steps.rank.outputs.skipped_candidates }}
+                  MANUAL_OPEN_PR_URL: ${{ steps.manual-open-pr.outputs.existing_pr_url }}
+                  MANUAL_FOUND: ${{ steps.manual.outputs.found }}
+                  MANUAL_RUN_ID: ${{ steps.manual.outputs.source_run_id }}
+                  MANUAL_SHARD_INDEX: ${{ steps.manual.outputs.shard_index }}
+                  MANUAL_MATCHED_DIRS: ${{ steps.manual.outputs.matched_dirs }}
+              run: |
+                  set -euo pipefail
+
+                  if [ "$MODE" = "manual" ]; then
+                    if [ -n "${MANUAL_OPEN_PR_URL}" ]; then
+                      {
+                        echo "has_candidate=false"
+                        echo "reason=test-has-open-pr"
+                        echo "existing_pr_url=${MANUAL_OPEN_PR_URL}"
+                        echo "source_run_id=${REQUESTED_RUN_ID}"
+                      } >> "$GITHUB_OUTPUT"
+                    elif [ "${MANUAL_FOUND}" = "true" ]; then
+                      {
+                        echo "has_candidate=true"
+                        echo "shard_index=${MANUAL_SHARD_INDEX}"
+                        echo "matched_dirs=${MANUAL_MATCHED_DIRS}"
+                        echo "source_run_id=${MANUAL_RUN_ID}"
+                      } >> "$GITHUB_OUTPUT"
+                    else
+                      {
+                        echo "has_candidate=false"
+                        echo "reason=no-manual-evidence"
+                        echo "source_run_id=${REQUESTED_RUN_ID}"
+                      } >> "$GITHUB_OUTPUT"
+                    fi
+                    printf 'test_name<<HEAL_EOF\n%s\nHEAL_EOF\n' "${REQUESTED_TEST_NAME}" >> "$GITHUB_OUTPUT"
+                    exit 0
+                  fi
+
+                  echo "source_run_id=${REQUESTED_RUN_ID}" >> "$GITHUB_OUTPUT"
+                  echo "skipped_candidates=${AUTO_SKIPPED_CANDIDATES:-[]}" >> "$GITHUB_OUTPUT"
+
+                  if [ "${AUTO_HAS_CANDIDATE}" = "true" ]; then
+                    {
+                      echo "has_candidate=true"
+                      echo "shard_index=${AUTO_SHARD_INDEX}"
+                      echo "matched_dirs=${AUTO_MATCHED_DIRS}"
+                    } >> "$GITHUB_OUTPUT"
+                    printf 'test_name<<HEAL_EOF\n%s\nHEAL_EOF\n' "${AUTO_TEST_NAME}" >> "$GITHUB_OUTPUT"
+                  else
+                    {
+                      echo "has_candidate=false"
+                      echo "reason=${AUTO_REASON}"
+                      echo "ranked_failures=${AUTO_RANKED_FAILURES}"
+                    } >> "$GITHUB_OUTPUT"
+                  fi
+
+    dispatch-agent:
+        name: Dispatch Cloud agent
+        needs: [resolve-input, find-candidate]
+        if: needs.find-candidate.outputs.has_candidate == 'true' && needs.resolve-input.outputs.fix_branch == ''
+        runs-on: ubuntu-22.04
+        outputs:
+            agent_id: ${{ steps.dispatch.outputs.agent_id }}
+            run_id: ${{ steps.dispatch.outputs.run_id }}
+            branch_name: ${{ steps.branch.outputs.branch_name }}
+        steps:
+            - name: Check out the healer
+              uses: actions/checkout@v6
+              with:
+                  repository: elementor/elementor-editor-github-actions
+                  ref: ${{ inputs.actions_ref }}
+                  path: .healer
+                  sparse-checkout: actions/playwright-test-healer
+                  persist-credentials: false
+            - uses: actions/setup-node@v6
+              with:
+                  node-version: ${{ env.HEALER_NODE_VERSION }}
+
+            # The run id keeps the branch unique. Without it a test that fails to
+            # heal produces the same branch name every night, and the next run
+            # mistakes last night's rejected branch for a fresh fix.
+            - name: Compute branch name
+              id: branch
+              env:
+                  TEST_NAME: ${{ needs.find-candidate.outputs.test_name }}
+                  RUN_ID: ${{ github.run_id }}
+              run: |
+                  set -euo pipefail
+                  node -e "
+                    const { buildHealBranchName } = require('./' + process.env.HEALER_DIR + '/scripts/healer-skips');
+                    process.stdout.write('branch_name=' + buildHealBranchName(process.env.TEST_NAME, process.env.RUN_ID) + '\n');
+                  " >> "$GITHUB_OUTPUT"
+
+            - name: Dispatch
+              id: dispatch
+              env:
+                  CURSOR_API_KEY: ${{ secrets.CURSOR_APIKEY }}
+                  GITHUB_REPOSITORY: ${{ github.repository }}
+                  HEAL_TEST_NAME: ${{ needs.find-candidate.outputs.test_name }}
+                  HEAL_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ needs.find-candidate.outputs.source_run_id }}
+                  HEAL_BRANCH_NAME: ${{ steps.branch.outputs.branch_name }}
+                  HEAL_SHARD_INDEX: ${{ needs.find-candidate.outputs.shard_index }}
+                  HEAL_MATCHED_DIRS: ${{ needs.find-candidate.outputs.matched_dirs }}
+                  HEAL_STARTING_REF: ${{ needs.find-candidate.outputs.base_ref }}
+                  HEAL_ATTEMPT: ${{ needs.resolve-input.outputs.attempt }}
+                  HEAL_MAX_ATTEMPTS: ${{ needs.resolve-input.outputs.max_fix_attempts }}
+                  HEAL_PREVIOUS_BRANCH: ${{ needs.resolve-input.outputs.previous_branch }}
+                  HEAL_PREVIOUS_RUN_ID: ${{ needs.resolve-input.outputs.previous_run_id }}
+              run: node "$HEALER_DIR/scripts/dispatch-cloud-agent.js"
+
+    wait-for-agent:
+        name: Wait for Cloud agent
+        needs: [resolve-input, find-candidate, dispatch-agent]
+        if: >-
+            !cancelled() &&
+            needs.find-candidate.outputs.has_candidate == 'true' &&
+            (needs.dispatch-agent.result == 'success' || needs.resolve-input.outputs.fix_branch != '')
+        runs-on: ubuntu-22.04
+        outputs:
+            status: ${{ steps.poll.outputs.status || steps.given.outputs.status }}
+            branch: ${{ steps.poll.outputs.branch || steps.given.outputs.branch }}
+            result_text: ${{ steps.poll.outputs.result_text }}
+            handoff: ${{ steps.poll.outputs.handoff }}
+        steps:
+            - name: Use the given fix branch
+              id: given
+              if: needs.resolve-input.outputs.fix_branch != ''
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  FIX_BRANCH: ${{ needs.resolve-input.outputs.fix_branch }}
+              run: |
+                  set -euo pipefail
+                  gh api "repos/${GITHUB_REPOSITORY}/branches/${FIX_BRANCH}" --silent
+                  echo "status=FINISHED" >> "$GITHUB_OUTPUT"
+                  echo "branch=${FIX_BRANCH}" >> "$GITHUB_OUTPUT"
+                  echo "Verify-only run: skipping the agent and verifying ${FIX_BRANCH}."
+
+            - name: Check out the healer
+              if: needs.resolve-input.outputs.fix_branch == ''
+              uses: actions/checkout@v6
+              with:
+                  repository: elementor/elementor-editor-github-actions
+                  ref: ${{ inputs.actions_ref }}
+                  path: .healer
+                  sparse-checkout: actions/playwright-test-healer
+                  persist-credentials: false
+            - uses: actions/setup-node@v6
+              if: needs.resolve-input.outputs.fix_branch == ''
+              with:
+                  node-version: ${{ env.HEALER_NODE_VERSION }}
+            - name: Poll
+              id: poll
+              if: needs.resolve-input.outputs.fix_branch == ''
+              env:
+                  CURSOR_API_KEY: ${{ secrets.CURSOR_APIKEY }}
+                  HEAL_AGENT_ID: ${{ needs.dispatch-agent.outputs.agent_id }}
+                  HEAL_AGENT_RUN_ID: ${{ needs.dispatch-agent.outputs.run_id }}
+                  HEAL_BRANCH_NAME: ${{ needs.dispatch-agent.outputs.branch_name }}
+                  HEAL_BASE_REF: ${{ needs.find-candidate.outputs.base_ref }}
+                  GITHUB_REPOSITORY: ${{ github.repository }}
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: node "$HEALER_DIR/scripts/poll-cloud-agent-run.js"
+
+    verify-fix:
+        name: Verify fix against the evidence build
+        needs: [resolve-input, find-candidate, wait-for-agent]
+        if: >-
+            !cancelled() &&
+            needs.wait-for-agent.outputs.status == 'FINISHED' &&
+            needs.wait-for-agent.outputs.branch != ''
+        runs-on: ubuntu-22.04
+        permissions:
+            contents: read
+            actions: read
+        outputs:
+            passed: ${{ steps.result.outputs.passed }}
+            stage: ${{ steps.result.outputs.stage }}
+            build_description: ${{ steps.builds.outputs.description }}
+            scope: ${{ steps.baseline.outputs.scope }}
+            test_file: ${{ steps.baseline.outputs.test_file }}
+            runs_to_failure: ${{ steps.baseline.outputs.runs_to_failure }}
+            fix_repeat: ${{ steps.baseline.outputs.fix_repeat }}
+            reproduced: ${{ steps.baseline.outputs.reproduced }}
+            verified_sha: ${{ steps.scope.outputs.sha }}
+        steps:
+            # No token is left in .git/config: the agent's test code runs in this
+            # job. fetch-depth 0 already brings every branch, so nothing later needs
+            # to fetch.
+            - uses: actions/checkout@v6
+              with:
+                  ref: ${{ needs.wait-for-agent.outputs.branch }}
+                  fetch-depth: 0
+                  persist-credentials: false
+
+            # Healer scripts always come from the healer's own ref, never from the
+            # branch the agent wrote.
+            - name: Check out the healer
+              uses: actions/checkout@v6
+              with:
+                  repository: elementor/elementor-editor-github-actions
+                  ref: ${{ inputs.actions_ref }}
+                  path: .healer
+                  sparse-checkout: actions/playwright-test-healer
+                  persist-credentials: false
+
+            # This job is about to run package scripts and a composite action out of
+            # the agent's branch with a production licence in scope, so the scope is
+            # checked before anything from that branch executes. It does not stop
+            # the job itself, so the violation reaches the report as its own stage;
+            # every later step is skipped, and the job still fails at the end.
+            - name: Enforce fix scope
+              id: scope
+              continue-on-error: true
+              env:
+                  BASE_REF: ${{ needs.find-candidate.outputs.base_ref }}
+              run: |
+                  set -euo pipefail
+                  echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+                  node "$HEALER_DIR/scripts/check-fix-scope.js"
+
+            # The evidence run's shard decides how the test has to be run. The
+            # numeric shards share one command, but template tests use a different
+            # Playwright config, plugin_tester needs a data import first, and
+            # import_export_customization needs an expert plan.
+            - name: Resolve the shard's run command
+              id: cmd
+              if: steps.scope.outcome == 'success'
+              env:
+                  HEAL_TEST_NAME: ${{ needs.find-candidate.outputs.test_name }}
+                  HEAL_SHARD_INDEX: ${{ needs.find-candidate.outputs.shard_index }}
+              run: node "$HEALER_DIR/scripts/resolve-shard-command.js"
+
+            - name: Restore the evidence run's builds
+              id: restore-builds
+              if: steps.scope.outcome == 'success'
+              continue-on-error: true
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  GITHUB_REPOSITORY: ${{ github.repository }}
+                  SOURCE_RUN_ID: ${{ needs.find-candidate.outputs.source_run_id }}
+              run: node "$HEALER_DIR/scripts/restore-nightly-playwright-builds.js"
+
+            - uses: actions/setup-node@v6
+              if: steps.restore-builds.outputs.build_source == 'fresh'
+              with:
+                  node-version-file: .nvmrc
+                  cache: 'npm'
+
+            # Build artifacts expire (Pro keeps them 1 day, Core 3), so an older
+            # evidence run has none. It is rebuilt from the exact commits it tested
+            # instead. Branch heads and nightlies move on after the run, and a pass
+            # on newer code does not show the fix works.
+            #
+            # Builds are cached by commit and saved straight after building, never
+            # at job end: by then the fix branch's test code has run in this job
+            # and could have altered the plugin the next verification would trust.
+
+            # Core: the plugin at the commit the run tested, mounted as ./build.
+            - name: Restore the cached Core plugin build
+              id: core-plugin-cache
+              if: inputs.product == 'core' && steps.restore-builds.outputs.build_source == 'fresh'
+              uses: actions/cache/restore@v5
+              with:
+                  path: build
+                  key: healer-core-plugin-${{ needs.find-candidate.outputs.core_sha }}
+
+            - name: Install PHP for the Core build
+              if: inputs.product == 'core' && steps.restore-builds.outputs.build_source == 'fresh' && steps.core-plugin-cache.outputs.cache-hit != 'true'
+              uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+              with:
+                  php-version: '7.4'
+
+            - name: Build Core at the evidence commit
+              id: fresh-core-plugin-build
+              if: inputs.product == 'core' && steps.restore-builds.outputs.build_source == 'fresh' && steps.core-plugin-cache.outputs.cache-hit != 'true'
+              continue-on-error: true
+              env:
+                  CORE_SHA: ${{ needs.find-candidate.outputs.core_sha }}
+              run: |
+                  set -euo pipefail
+                  if ! git cat-file -e "${CORE_SHA}^{commit}" 2>/dev/null; then
+                    echo "::error::Core commit ${CORE_SHA} is not in the checkout's history."
+                    exit 1
+                  fi
+                  CORE_WORKTREE="$(dirname "$GITHUB_WORKSPACE")/core-at-evidence"
+                  git worktree add --detach "$CORE_WORKTREE" "$CORE_SHA"
+                  (cd "$CORE_WORKTREE" && npm run install:ci && npm run composer:no-dev && npm run build)
+                  rm -rf build
+                  mv "$CORE_WORKTREE/build" ./build
+                  git worktree remove --force "$CORE_WORKTREE"
+
+            - name: Cache the Core plugin build
+              if: steps.fresh-core-plugin-build.outcome == 'success'
+              uses: actions/cache/save@v5
+              with:
+                  path: build
+                  key: healer-core-plugin-${{ needs.find-candidate.outputs.core_sha }}
+
+            - name: Confirm the Core plugin build
+              id: fresh-core-plugin
+              if: inputs.product == 'core' && steps.restore-builds.outputs.build_source == 'fresh'
+              continue-on-error: true
+              env:
+                  BUILD: ${{ steps.fresh-core-plugin-build.outcome }}
+                  CACHED: ${{ steps.core-plugin-cache.outputs.cache-hit }}
+                  BASE_REF: ${{ needs.find-candidate.outputs.base_ref }}
+                  CORE_SHA: ${{ needs.find-candidate.outputs.core_sha }}
+              run: |
+                  set -euo pipefail
+                  if [ "$BUILD" != "success" ] && [ "$CACHED" != "true" ]; then
+                    echo "::error::Could not build Core at ${CORE_SHA} (build: ${BUILD:-skipped})."
+                    exit 1
+                  fi
+                  test -f build/elementor.php
+                  echo "label=Core built from \`${BASE_REF}\` at \`${CORE_SHA:0:12}\`" >> "$GITHUB_OUTPUT"
+
+            # Pro: Core from the release or commit the run tested, and Pro's plugin
+            # code at the commit it checked out.
+            - name: Fetch the Core release
+              id: fresh-core-release
+              if: inputs.product == 'pro' && steps.restore-builds.outputs.build_source == 'fresh' && needs.find-candidate.outputs.core_release_tag != ''
+              continue-on-error: true
+              env:
+                  GH_TOKEN: ${{ secrets.MAINTAIN_TOKEN }}
+                  CORE_RELEASE_TAG: ${{ needs.find-candidate.outputs.core_release_tag }}
+              run: bash ./.github/scripts/download-core-release.sh "$CORE_RELEASE_TAG" elementor.zip
+
+            - name: Restore the cached Core build
+              id: core-cache
+              if: inputs.product == 'pro' && steps.restore-builds.outputs.build_source == 'fresh' && needs.find-candidate.outputs.core_release_tag == ''
+              uses: actions/cache/restore@v5
+              with:
+                  path: elementor.zip
+                  key: healer-core-${{ needs.find-candidate.outputs.core_sha }}
+
+            # The clone script comes from the healer: the fix branch's copy is its
+            # base branch's, which may not know how to pin a commit.
+            - name: Build Core for Pro at the evidence commit
+              id: fresh-core-build
+              if: inputs.product == 'pro' && steps.restore-builds.outputs.build_source == 'fresh' && needs.find-candidate.outputs.core_release_tag == '' && steps.core-cache.outputs.cache-hit != 'true'
+              continue-on-error: true
+              env:
+                  ELEMENTOR_CORE_BRANCH: ${{ needs.find-candidate.outputs.core_clone_ref || needs.find-candidate.outputs.core_branch }}
+                  ELEMENTOR_CORE_SHA: ${{ needs.find-candidate.outputs.core_sha }}
+              run: |
+                  set -euo pipefail
+                  bash "$HEALER_DIR/scripts/clone-core-at-commit.sh"
+                  test "$(git -C ../elementor rev-parse HEAD)" = "$ELEMENTOR_CORE_SHA"
+                  PACKAGE_VERSION=$(node -p "require('./package.json').version") bash ./.github/scripts/build-core.sh
+                  cd ../elementor
+                  mv build elementor
+                  zip -rq elementor.zip elementor
+                  mv elementor.zip "$GITHUB_WORKSPACE/elementor.zip"
+
+            - name: Cache the Core build
+              if: steps.fresh-core-build.outcome == 'success'
+              uses: actions/cache/save@v5
+              with:
+                  path: elementor.zip
+                  key: healer-core-${{ needs.find-candidate.outputs.core_sha }}
+
+            - name: Confirm the Core build
+              id: fresh-core
+              if: inputs.product == 'pro' && steps.restore-builds.outputs.build_source == 'fresh'
+              continue-on-error: true
+              env:
+                  RELEASE: ${{ steps.fresh-core-release.outcome }}
+                  RELEASE_TAG: ${{ needs.find-candidate.outputs.core_release_tag }}
+                  BUILD: ${{ steps.fresh-core-build.outcome }}
+                  CACHED: ${{ steps.core-cache.outputs.cache-hit }}
+                  CORE_BRANCH: ${{ needs.find-candidate.outputs.core_branch }}
+                  CORE_SHA: ${{ needs.find-candidate.outputs.core_sha }}
+              run: |
+                  set -euo pipefail
+
+                  if [ "$RELEASE" = "success" ]; then
+                    LABEL="Core release \`${RELEASE_TAG}\`"
+                  elif [ "$BUILD" = "success" ] || [ "$CACHED" = "true" ]; then
+                    LABEL="Core built from \`${CORE_BRANCH}\` at \`${CORE_SHA:0:12}\`"
+                  else
+                    echo "::error::Could not get Core ${RELEASE_TAG:+release $RELEASE_TAG}${CORE_BRANCH:+from $CORE_BRANCH at $CORE_SHA} (release: ${RELEASE:-skipped}, build: ${BUILD:-skipped})."
+                    exit 1
+                  fi
+
+                  test -f elementor.zip
+                  echo "label=${LABEL}" >> "$GITHUB_OUTPUT"
+
+            # Only the plugin comes from the evidence commit. The tests stay the fix
+            # branch's, and the baseline run below takes the fix back out of them.
+            # The Pro build compiles against Core sources in a sibling ../elementor,
+            # so the worktree sits next to the workspace, beside that clone.
+            - name: Unpack the Core build
+              if: steps.fresh-core.outcome == 'success'
+              run: unzip -qo elementor.zip
+
+            - name: Restore the cached Pro build
+              id: pro-cache
+              if: steps.fresh-core.outcome == 'success' && steps.restore-builds.outputs.pro_restored != 'true'
+              uses: actions/cache/restore@v5
+              with:
+                  path: elementor-pro
+                  key: healer-pro-${{ needs.find-candidate.outputs.pro_sha }}-core-${{ needs.find-candidate.outputs.core_sha }}
+
+            - name: Build Pro at the evidence commit
+              id: fresh-pro-build
+              if: steps.fresh-core.outcome == 'success' && steps.restore-builds.outputs.pro_restored != 'true' && steps.pro-cache.outputs.cache-hit != 'true'
+              continue-on-error: true
+              env:
+                  PRO_SHA: ${{ needs.find-candidate.outputs.pro_sha }}
+                  ELEMENTOR_CORE_BRANCH: ${{ needs.find-candidate.outputs.core_clone_ref }}
+                  ELEMENTOR_CORE_SHA: ${{ needs.find-candidate.outputs.core_sha }}
+              run: |
+                  set -euo pipefail
+                  if [ ! -d ../elementor ]; then
+                    bash "$HEALER_DIR/scripts/clone-core-at-commit.sh"
+                  fi
+                  test "$(git -C ../elementor rev-parse HEAD)" = "$ELEMENTOR_CORE_SHA"
+                  if ! git cat-file -e "${PRO_SHA}^{commit}" 2>/dev/null; then
+                    echo "::error::Pro commit ${PRO_SHA} is not in the checkout's history."
+                    exit 1
+                  fi
+                  PRO_SRC="$(dirname "$GITHUB_WORKSPACE")/pro-at-evidence"
+                  git worktree add --detach "$PRO_SRC" "$PRO_SHA"
+                  (cd "$PRO_SRC" && PACKAGE_VERSION=$(node -p "require('./package.json').version") bash ./.github/scripts/build-zip.sh)
+                  rm -rf elementor-pro
+                  mv "$PRO_SRC/elementor-pro" ./elementor-pro
+                  git worktree remove --force "$PRO_SRC"
+                  rm -rf ../elementor
+
+            - name: Cache the Pro build
+              if: steps.fresh-pro-build.outcome == 'success'
+              uses: actions/cache/save@v5
+              with:
+                  path: elementor-pro
+                  key: healer-pro-${{ needs.find-candidate.outputs.pro_sha }}-core-${{ needs.find-candidate.outputs.core_sha }}
+
+            - name: Confirm the Pro build
+              id: fresh-pro
+              if: steps.fresh-core.outcome == 'success'
+              continue-on-error: true
+              env:
+                  BUILD: ${{ steps.fresh-pro-build.outcome }}
+                  CACHED: ${{ steps.pro-cache.outputs.cache-hit }}
+                  RESTORED: ${{ steps.restore-builds.outputs.pro_restored }}
+                  BASE_REF: ${{ needs.find-candidate.outputs.base_ref }}
+                  PRO_SHA: ${{ needs.find-candidate.outputs.pro_sha }}
+              run: |
+                  set -euo pipefail
+                  if [ "$RESTORED" = "true" ]; then
+                    LABEL="Pro restored from the evidence run, built from \`${BASE_REF}\` at \`${PRO_SHA:0:12}\`"
+                  elif [ "$BUILD" = "success" ] || [ "$CACHED" = "true" ]; then
+                    LABEL="Pro built from \`${BASE_REF}\` at \`${PRO_SHA:0:12}\`"
+                  else
+                    echo "::error::Could not build Pro at ${PRO_SHA} (build: ${BUILD:-skipped})."
+                    exit 1
+                  fi
+                  test -d elementor-pro
+                  echo "label=${LABEL}" >> "$GITHUB_OUTPUT"
+
+            - name: Confirm the builds are in place
+              id: builds
+              if: steps.restore-builds.outcome == 'success'
+              continue-on-error: true
+              env:
+                  BUILD_SOURCE: ${{ steps.restore-builds.outputs.build_source }}
+                  FRESH_CORE: ${{ steps.fresh-core.outcome }}
+                  FRESH_PRO: ${{ steps.fresh-pro.outcome }}
+                  FRESH_CORE_PLUGIN: ${{ steps.fresh-core-plugin.outcome }}
+                  PRO_LABEL: ${{ steps.fresh-pro.outputs.label }}
+                  CORE_LABEL: ${{ steps.fresh-core.outputs.label || steps.fresh-core-plugin.outputs.label }}
+                  EVIDENCE_PRO_VERSION: ${{ needs.find-candidate.outputs.pro_version }}
+                  EVIDENCE_CORE_VERSION: ${{ needs.find-candidate.outputs.core_version }}
+                  EVIDENCE_PHP_VERSION: ${{ needs.find-candidate.outputs.php_version }}
+                  EVIDENCE_WP_NIGHTLY: ${{ needs.find-candidate.outputs.wp_nightly }}
+              run: |
+                  set -euo pipefail
+
+                  release_line() { printf '%s' "$1" | grep -oE '^[0-9]+\.[0-9]+' || true; }
+                  plugin_version() { sed -nE "s/.*define\( '$1', '([^']+)'.*/\1/p" "$2"; }
+
+                  if [ "$HEALER_PRODUCT" = "core" ]; then
+                    if [ "$BUILD_SOURCE" = "fresh" ] && [ "$FRESH_CORE_PLUGIN" != "success" ]; then
+                      echo "::error::Fresh Core build failed (${FRESH_CORE_PLUGIN:-skipped})."
+                      exit 1
+                    fi
+
+                    test -f build/elementor.php
+                    CORE_BUILT=$(plugin_version ELEMENTOR_VERSION build/elementor.php)
+
+                    if [ -z "$(release_line "$CORE_BUILT")" ] || [ "$(release_line "$CORE_BUILT")" != "$(release_line "$EVIDENCE_CORE_VERSION")" ]; then
+                      echo "::error::The verification build is Core ${CORE_BUILT:-unknown}, but the failure was on Core ${EVIDENCE_CORE_VERSION}. A pass on another release line would not show the fix works."
+                      exit 1
+                    fi
+
+                    ENVIRONMENT="PHP ${EVIDENCE_PHP_VERSION:-default}"
+                    if [ "$EVIDENCE_WP_NIGHTLY" = "true" ]; then
+                      ENVIRONMENT="${ENVIRONMENT} with WordPress nightly"
+                    fi
+                    if [ "$BUILD_SOURCE" = "fresh" ]; then
+                      DESCRIPTION="a build of what the evidence run tested — Core ${CORE_BUILT} (${CORE_LABEL}) on ${ENVIRONMENT}, rebuilt because the evidence run's plugin artifact had expired"
+                    else
+                      DESCRIPTION="the Core ${CORE_BUILT} build restored from the evidence run, on ${ENVIRONMENT}"
+                    fi
+                  else
+                    if [ "$BUILD_SOURCE" = "fresh" ] && { [ "$FRESH_CORE" != "success" ] || [ "$FRESH_PRO" != "success" ]; }; then
+                      echo "::error::Fresh build failed (Core: ${FRESH_CORE:-skipped}, Pro: ${FRESH_PRO:-skipped})."
+                      exit 1
+                    fi
+
+                    test -d elementor && test -d elementor-pro && test -f elementor.zip
+
+                    CORE_BUILT=$(plugin_version ELEMENTOR_VERSION elementor/elementor.php)
+                    PRO_BUILT=$(plugin_version ELEMENTOR_PRO_VERSION elementor-pro/elementor-pro.php)
+
+                    if [ -z "$(release_line "$CORE_BUILT")" ] || [ "$(release_line "$CORE_BUILT")" != "$(release_line "$EVIDENCE_CORE_VERSION")" ] ||
+                       [ -z "$(release_line "$PRO_BUILT")" ] || [ "$(release_line "$PRO_BUILT")" != "$(release_line "$EVIDENCE_PRO_VERSION")" ]; then
+                      echo "::error::The verification build is Pro ${PRO_BUILT:-unknown} with Core ${CORE_BUILT:-unknown}, but the failure was on Pro ${EVIDENCE_PRO_VERSION} with Core ${EVIDENCE_CORE_VERSION}. A pass on another release line would not show the fix works."
+                      exit 1
+                    fi
+
+                    if [ "$BUILD_SOURCE" = "fresh" ]; then
+                      DESCRIPTION="builds of what the evidence run tested — Pro ${PRO_BUILT} (${PRO_LABEL}) with Core ${CORE_BUILT} (${CORE_LABEL}), for a failure on Pro ${EVIDENCE_PRO_VERSION} with Core ${EVIDENCE_CORE_VERSION}, rebuilt where the evidence run's artifacts were missing"
+                    else
+                      DESCRIPTION="the Pro ${PRO_BUILT} with Core ${CORE_BUILT} build restored from the evidence run"
+                    fi
+                  fi
+
+                  echo "build_source=${BUILD_SOURCE}" >> "$GITHUB_OUTPUT"
+                  echo "description=${DESCRIPTION}" >> "$GITHUB_OUTPUT"
+                  echo "Verifying against ${DESCRIPTION}."
+
+            - name: Setup the Pro Playwright job against that build
+              id: setup-pro
+              if: inputs.product == 'pro' && steps.builds.outcome == 'success'
+              continue-on-error: true
+              timeout-minutes: 30
+              uses: ./.github/actions/playwright-test-setup
+              with:
+                  wp_core_version: 'latest'
+                  cache_key: unused-nightly-artifacts-restore
+                  skip_cache_restore: 'true'
+                  e2e_pro_license: ${{ secrets.E2E_PRO_LICENSE }}
+
+            - uses: actions/setup-node@v6
+              id: setup-core-node
+              if: inputs.product == 'core' && steps.builds.outcome == 'success'
+              continue-on-error: true
+              with:
+                  node-version-file: .nvmrc
+
+            - name: Setup the Core Playwright environment against that build
+              id: setup-core
+              if: inputs.product == 'core' && steps.setup-core-node.outcome == 'success'
+              continue-on-error: true
+              timeout-minutes: 30
+              env:
+                  PHP_VERSION: ${{ needs.find-candidate.outputs.php_version }}
+                  WP_NIGHTLY: ${{ needs.find-candidate.outputs.wp_nightly }}
+              run: bash "$HEALER_DIR/scripts/setup-core-playwright.sh"
+
+            - name: Confirm the Playwright environment is up
+              id: setup
+              if: steps.builds.outcome == 'success'
+              continue-on-error: true
+              env:
+                  SETUP_PRO: ${{ steps.setup-pro.outcome }}
+                  SETUP_CORE: ${{ steps.setup-core.outcome }}
+              run: |
+                  if [ "$SETUP_PRO" != "success" ] && [ "$SETUP_CORE" != "success" ]; then
+                    echo "::error::Playwright environment setup failed (Pro: ${SETUP_PRO:-skipped}, Core: ${SETUP_CORE:-skipped})."
+                    exit 1
+                  fi
+
+            - name: Run the shard's test setup
+              id: shard-setup
+              if: steps.setup.outcome == 'success' && steps.cmd.outputs.requires_test_setup == 'true'
+              continue-on-error: true
+              env:
+                  TEST_SETUP_SCRIPT: ${{ steps.cmd.outputs.test_setup_script }}
+              run: npm run "$TEST_SETUP_SCRIPT"
+
+            # A green run proves nothing if it ran zero tests, and an unescaped
+            # title can widen `--grep` into an alternation that matches a different,
+            # passing test. Both would open a PR on an unverified fix.
+            - name: Confirm the grep matches exactly one test
+              id: grep-check
+              if: steps.setup.outcome == 'success' && steps.shard-setup.outcome != 'failure'
+              continue-on-error: true
+              env:
+                  NPM_SCRIPT: ${{ steps.cmd.outputs.npm_script }}
+                  GREP_PATTERN: ${{ steps.cmd.outputs.grep_pattern }}
+              run: |
+                  set -euo pipefail
+
+                  npm run "$NPM_SCRIPT" -- --grep="$GREP_PATTERN" --list > playwright-list.txt 2>&1 || true
+                  cat playwright-list.txt
+
+                  TOTAL=$(node -e "
+                    const fs = require('fs');
+                    const { parsePlaywrightListTotal } = require('./' + process.env.HEALER_DIR + '/scripts/resolve-shard-command');
+                    const total = parsePlaywrightListTotal(fs.readFileSync('playwright-list.txt', 'utf8'));
+                    process.stdout.write(total === null ? 'none' : String(total));
+                  ")
+
+                  if [ "$TOTAL" != "1" ]; then
+                    echo "::error::Expected the grep to match exactly 1 test, matched '${TOTAL}'. Use the full, exact test title."
+                    exit 1
+                  fi
+
+            # A fix is proven only if the test fails without it on the same builds.
+            # Most nightly flakes stay green in isolation, so a failure that does not
+            # show up here still gets its fix run and a draft PR flagged unreproduced:
+            # that only proves the fix breaks nothing, and the PR says so.
+            # A flake passes a few runs in a row often enough to throw good fixes
+            # away, so this repeats well past verify_repeat and stops at the first
+            # failure, which also keeps the usual reproducing case short. When the
+            # test never fails alone, its whole file is run too: the nightly runs a
+            # file's tests in order, and some failures need what ran before them.
+            - name: Run the test without the fix
+              id: baseline
+              if: steps.grep-check.outcome == 'success'
+              continue-on-error: true
+              env:
+                  BASE_REF: ${{ needs.find-candidate.outputs.base_ref }}
+                  NPM_SCRIPT: ${{ steps.cmd.outputs.npm_script }}
+                  GREP_PATTERN: ${{ steps.cmd.outputs.grep_pattern }}
+                  HEAL_TEST_NAME: ${{ needs.find-candidate.outputs.test_name }}
+                  LIST_OUTPUT: playwright-list.txt
+                  VERIFY_REPEAT: ${{ needs.resolve-input.outputs.verify_repeat }}
+                  E2E_PRO_PLAN: ${{ steps.cmd.outputs.pro_plan }}
+              run: |
+                  set -euo pipefail
+
+                  # Environment setup may already have edited tracked files here, such
+                  # as Core's wp-lite-env config, so the tree is compared with itself.
+                  FIX_PATCH="$RUNNER_TEMP/healer-fix.patch"
+                  TREE_BEFORE="$RUNNER_TEMP/healer-tree-before.diff"
+                  git diff --binary "$(git merge-base "origin/${BASE_REF}" HEAD)" HEAD -- tests/playwright > "$FIX_PATCH"
+                  git diff --binary HEAD -- tests/playwright > "$TREE_BEFORE"
+                  git apply -R "$FIX_PATCH"
+
+                  set +e
+                  node "$HEALER_DIR/scripts/run-healer-attempts.js" baseline
+                  BASELINE_STATUS=$?
+                  set -e
+
+                  git apply "$FIX_PATCH"
+                  if ! git diff --binary HEAD -- tests/playwright | cmp -s - "$TREE_BEFORE"; then
+                    echo "::error::Could not put the fix back after the baseline run."
+                    exit 1
+                  fi
+
+                  exit "$BASELINE_STATUS"
+
+            - name: Run the test
+              id: run-test
+              if: steps.baseline.outcome == 'success' && steps.baseline.outputs.fix_repeat != ''
+              continue-on-error: true
+              env:
+                  NPM_SCRIPT: ${{ steps.cmd.outputs.npm_script }}
+                  GREP_PATTERN: ${{ steps.cmd.outputs.grep_pattern }}
+                  HEAL_TEST_NAME: ${{ needs.find-candidate.outputs.test_name }}
+                  SCOPE: ${{ steps.baseline.outputs.scope }}
+                  TEST_FILE: ${{ steps.baseline.outputs.test_file }}
+                  FIX_REPEAT: ${{ steps.baseline.outputs.fix_repeat }}
+                  E2E_PRO_PLAN: ${{ steps.cmd.outputs.pro_plan }}
+              run: node "$HEALER_DIR/scripts/run-healer-attempts.js" verify
+
+            # `stage` separates "the fix is bad" from "the healer's own environment
+            # broke". Reporting them as the same thing sends someone to review a fix
+            # that was never actually tested.
+            - name: Record result
+              id: result
+              env:
+                  SCOPE: ${{ steps.scope.outcome }}
+                  RESTORE: ${{ steps.builds.outcome }}
+                  SETUP: ${{ steps.setup.outcome }}
+                  SHARD_SETUP: ${{ steps.shard-setup.outcome }}
+                  GREP_CHECK: ${{ steps.grep-check.outcome }}
+                  BASELINE: ${{ steps.baseline.outcome }}
+                  REPRODUCED: ${{ steps.baseline.outputs.reproduced }}
+                  RUN_TEST: ${{ steps.run-test.outcome }}
+                  RUN_TEST_INFRA_ERROR: ${{ steps.run-test.outputs.infra_error }}
+              run: |
+                  set -euo pipefail
+
+                  STAGE=""
+                  PASSED=false
+
+                  if [ "$SCOPE" != "success" ]; then
+                    STAGE="scope"
+                  elif [ "$RESTORE" != "success" ]; then
+                    STAGE="restore"
+                  elif [ "$SETUP" != "success" ] || [ "$SHARD_SETUP" = "failure" ]; then
+                    STAGE="setup"
+                  elif [ "$GREP_CHECK" != "success" ]; then
+                    STAGE="grep"
+                  elif [ "$BASELINE" != "success" ]; then
+                    STAGE="baseline"
+                  elif [ "$REPRODUCED" != "true" ] && [ "$RUN_TEST" = "skipped" ]; then
+                    STAGE="baseline-neighbour-failed"
+                  elif [ "$RUN_TEST_INFRA_ERROR" = "true" ]; then
+                    STAGE="verify-run"
+                  elif [ "$RUN_TEST" != "success" ]; then
+                    STAGE="test"
+                  else
+                    PASSED=true
+                  fi
+
+                  echo "passed=$PASSED" >> "$GITHUB_OUTPUT"
+                  echo "stage=$STAGE" >> "$GITHUB_OUTPUT"
+                  echo "Verification passed=$PASSED stage=${STAGE:-none}"
+
+            - uses: actions/upload-artifact@v7
+              if: steps.run-test.outcome == 'failure'
+              with:
+                  name: healer-verify-failure-test-results
+                  path: test-results/
+                  if-no-files-found: ignore
+                  retention-days: 3
+
+            - name: Fail on a fix out of scope
+              if: steps.scope.outcome == 'failure'
+              run: |
+                  echo "::error::The agent's branch changes files the healer may not touch; see Enforce fix scope."
+                  exit 1
+
+    open-pr:
+        name: Open PR
+        needs: [resolve-input, find-candidate, wait-for-agent, verify-fix]
+        if: >-
+            !cancelled() &&
+            needs.verify-fix.outputs.passed == 'true' &&
+            needs.resolve-input.outputs.fix_branch == ''
+        runs-on: ubuntu-22.04
+        permissions:
+            contents: read
+            pull-requests: write
+        outputs:
+            pr_url: ${{ steps.open.outputs.pr_url }}
+            jira_url: ${{ steps.jira.outputs.jira_url }}
+            duplicate_pr_url: ${{ steps.duplicate.outputs.existing_pr_url }}
+            unreproduced_limit_reached: ${{ steps.unreproduced-limit.outputs.unreproduced_limit_reached }}
+        steps:
+            # The title builder lives in the healer — never the agent's branch.
+            - name: Check out the healer
+              uses: actions/checkout@v6
+              with:
+                  repository: elementor/elementor-editor-github-actions
+                  ref: ${{ inputs.actions_ref }}
+                  path: .healer
+                  sparse-checkout: actions/playwright-test-healer
+                  persist-credentials: false
+
+            # Checked again here, not only before the agent ran: the agent and
+            # verification take the better part of an hour, and another run or a
+            # person can open a PR for the same test in that time.
+            - name: Check the test still has no open PR
+              id: duplicate
+              if: needs.resolve-input.outputs.allow_duplicate_pr != 'true'
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  GITHUB_REPOSITORY: ${{ github.repository }}
+                  TEST_NAME: ${{ needs.find-candidate.outputs.test_name }}
+                  BASE_REF: ${{ needs.find-candidate.outputs.base_ref }}
+              run: |
+                  set -euo pipefail
+                  node -e "
+                    const { findOpenPrForTest, listOpenPrs } = require('./' + process.env.HEALER_DIR + '/scripts/healer-skips');
+                    const pr = findOpenPrForTest(process.env.TEST_NAME, listOpenPrs(process.env.GITHUB_REPOSITORY), process.env.BASE_REF);
+                    if (pr) {
+                      console.log('::notice::' + pr.url + ' is already open for this test — not opening a duplicate.');
+                      require('./' + process.env.HEALER_DIR + '/scripts/github-output').setOutput('existing_pr_url', pr.url);
+                    }
+                  "
+
+            # A PR shows the branch head, so anything pushed after verification
+            # would ride in under a "verified" body.
+            - name: Check the branch is still at the verified commit
+              if: steps.duplicate.outputs.existing_pr_url == ''
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  BRANCH: ${{ needs.wait-for-agent.outputs.branch }}
+                  VERIFIED_SHA: ${{ needs.verify-fix.outputs.verified_sha }}
+              run: |
+                  set -euo pipefail
+                  HEAD_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/branches/${BRANCH}" --jq '.commit.sha')
+                  if [ -z "$VERIFIED_SHA" ] || [ "$HEAD_SHA" != "$VERIFIED_SHA" ]; then
+                    echo "::error::${BRANCH} is at ${HEAD_SHA}, but verification ran on ${VERIFIED_SHA:-an unknown commit}. Not opening a PR for unverified code."
+                    exit 1
+                  fi
+
+            # Most nightly failures do not reproduce, so without a limit the
+            # unattended run could leave a new draft every night. A person who
+            # dispatched the run asked for this test, so manual mode is not limited.
+            - name: Check the open unreproduced drafts are under the limit
+              id: unreproduced-limit
+              if: >-
+                  steps.duplicate.outputs.existing_pr_url == '' &&
+                  needs.verify-fix.outputs.reproduced != 'true' &&
+                  needs.resolve-input.outputs.trigger == 'auto'
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  MAX_UNREPRODUCED_PRS: ${{ inputs.max_unreproduced_prs }}
+              run: |
+                  set -euo pipefail
+                  if ! printf '%s' "$MAX_UNREPRODUCED_PRS" | grep -qE '^[0-9]+$'; then
+                    echo "::error::max_unreproduced_prs must be a whole number, got '${MAX_UNREPRODUCED_PRS}'."
+                    exit 1
+                  fi
+                  OPEN=$(gh pr list --repo "$GITHUB_REPOSITORY" --label "$UNREPRODUCED_LABEL" --state open --limit 100 --json number --jq 'length')
+                  if [ "$OPEN" -ge "$MAX_UNREPRODUCED_PRS" ]; then
+                    echo "::notice::${OPEN} open ${UNREPRODUCED_LABEL} PRs, limit ${MAX_UNREPRODUCED_PRS} — not opening another."
+                    echo "unreproduced_limit_reached=true" >> "$GITHUB_OUTPUT"
+                  fi
+
+            # Non-fatal: a Jira outage or missing credentials must not lose a
+            # verified fix, so the PR falls back to the epic key.
+            - name: Create the Jira task
+              id: jira
+              if: >-
+                  steps.duplicate.outputs.existing_pr_url == '' &&
+                  steps.unreproduced-limit.outputs.unreproduced_limit_reached != 'true' &&
+                  vars.TEST_HEALER_JIRA_ENABLED != 'false'
+              continue-on-error: true
+              env:
+                  JIRA_API_EMAIL: ${{ secrets.JIRA_API_EMAIL }}
+                  JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+                  JIRA_PARENT_KEY: ${{ env.HEALER_PARENT_JIRA_KEY }}
+                  JIRA_HEALER_ASSIGNEE_EMAIL: ${{ vars.NIGHTLY_HEALER_JIRA_ASSIGNEE_EMAIL }}
+                  HEAL_TEST_NAME: ${{ needs.find-candidate.outputs.test_name }}
+                  HEAL_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ needs.find-candidate.outputs.source_run_id }}
+                  HEAL_VERIFICATION_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+                  HEAL_BRANCH: ${{ needs.wait-for-agent.outputs.branch }}
+                  HEAL_REPRODUCED: ${{ needs.verify-fix.outputs.reproduced }}
+              run: node "$HEALER_DIR/scripts/create-jira-heal-ticket.js"
+
+            - name: Create the PR
+              id: open
+              if: steps.duplicate.outputs.existing_pr_url == '' && steps.unreproduced-limit.outputs.unreproduced_limit_reached != 'true'
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  TEST_NAME: ${{ needs.find-candidate.outputs.test_name }}
+                  SHARD_INDEX: ${{ needs.find-candidate.outputs.shard_index }}
+                  BRANCH: ${{ needs.wait-for-agent.outputs.branch }}
+                  BASE_REF: ${{ needs.find-candidate.outputs.base_ref }}
+                  LABEL: ${{ needs.resolve-input.outputs.label }}
+                  MODE: ${{ needs.resolve-input.outputs.trigger }}
+                  SCOPE: ${{ needs.verify-fix.outputs.scope }}
+                  TEST_FILE: ${{ needs.verify-fix.outputs.test_file }}
+                  RUNS_TO_FAILURE: ${{ needs.verify-fix.outputs.runs_to_failure }}
+                  FIX_REPEAT: ${{ needs.verify-fix.outputs.fix_repeat }}
+                  REPRODUCED: ${{ needs.verify-fix.outputs.reproduced }}
+                  SOURCE_RUN_ID: ${{ needs.find-candidate.outputs.source_run_id }}
+                  RESULT_TEXT: ${{ needs.wait-for-agent.outputs.result_text }}
+                  BUILD_DESCRIPTION: ${{ needs.verify-fix.outputs.build_description }}
+                  ASSIGNEE: ${{ vars.NIGHTLY_HEALER_PR_ASSIGNEE }}
+                  JIRA_KEY: ${{ steps.jira.outputs.jira_key || env.HEALER_PARENT_JIRA_KEY }}
+                  JIRA_URL: ${{ steps.jira.outputs.jira_url || format('https://elementor.atlassian.net/browse/{0}', env.HEALER_PARENT_JIRA_KEY) }}
+              run: |
+                  set -euo pipefail
+
+                  REPO="${GITHUB_REPOSITORY}"
+
+                  TITLE=$(node -e "
+                    const { buildHealPrTitle } = require('./' + process.env.HEALER_DIR + '/scripts/build-jira-heal-ticket');
+                    process.stdout.write(buildHealPrTitle({
+                      testName: process.env.TEST_NAME,
+                      jiraKey: process.env.JIRA_KEY,
+                    }));
+                  ")
+                  echo "PR title (${#TITLE} chars): $TITLE"
+                  gh label create "$LABEL" --repo "$REPO" --color BFD4F2 --description "Opened by the automated test healer" 2>/dev/null || true
+
+                  if [ "$SCOPE" = "file" ]; then
+                    RAN="its whole file, \`${TEST_FILE}\`, because the test did not fail on its own"
+                  else
+                    RAN="this one test"
+                  fi
+
+                  PR_FLAGS=()
+                  if [ "$REPRODUCED" = "true" ]; then
+                    VERIFIED="Verified by running ${RAN}: without the fix it failed on run ${RUNS_TO_FAILURE}; with it the test passed ${FIX_REPEAT}x in a row on the same builds."
+                  else
+                    VERIFIED="⚠️ **The failure did not reproduce.** The test failed in the evidence run, but ${RAN} passed every re-run without the fix. With the fix it passed ${FIX_REPEAT}x in a row, which shows the fix breaks nothing — not that it removes the flake, so judge it by the agent's root cause below."
+                    gh label create "$UNREPRODUCED_LABEL" --repo "$REPO" --color FBCA04 --description "Test healer fix whose failure did not reproduce during verification" 2>/dev/null || true
+                    PR_FLAGS=(--draft --label "$UNREPRODUCED_LABEL")
+                  fi
+
+                  # Agent text in a code block: GitHub links no issues, mentions or
+                  # closing keywords ("Fixes #123") there, and renders no markdown.
+                  SAFE_RESULT_TEXT=$(printf '%s' "$RESULT_TEXT" | sed 's/~~~/~ ~ ~/g')
+
+                  BODY=$(printf '%s\n' \
+                    "Automated test-healer fix for \`${TEST_NAME}\`." \
+                    "" \
+                    "| | |" \
+                    "| --- | --- |" \
+                    "| Jira | ${JIRA_URL} |" \
+                    "| Trigger | ${MODE} |" \
+                    "| Evidence run | https://github.com/${REPO}/actions/runs/${SOURCE_RUN_ID} |" \
+                    "| Shard | \`${SHARD_INDEX:-default}\` |" \
+                    "| Verification | https://github.com/${REPO}/actions/runs/${GITHUB_RUN_ID} |" \
+                    "" \
+                    "${VERIFIED} Both on the shard's own command, against ${BUILD_DESCRIPTION}. The diff is gated to \`tests/playwright/\` with no snapshot-baseline or environment changes." \
+                    "" \
+                    "**Agent summary**" \
+                    "" \
+                    "~~~text" \
+                    "${SAFE_RESULT_TEXT}" \
+                    "~~~")
+
+                  PR_URL=$(gh pr create \
+                    --repo "$REPO" \
+                    --base "$BASE_REF" \
+                    --head "$BRANCH" \
+                    --title "$TITLE" \
+                    --body "$BODY" \
+                    --label "$LABEL" \
+                    "${PR_FLAGS[@]}")
+
+                  echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
+                  echo "Opened $PR_URL"
+
+                  # An unset assignee variable must not lose a verified fix, so this
+                  # is a separate, non-fatal step rather than a flag on create.
+                  if [ -n "${ASSIGNEE}" ]; then
+                    gh pr edit "$PR_URL" --repo "$REPO" --add-assignee "$ASSIGNEE" || echo "::warning::Could not assign $ASSIGNEE."
+                  else
+                    echo "::notice::vars.NIGHTLY_HEALER_PR_ASSIGNEE is not set — PR left unassigned."
+                  fi
+
+    report:
+        name: Report
+        needs:
+            [
+                resolve-input,
+                find-candidate,
+                dispatch-agent,
+                wait-for-agent,
+                verify-fix,
+                open-pr,
+            ]
+        if: always() && needs.resolve-input.result == 'success'
+        runs-on: ubuntu-22.04
+        steps:
+            - name: Check out the healer
+              uses: actions/checkout@v6
+              with:
+                  repository: elementor/elementor-editor-github-actions
+                  ref: ${{ inputs.actions_ref }}
+                  path: .healer
+                  sparse-checkout: actions/playwright-test-healer
+                  persist-credentials: false
+
+            - name: Resolve outcome and write the job summary
+              id: outcome
+              uses: actions/github-script@v8
+              env:
+                  MODE: ${{ needs.resolve-input.outputs.trigger }}
+                  HEALER_ENABLED: ${{ needs.resolve-input.outputs.enabled }}
+                  HEALER_SWITCH: ${{ needs.resolve-input.outputs.switch }}
+                  EXISTING_PR_URL: ${{ needs.find-candidate.outputs.existing_pr_url }}
+                  DUPLICATE_PR_URL: ${{ needs.open-pr.outputs.duplicate_pr_url }}
+                  HAS_CANDIDATE: ${{ needs.find-candidate.outputs.has_candidate }}
+                  NO_CANDIDATE_REASON: ${{ needs.find-candidate.outputs.reason }}
+                  RANKED_FAILURES: ${{ needs.find-candidate.outputs.ranked_failures }}
+                  SKIPPED_CANDIDATES: ${{ needs.find-candidate.outputs.skipped_candidates }}
+                  TEST_NAME: ${{ needs.find-candidate.outputs.test_name || needs.resolve-input.outputs.test_name }}
+                  SHARD_INDEX: ${{ needs.find-candidate.outputs.shard_index }}
+                  SOURCE_RUN_ID: ${{ needs.find-candidate.outputs.source_run_id }}
+                  AGENT_STATUS: ${{ needs.wait-for-agent.outputs.status }}
+                  AGENT_BRANCH: ${{ needs.wait-for-agent.outputs.branch }}
+                  AGENT_RESULT: ${{ needs.wait-for-agent.outputs.result_text }}
+                  AGENT_HANDOFF: ${{ needs.wait-for-agent.outputs.handoff }}
+                  VERIFY_PASSED: ${{ needs.verify-fix.outputs.passed }}
+                  VERIFY_REPRODUCED: ${{ needs.verify-fix.outputs.reproduced }}
+                  VERIFY_STAGE: ${{ needs.verify-fix.outputs.stage }}
+                  VERIFY_JOB_RESULT: ${{ needs.verify-fix.result }}
+                  VERIFY_BUILD: ${{ needs.verify-fix.outputs.build_description }}
+                  PR_URL: ${{ needs.open-pr.outputs.pr_url }}
+                  JIRA_URL: ${{ needs.open-pr.outputs.jira_url }}
+                  OPEN_PR_RESULT: ${{ needs.open-pr.result }}
+                  UNREPRODUCED_LIMIT_REACHED: ${{ needs.open-pr.outputs.unreproduced_limit_reached }}
+                  VERIFY_ONLY: ${{ needs.resolve-input.outputs.fix_branch != '' }}
+                  FIND_RESULT: ${{ needs.find-candidate.result }}
+                  DISPATCH_RESULT: ${{ needs.dispatch-agent.result }}
+                  AGENT_JOB_RESULT: ${{ needs.wait-for-agent.result }}
+              with:
+                  script: |
+                      const { resolveHealerOutcome } = require('./' + process.env.HEALER_DIR + '/scripts/resolve-healer-outcome');
+                      const { buildNightlyHealerSummary } = require('./' + process.env.HEALER_DIR + '/scripts/nightly-healer-summary');
+                      const { buildNightlyHealerSlackPayload } = require('./' + process.env.HEALER_DIR + '/scripts/nightly-healer-slack');
+                      const { ATTEMPT_RECORD_FILE, COOLDOWN_OUTCOMES } = require('./' + process.env.HEALER_DIR + '/scripts/healer-skips');
+
+                      const parseList = (value) => {
+                        try {
+                          return JSON.parse(value || '[]');
+                        } catch {
+                          return [];
+                        }
+                      };
+                      const rankedFailures = parseList(process.env.RANKED_FAILURES);
+                      const skippedCandidates = parseList(process.env.SKIPPED_CANDIDATES);
+
+                      // A crashed poller reports no status, but the agent still failed.
+                      // A failed dispatch never reached an agent at all — say which.
+                      const agentStatus = process.env.AGENT_STATUS ||
+                        ('failure' === process.env.DISPATCH_RESULT ? 'DISPATCH_FAILED' : '') ||
+                        ('failure' === process.env.AGENT_JOB_RESULT ? 'FAILED' : '');
+
+                      // A crashed finder is an infrastructure failure, not a green night.
+                      const hasCandidate = 'failure' === process.env.FIND_RESULT
+                        ? 'true'
+                        : process.env.HAS_CANDIDATE;
+
+                      const { outcome, details } = resolveHealerOutcome({
+                        mode: process.env.MODE,
+                        enabled: process.env.HEALER_ENABLED,
+                        healerSwitch: process.env.HEALER_SWITCH,
+                        existingPrUrl: process.env.EXISTING_PR_URL,
+                        hasCandidate,
+                        noCandidateReason: process.env.NO_CANDIDATE_REASON,
+                        rankedFailures,
+                        skippedCandidates,
+                        testName: process.env.TEST_NAME,
+                        shardIndex: process.env.SHARD_INDEX,
+                        sourceRunId: process.env.SOURCE_RUN_ID,
+                        repo: process.env.GITHUB_REPOSITORY,
+                        agentStatus,
+                        agentBranch: process.env.AGENT_BRANCH,
+                        agentResult: process.env.AGENT_RESULT,
+                        agentHandoff: process.env.AGENT_HANDOFF,
+                        verifyPassed: process.env.VERIFY_PASSED,
+                        verifyReproduced: process.env.VERIFY_REPRODUCED,
+                        verifyStage: process.env.VERIFY_STAGE,
+                        verifyJobResult: process.env.VERIFY_JOB_RESULT,
+                        buildDescription: process.env.VERIFY_BUILD,
+                        prUrl: process.env.PR_URL,
+                        jiraUrl: process.env.JIRA_URL,
+                        duplicatePrUrl: process.env.DUPLICATE_PR_URL,
+                        verifyOnly: process.env.VERIFY_ONLY,
+                        openPrResult: process.env.OPEN_PR_RESULT,
+                        unreproducedLimitReached: process.env.UNREPRODUCED_LIMIT_REACHED,
+                      });
+
+                      core.info(`Outcome: ${outcome}`);
+                      await core.summary.addRaw(buildNightlyHealerSummary({ outcome, details })).write();
+
+                      core.setOutput('outcome', outcome);
+                      core.setOutput('payload', JSON.stringify(buildNightlyHealerSlackPayload({ outcome, details })));
+
+                      if (details.testName && COOLDOWN_OUTCOMES.has(outcome)) {
+                        require('fs').writeFileSync(ATTEMPT_RECORD_FILE, JSON.stringify({
+                          testName: details.testName,
+                          outcome,
+                          mode: details.mode,
+                          sourceRunId: details.sourceRunId,
+                        }));
+                        core.setOutput('record_attempt', 'true');
+                      }
+
+            # The ledger the next night's ranking reads to pass over this test.
+            # Kept well past the cooldown, which is measured from the artifact's date.
+            - name: Record the verdict for later runs
+              if: steps.outcome.outputs.record_attempt == 'true'
+              uses: actions/upload-artifact@v7
+              with:
+                  name: healer-attempt
+                  path: healer-attempt.json
+                  retention-days: 30
+
+            # A switched-off healer still runs every night; posting that each time
+            # would bury the outcomes that need someone.
+            - name: Prepare the Slack message
+              id: slack-payload
+              if: inputs.slack_channel != '' && steps.outcome.outputs.outcome != 'disabled'
+              env:
+                  PAYLOAD: ${{ steps.outcome.outputs.payload }}
+                  SLACK_CHANNEL: ${{ inputs.slack_channel }}
+              run: |
+                  set -euo pipefail
+                  FILE="$RUNNER_TEMP/healer-slack-payload.json"
+                  printf '%s' "$PAYLOAD" | jq --arg channel "$SLACK_CHANNEL" '. + {channel: $channel}' > "$FILE"
+                  echo "file=$FILE" >> "$GITHUB_OUTPUT"
+
+            - name: Notify Slack
+              if: steps.slack-payload.outcome == 'success'
+              continue-on-error: true
+              uses: slackapi/slack-github-action@0d95c9a7becc1e6e297d76df9bc735c44f4cbcbc # v3
+              with:
+                  method: chat.postMessage
+                  errors: true
+                  token: ${{ secrets.SLACK_TOKEN }}
+                  payload-file-path: ${{ steps.slack-payload.outputs.file }}
+
+    retry:
+        name: Retry the fix
+        needs: [resolve-input, find-candidate, wait-for-agent, verify-fix]
+        # Only a genuine test failure is worth another attempt. An infrastructure
+        # stage (restore/setup/grep) will fail again the same way, and a drift or
+        # product-bug handoff is a finished answer, not a failed one.
+        if: >-
+            always() &&
+            needs.verify-fix.result == 'success' &&
+            needs.verify-fix.outputs.passed != 'true' &&
+            needs.verify-fix.outputs.stage == 'test' &&
+            needs.resolve-input.outputs.fix_branch == '' &&
+            needs.resolve-input.outputs.attempt < needs.resolve-input.outputs.max_fix_attempts
+        runs-on: ubuntu-22.04
+        permissions:
+            contents: read
+            actions: write
+        steps:
+            - name: Dispatch the next attempt
+              uses: actions/github-script@v8
+              env:
+                  NEXT_ATTEMPT: ${{ needs.resolve-input.outputs.attempt }}
+                  MAX_FIX_ATTEMPTS: ${{ needs.resolve-input.outputs.max_fix_attempts }}
+                  TEST_NAME: ${{ needs.find-candidate.outputs.test_name }}
+                  SOURCE_RUN_ID: ${{ needs.find-candidate.outputs.source_run_id }}
+                  BASE_REF: ${{ needs.find-candidate.outputs.base_ref }}
+                  VERIFY_REPEAT: ${{ needs.resolve-input.outputs.verify_repeat }}
+                  FAILED_BRANCH: ${{ needs.wait-for-agent.outputs.branch }}
+                  ALLOW_DUPLICATE_PR: ${{ needs.resolve-input.outputs.allow_duplicate_pr }}
+                  TRIGGER: ${{ needs.resolve-input.outputs.trigger }}
+                  CALLER_WORKFLOW_REF: ${{ github.workflow_ref }}
+              with:
+                  github-token: ${{ secrets.GITHUB_TOKEN }}
+                  script: |
+                      const attempt = String(Number(process.env.NEXT_ATTEMPT) + 1);
+
+                      // In a called workflow, workflow_ref is the caller's:
+                      // owner/repo/.github/workflows/<file>@<ref>.
+                      const callerWorkflow = /\/\.github\/workflows\/([^@]+)@/.exec(process.env.CALLER_WORKFLOW_REF)?.[1];
+                      if (!callerWorkflow) {
+                        core.setFailed(`Could not tell which workflow to retry from "${process.env.CALLER_WORKFLOW_REF}".`);
+                        return;
+                      }
+
+                      // Always pins test_name, so the retry heals the same test rather
+                      // than re-ranking and wandering onto a different failure.
+                      await github.rest.actions.createWorkflowDispatch({
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        workflow_id: callerWorkflow,
+                        ref: context.ref.replace('refs/heads/', ''),
+                        inputs: {
+                          test_name: process.env.TEST_NAME,
+                          source_run_id: process.env.SOURCE_RUN_ID,
+                          base_ref: process.env.BASE_REF,
+                          verify_repeat: process.env.VERIFY_REPEAT,
+                          max_fix_attempts: process.env.MAX_FIX_ATTEMPTS,
+                          attempt,
+                          previous_branch: process.env.FAILED_BRANCH,
+                          previous_run_id: String(context.runId),
+                          allow_duplicate_pr: process.env.ALLOW_DUPLICATE_PR || 'false',
+                          trigger_mode: process.env.TRIGGER,
+                        },
+                      });
+
+                      core.notice(`Fix failed verification — dispatched attempt ${attempt} of ${process.env.MAX_FIX_ATTEMPTS}.`);

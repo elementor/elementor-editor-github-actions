@@ -15,6 +15,18 @@ export default tseslint.config(
 		},
 	},
 	{
+		files: ['actions/playwright-test-healer/**/*.js'],
+		...tseslint.configs.disableTypeChecked,
+		languageOptions: {
+			sourceType: 'commonjs',
+			globals: { ...globals.node, ...globals.vitest },
+		},
+		rules: {
+			...tseslint.configs.disableTypeChecked.rules,
+			'@typescript-eslint/no-require-imports': 'off',
+		},
+	},
+	{
 		ignores: [
 			'**/coverage/**',
 			'**/dist/**',

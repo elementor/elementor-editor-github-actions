@@ -1,0 +1,13 @@
+{
+	"name": "@elementor/playwright-test-healer",
+	"author": "Elementor Team",
+	"license": "GPL-3.0-or-later",
+	"private": true,
+	"type": "commonjs",
+	"scripts": {
+		"test": "vitest run"
+	},
+	"devDependencies": {
+		"vitest": "^4.1.9"
+	}
+}
