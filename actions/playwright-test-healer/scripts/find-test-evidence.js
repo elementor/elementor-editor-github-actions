@@ -120,12 +120,17 @@ function pickShardArtifacts(artifacts, profile = loadProfile()) {
 }
 
 function listShardArtifacts(repo, runId, profile) {
-	const output = gh([
+	const artifacts = gh([
 		'api',
-		`repos/${repo}/actions/runs/${runId}/artifacts`,
+		`repos/${repo}/actions/runs/${runId}/artifacts?per_page=100`,
 		'--paginate',
-	]);
-	return pickShardArtifacts(JSON.parse(output).artifacts, profile);
+		'--jq',
+		'.artifacts[] | tojson',
+	])
+		.split('\n')
+		.filter(Boolean)
+		.map((line) => JSON.parse(line));
+	return pickShardArtifacts(artifacts, profile);
 }
 
 /**

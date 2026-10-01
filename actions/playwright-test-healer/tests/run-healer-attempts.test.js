@@ -7,6 +7,7 @@ const {
 	parseTestFile,
 	requiredFixRepeat,
 	summarizeReport,
+	testProcessEnv,
 	unreproducedFixRepeat,
 } = require('../scripts/run-healer-attempts');
 
@@ -339,5 +340,27 @@ describe('requiredFixRepeat', () => {
 				scope: SCOPE_FILE,
 			}),
 		).toBe(MAX_FIX_REPEAT[SCOPE_FILE]);
+	});
+});
+
+describe('testProcessEnv', () => {
+	it("keeps the runner's file commands away from the agent's tests", () => {
+		// Arrange
+		const env = {
+			CI: 'true',
+			HEALER_DIR: '.healer',
+			GITHUB_ENV: '/tmp/set_env',
+			GITHUB_OUTPUT: '/tmp/set_output',
+			GITHUB_PATH: '/tmp/add_path',
+			GITHUB_STATE: '/tmp/save_state',
+			GITHUB_STEP_SUMMARY: '/tmp/step_summary',
+		};
+
+		// Act
+		const result = testProcessEnv(env);
+
+		// Assert
+		expect(result).toEqual({ CI: 'true', HEALER_DIR: '.healer' });
+		expect(env.GITHUB_ENV).toBe('/tmp/set_env');
 	});
 });

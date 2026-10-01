@@ -21,6 +21,10 @@ const FORBIDDEN_PATHS = [
 		reason: 'environment or WordPress plugin code',
 	},
 	{
+		pattern: /(?:^|\/)\.gitattributes$/,
+		reason: 'git attributes, which can hide changes from this check',
+	},
+	{
 		pattern: /^tests\/playwright\/blueprints\//,
 		reason: 'WordPress Playground blueprint',
 	},
@@ -125,11 +129,34 @@ function findWeakening(diff) {
 	return findings;
 }
 
-function git(args) {
+function git(args, cwd) {
 	return execFileSync('git', args, {
+		cwd,
 		encoding: 'utf8',
 		maxBuffer: MAX_DIFF_BYTES,
 	});
+}
+
+/**
+ * The branch's own .gitattributes could mark specs `-diff` or give them a
+ * textconv driver, turning every changed line into "Binary files differ";
+ * the forced flags keep the real lines in the diff.
+ */
+function diffTestCode(range, cwd) {
+	return git(
+		[
+			'diff',
+			'--no-renames',
+			'--unified=0',
+			'--text',
+			'--no-textconv',
+			'--no-ext-diff',
+			range,
+			'--',
+			ALLOWED_PREFIX,
+		],
+		cwd,
+	);
 }
 
 function main() {
@@ -156,16 +183,7 @@ function main() {
 
 	const problems = [
 		...findScopeViolations(files),
-		...findWeakening(
-			git([
-				'diff',
-				'--no-renames',
-				'--unified=0',
-				range,
-				'--',
-				ALLOWED_PREFIX,
-			]),
-		),
+		...findWeakening(diffTestCode(range)),
 	];
 
 	if (problems.length) {
@@ -187,4 +205,4 @@ if (require.main === module) {
 	}
 }
 
-module.exports = { findScopeViolations, findWeakening };
+module.exports = { diffTestCode, findScopeViolations, findWeakening };

@@ -10,6 +10,8 @@ const POLL_INTERVAL_MS = 60 * 1000;
 const BRANCH_LAG_INTERVAL_MS = 30 * 1000;
 const MAX_WAIT_MS = 45 * 60 * 1000;
 const MS_PER_MINUTE = 60 * 1000;
+const FETCH_ATTEMPTS = 4;
+const FETCH_RETRY_DELAY_MS = 15 * 1000;
 const TERMINAL_STATUSES = new Set([
 	'FINISHED',
 	'ERROR',
@@ -118,7 +120,18 @@ function evaluateHealerAgentRun(run) {
 	const result = run.result ?? '';
 	const handoff = detectHandoff(result);
 
-	if (status === 'FINISHED' && !branch && !handoff) {
+	if (status !== 'FINISHED') {
+		return {
+			ok: false,
+			status,
+			branch,
+			result,
+			handoff: '',
+			error: `Cloud agent run ended with status ${status}.`,
+		};
+	}
+
+	if (!branch && !handoff) {
 		return {
 			ok: false,
 			status,
@@ -132,21 +145,54 @@ function evaluateHealerAgentRun(run) {
 	return { ok: true, status, branch, result, handoff };
 }
 
-async function fetchRun() {
-	const response = await fetch(
-		`https://api.cursor.com/v1/agents/${HEAL_AGENT_ID}/runs/${HEAL_AGENT_RUN_ID}`,
-		{
-			headers: { Authorization: `Bearer ${CURSOR_API_KEY}` },
-		},
-	);
+function isRetryableFetchStatus(status) {
+	return 429 === status || (status >= 500 && status < 600);
+}
 
-	if (!response.ok) {
-		throw new Error(
-			`Failed to fetch Cloud agent run status (HTTP ${response.status})`,
+/**
+ * The agent keeps running whatever happens here, so one 5xx or dropped
+ * connection must not throw away a fix it is about to push.
+ */
+async function fetchRun({
+	request = fetch,
+	wait = sleep,
+	attempts = FETCH_ATTEMPTS,
+} = {}) {
+	for (let attempt = 1; ; attempt++) {
+		let response;
+		try {
+			response = await request(
+				`https://api.cursor.com/v1/agents/${HEAL_AGENT_ID}/runs/${HEAL_AGENT_RUN_ID}`,
+				{
+					headers: { Authorization: `Bearer ${CURSOR_API_KEY}` },
+				},
+			);
+		} catch (error) {
+			if (attempt >= attempts) {
+				throw error;
+			}
+			console.log(
+				`::warning::Cloud agent status check failed (${error.message}); retrying (${attempt}/${attempts})`,
+			);
+			await wait(FETCH_RETRY_DELAY_MS * attempt);
+			continue;
+		}
+
+		if (response.ok) {
+			return response.json();
+		}
+
+		if (!isRetryableFetchStatus(response.status) || attempt >= attempts) {
+			throw new Error(
+				`Failed to fetch Cloud agent run status (HTTP ${response.status})`,
+			);
+		}
+
+		console.log(
+			`::warning::Cloud agent status check got HTTP ${response.status}; retrying (${attempt}/${attempts})`,
 		);
+		await wait(FETCH_RETRY_DELAY_MS * attempt);
 	}
-
-	return response.json();
 }
 
 async function waitForCursorBranch(run) {
@@ -253,6 +299,8 @@ module.exports = {
 	countCommitsAhead,
 	detectHandoff,
 	evaluateHealerAgentRun,
+	fetchRun,
+	isRetryableFetchStatus,
 	resolveHealerBranch,
 	shouldWaitForCursorBranch,
 	withResolvedBranch,

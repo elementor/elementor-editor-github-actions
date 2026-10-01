@@ -72,12 +72,20 @@ function planBuildRestore(artifacts) {
 }
 
 function listRunArtifacts(repo, runId) {
-	const output = execFileSync(
+	return execFileSync(
 		'gh',
-		['api', `repos/${repo}/actions/runs/${runId}/artifacts`, '--paginate'],
-		{ encoding: 'utf8' },
-	);
-	return JSON.parse(output).artifacts || [];
+		[
+			'api',
+			`repos/${repo}/actions/runs/${runId}/artifacts?per_page=100`,
+			'--paginate',
+			'--jq',
+			'.artifacts[] | tojson',
+		],
+		{ encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 },
+	)
+		.split('\n')
+		.filter(Boolean)
+		.map((line) => JSON.parse(line));
 }
 
 function downloadArtifact(repo, runId, artifactName, destinationDir) {

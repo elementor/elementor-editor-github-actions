@@ -163,7 +163,7 @@ function runPlaywright({
 			stdio: capture ? ['ignore', 'pipe', 'inherit'] : 'inherit',
 			encoding: 'utf8',
 			env: {
-				...process.env,
+				...testProcessEnv(),
 				...(reportFile
 					? { PLAYWRIGHT_JSON_OUTPUT_FILE: reportFile }
 					: {}),
@@ -232,6 +232,26 @@ function runAttempts({
 	assertTestsRan(report, summary, scope);
 
 	return summary;
+}
+
+/**
+ * The tests run the agent's code. With these, a test could set NODE_OPTIONS
+ * or PATH for later steps, or write this step's outputs, and so fake a pass.
+ */
+const RUNNER_FILE_COMMANDS = [
+	'GITHUB_ENV',
+	'GITHUB_OUTPUT',
+	'GITHUB_PATH',
+	'GITHUB_STATE',
+	'GITHUB_STEP_SUMMARY',
+];
+
+function testProcessEnv(env = process.env) {
+	return Object.fromEntries(
+		Object.entries(env).filter(
+			([name]) => !RUNNER_FILE_COMMANDS.includes(name),
+		),
+	);
 }
 
 function setOutput(name, value) {
@@ -351,5 +371,6 @@ module.exports = {
 	parseTestFile,
 	requiredFixRepeat,
 	summarizeReport,
+	testProcessEnv,
 	unreproducedFixRepeat,
 };

@@ -140,9 +140,14 @@ describe('isRetryableDispatchStatus', () => {
 		expect(isRetryableDispatchStatus(429)).toBe(true);
 	});
 
-	it('retries server errors', () => {
-		expect(isRetryableDispatchStatus(500)).toBe(true);
+	it('retries a 503, which means the request was not processed', () => {
 		expect(isRetryableDispatchStatus(503)).toBe(true);
+	});
+
+	it('does not retry errors after which the agent may already exist', () => {
+		expect(isRetryableDispatchStatus(500)).toBe(false);
+		expect(isRetryableDispatchStatus(502)).toBe(false);
+		expect(isRetryableDispatchStatus(504)).toBe(false);
 	});
 
 	it('does not retry a bad key or a bad request', () => {

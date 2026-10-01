@@ -34,9 +34,13 @@ const MAX_RETRY_DELAY_MS = 5 * 60 * 1000;
  * Cursor returns 429 when its GitHub App is rate limited fetching an
  * installation token — a transient condition it flags `isRetryable` with a
  * `retryAfter`. Failing the run on that loses a whole night to a blip.
+ *
+ * Creating an agent is not idempotent: after a 500, 502 or 504 the agent may
+ * already exist, and a second POST starts another one on the same branch.
+ * Only statuses that mean the request was not processed are retried.
  */
 function isRetryableDispatchStatus(status) {
-	return 429 === status || (status >= 500 && status < 600);
+	return 429 === status || 503 === status;
 }
 
 /**

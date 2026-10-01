@@ -1,4 +1,10 @@
+const { execFileSync } = require('child_process');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+
 const {
+	diffTestCode,
 	findScopeViolations,
 	findWeakening,
 } = require('../scripts/check-fix-scope');
@@ -188,5 +194,68 @@ describe('findWeakening', () => {
 
 		// Assert
 		expect(findings).toEqual(['removes 1 expect() assertion(s)']);
+	});
+});
+
+describe('git attributes', () => {
+	let repo;
+	const run = (...args) =>
+		execFileSync('git', args, { cwd: repo, encoding: 'utf8' });
+	const write = (file, content) => {
+		const target = path.join(repo, file);
+		fs.mkdirSync(path.dirname(target), { recursive: true });
+		fs.writeFileSync(target, content);
+	};
+
+	beforeEach(() => {
+		repo = fs.mkdtempSync(path.join(os.tmpdir(), 'healer-scope-'));
+		run('init', '-q', '-b', 'main');
+		run('config', 'user.email', 'healer@example.com');
+		run('config', 'user.name', 'Healer');
+		write(
+			'tests/playwright/sanity/a.test.ts',
+			"test('a', async () => {\n\tawait expect(page).toHaveTitle('A');\n});\n",
+		);
+		run('add', '.');
+		run('commit', '-q', '-m', 'base');
+		run('checkout', '-q', '-b', 'fix');
+	});
+
+	afterEach(() => {
+		fs.rmSync(repo, { recursive: true, force: true });
+	});
+
+	it('rejects a .gitattributes under tests/playwright', () => {
+		// Act
+		const violations = findScopeViolations([
+			'tests/playwright/.gitattributes',
+			'tests/playwright/sanity/.gitattributes',
+		]);
+
+		// Assert
+		expect(violations).toEqual([
+			'tests/playwright/.gitattributes: git attributes, which can hide changes from this check',
+			'tests/playwright/sanity/.gitattributes: git attributes, which can hide changes from this check',
+		]);
+	});
+
+	it('still sees a skip and a removed assertion when the branch marks specs -diff', () => {
+		// Arrange
+		write('tests/playwright/.gitattributes', '*.ts -diff\n');
+		write(
+			'tests/playwright/sanity/a.test.ts',
+			"test.skip('a', async () => {\n});\n",
+		);
+		run('add', '.');
+		run('commit', '-q', '-m', 'fix');
+
+		// Act
+		const findings = findWeakening(diffTestCode('main...HEAD', repo));
+
+		// Assert
+		expect(findings).toEqual([
+			"skips, marks, or narrows tests: test.skip('a', async () => {",
+			'removes 1 expect() assertion(s)',
+		]);
 	});
 });

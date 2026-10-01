@@ -2,6 +2,7 @@ const {
 	countCommitsAhead,
 	detectHandoff,
 	evaluateHealerAgentRun,
+	fetchRun,
 	resolveHealerBranch,
 	shouldWaitForCursorBranch,
 	withResolvedBranch,
@@ -312,5 +313,86 @@ describe('evaluateHealerAgentRun baseline drift', () => {
 		expect(result.ok).toBe(false);
 		expect(result.error).toContain('Baseline drift');
 		expect(result.error).toContain('Possible product bug');
+	});
+});
+
+describe('evaluateHealerAgentRun failed runs', () => {
+	it.each(['ERROR', 'CANCELLED', 'EXPIRED'])(
+		'rejects a run that ended %s, even with a branch',
+		(status) => {
+			// Arrange
+			const run = {
+				status,
+				git: { branches: [{ name: 'heal/x-1' }] },
+				result: 'Partial work.',
+			};
+
+			// Act
+			const result = evaluateHealerAgentRun(run);
+
+			// Assert
+			expect(result.ok).toBe(false);
+			expect(result.status).toBe(status);
+			expect(result.error).toContain(status);
+		},
+	);
+});
+
+describe('fetchRun', () => {
+	const noWait = async () => {};
+	const reply = (status, body = {}) => ({
+		ok: status >= 200 && status < 300,
+		status,
+		json: async () => body,
+	});
+
+	it('retries a server error and a dropped connection, then returns the run', async () => {
+		// Arrange
+		const responses = [
+			() => reply(502),
+			() => {
+				throw new TypeError('fetch failed');
+			},
+			() => reply(200, { status: 'RUNNING' }),
+		];
+		let calls = 0;
+		const request = async () => responses[calls++]();
+
+		// Act
+		const run = await fetchRun({ request, wait: noWait });
+
+		// Assert
+		expect(run).toEqual({ status: 'RUNNING' });
+		expect(calls).toBe(3);
+	});
+
+	it('fails at once on an error retrying will not fix', async () => {
+		// Arrange
+		let calls = 0;
+		const request = async () => {
+			calls++;
+			return reply(401);
+		};
+
+		// Act & Assert
+		await expect(fetchRun({ request, wait: noWait })).rejects.toThrow(
+			/HTTP 401/,
+		);
+		expect(calls).toBe(1);
+	});
+
+	it('gives up after the last attempt', async () => {
+		// Arrange
+		let calls = 0;
+		const request = async () => {
+			calls++;
+			return reply(503);
+		};
+
+		// Act & Assert
+		await expect(
+			fetchRun({ request, wait: noWait, attempts: 3 }),
+		).rejects.toThrow(/HTTP 503/);
+		expect(calls).toBe(3);
 	});
 });
