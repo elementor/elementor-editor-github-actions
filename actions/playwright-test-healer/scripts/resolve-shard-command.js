@@ -147,11 +147,8 @@ if (require.main === module) {
 }
 
 module.exports = {
-	buildGrepPattern,
 	filterHealableArtifactNames,
 	isHealableShard,
-	isNamedShard,
 	parsePlaywrightListTotal,
-	resolveShardCommand,
 	shardIndexFromArtifactName,
 };

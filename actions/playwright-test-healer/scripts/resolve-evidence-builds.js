@@ -363,12 +363,3 @@ if (require.main === module) {
 		process.exit(1);
 	}
 }
-
-module.exports = {
-	parseBuildVersions,
-	parseCoreClone,
-	parseProCommit,
-	parseReusableWorkflowInputs,
-	releaseLine,
-	resolveEvidenceBuilds,
-};

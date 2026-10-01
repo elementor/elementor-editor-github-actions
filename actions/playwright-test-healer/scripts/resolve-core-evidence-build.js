@@ -85,9 +85,4 @@ function resolveCoreEvidenceBuild({
 	};
 }
 
-module.exports = {
-	WP_NIGHTLY_STEP_NAME,
-	parsePhpVersion,
-	ranOnWordPressNightly,
-	resolveCoreEvidenceBuild,
-};
+module.exports = { resolveCoreEvidenceBuild };

@@ -352,14 +352,3 @@ if (require.main === module) {
 		process.exit(1);
 	}
 }
-
-module.exports = {
-	buildEvidenceCandidates,
-	findEvidenceInResultDirs,
-	isShardArtifact,
-	newestMainFirst,
-	pickBestEvidence,
-	listEvidenceRuns,
-	pickEvidenceRuns,
-	pickShardArtifacts,
-};

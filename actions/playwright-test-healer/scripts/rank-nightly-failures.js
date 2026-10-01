@@ -387,10 +387,4 @@ if (require.main === module) {
 	}
 }
 
-module.exports = {
-	flattenAllureFailures,
-	hasTraceInDirectory,
-	matchResultDirectories,
-	selectHealCandidate,
-	shardIndexForMatchedDirs,
-};
+module.exports = { hasTraceInDirectory, matchResultDirectories };
