@@ -34,7 +34,8 @@ const FORBIDDEN_PATHS = [
 		reason: 'WordPress environment config',
 	},
 ];
-const SNAPSHOT_PATH = /(?:-snapshots|__snapshots__)\/|\.aria\.ya?ml$/i;
+const SNAPSHOT_DIR = /(?:-snapshots|__snapshots__)\//i;
+const ARIA_SNAPSHOT = /\.aria\.ya?ml$/i;
 const DIFF_FILE_HEADER = /^(?:\+\+\+|---) (?:[ab]\/|\/dev\/null)/;
 const NEW_FILE_HEADER = /^\+\+\+ b\/(.+)$/;
 const ASSERTION = /\bexpect(?:\.poll)?\s*(?:\(|$)/g;
@@ -108,7 +109,11 @@ function findScopeViolations(files) {
 			return [`${file}: outside ${ALLOWED_PREFIX}`];
 		}
 
-		if (SNAPSHOT_FILE.test(file) || SNAPSHOT_PATH.test(file)) {
+		if (
+			[SNAPSHOT_FILE, SNAPSHOT_DIR, ARIA_SNAPSHOT].some((pattern) =>
+				pattern.test(file),
+			)
+		) {
 			return [`${file}: snapshot baseline`];
 		}
 
