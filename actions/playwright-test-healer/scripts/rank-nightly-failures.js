@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 
 const { DEFAULT_HARD_FAILURES_PATH } = require('./collect-log-hard-failures');
+const { setOutput } = require('./github-output');
 const { findSkipReason, readSkipSources } = require('./healer-skips');
 const { loadProfile } = require('./profile');
 const {
@@ -287,14 +288,6 @@ function selectHealCandidate({
 	}
 
 	return { candidate, reason: null, rankedFailures, skippedCandidates };
-}
-
-function setOutput(name, value) {
-	if (!process.env.GITHUB_OUTPUT) {
-		console.log(`${name}=${value}`);
-		return;
-	}
-	fs.appendFileSync(process.env.GITHUB_OUTPUT, `${name}=${value}\n`);
 }
 
 const DEFAULT_ALLURE_SUITES_PATH = 'allure-report/data/suites.json';

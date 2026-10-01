@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 
+const { setOutput } = require('./github-output');
 const { loadProfile } = require('./profile');
 
 const MAX_DISPATCH_ATTEMPTS = 4;
@@ -73,13 +74,6 @@ const {
 	HEAL_PREVIOUS_BRANCH,
 	HEAL_PREVIOUS_RUN_ID,
 } = process.env;
-
-function setOutput(name, value) {
-	if (!process.env.GITHUB_OUTPUT) {
-		return;
-	}
-	fs.appendFileSync(process.env.GITHUB_OUTPUT, `${name}=${value}\n`);
-}
 
 /**
  * Takes its input explicitly so the prompt can be unit-tested; defaults to the

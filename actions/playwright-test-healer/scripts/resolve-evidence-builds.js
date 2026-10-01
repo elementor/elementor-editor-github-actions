@@ -13,9 +13,9 @@
  * log is kept for 90 days; the artifact, and its listing, for one.
  */
 
-const fs = require('fs');
 const { fetchJobLog } = require('./fetch-job-log');
 const { gh } = require('./gh');
+const { setOutput } = require('./github-output');
 const { loadProfile } = require('./profile');
 const { resolveCoreEvidenceBuild } = require('./resolve-core-evidence-build');
 
@@ -230,12 +230,6 @@ function fetchRunFacts(repo, runId) {
 		headBranch,
 		buildLog: fetchJobLog(repo, buildJobId),
 	};
-}
-
-function setOutput(name, value) {
-	if (process.env.GITHUB_OUTPUT) {
-		fs.appendFileSync(process.env.GITHUB_OUTPUT, `${name}=${value}\n`);
-	}
 }
 
 function fetchCoreRunFacts(repo, runId) {

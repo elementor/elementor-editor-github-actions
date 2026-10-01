@@ -15,6 +15,7 @@ const { spawnSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { setOutput: writeOutput } = require('./github-output');
 const { parsePlaywrightListTotal } = require('./resolve-shard-command');
 
 const SCOPE_TEST = 'test';
@@ -235,9 +236,7 @@ function runAttempts({
 
 function setOutput(name, value) {
 	console.log(`${name}=${value}`);
-	if (process.env.GITHUB_OUTPUT) {
-		fs.appendFileSync(process.env.GITHUB_OUTPUT, `${name}=${value}\n`);
-	}
+	writeOutput(name, value);
 }
 
 function baseline(env) {

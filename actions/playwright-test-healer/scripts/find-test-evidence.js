@@ -17,6 +17,7 @@ const os = require('os');
 const path = require('path');
 
 const { gh } = require('./gh');
+const { setOutput } = require('./github-output');
 const { loadProfile } = require('./profile');
 const { matchResultDirectories } = require('./rank-nightly-failures');
 const {
@@ -263,14 +264,6 @@ function findEvidenceInRun(repo, runId, testName, profile) {
 	const evidence = findEvidenceInResultDirs(testName, resultDirs);
 
 	return evidence ? { ...evidence, sourceRunId: String(runId) } : null;
-}
-
-function setOutput(name, value) {
-	if (!process.env.GITHUB_OUTPUT) {
-		console.log(`${name}=${value}`);
-		return;
-	}
-	fs.appendFileSync(process.env.GITHUB_OUTPUT, `${name}=${value}\n`);
 }
 
 function main() {

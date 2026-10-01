@@ -12,6 +12,7 @@
  * did not verify". Each product's shards are listed in its profile.
  */
 
+const { setOutput } = require('./github-output');
 const { loadProfile } = require('./profile');
 
 const ARTIFACT_NAME_PREFIX = 'playwright-test-results-';
@@ -110,17 +111,6 @@ function buildGrepPattern(testName) {
 function parsePlaywrightListTotal(stdout) {
 	const match = /^\s*Total:\s+(\d+)\s+tests?\b/m.exec(String(stdout || ''));
 	return match ? Number(match[1]) : null;
-}
-
-function setOutput(name, value) {
-	if (!process.env.GITHUB_OUTPUT) {
-		console.log(`${name}=${value}`);
-		return;
-	}
-	require('fs').appendFileSync(
-		process.env.GITHUB_OUTPUT,
-		`${name}=${value}\n`,
-	);
 }
 
 function main() {

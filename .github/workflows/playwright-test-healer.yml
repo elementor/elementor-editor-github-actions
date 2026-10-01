@@ -1236,7 +1236,7 @@ jobs:
                     const pr = findOpenPrForTest(process.env.TEST_NAME, listOpenPrs(process.env.GITHUB_REPOSITORY), process.env.BASE_REF);
                     if (pr) {
                       console.log('::notice::' + pr.url + ' is already open for this test — not opening a duplicate.');
-                      require('fs').appendFileSync(process.env.GITHUB_OUTPUT, 'existing_pr_url=' + pr.url + '\n');
+                      require('./' + process.env.HEALER_DIR + '/scripts/github-output').setOutput('existing_pr_url', pr.url);
                     }
                   "
 

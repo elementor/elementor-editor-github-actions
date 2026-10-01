@@ -1,7 +1,7 @@
 'use strict';
 
-const fs = require('fs');
 const { buildJiraIssuePayload } = require('./build-jira-heal-ticket');
+const { setOutput } = require('./github-output');
 
 const {
 	JIRA_API_EMAIL,
@@ -19,13 +19,6 @@ const {
 const JIRA_ISSUE_CREATED_STATUS = 201;
 const DEFAULT_JIRA_SITE_URL = 'https://elementor.atlassian.net';
 const RESPONSE_PREVIEW_LIMIT = 300;
-
-function setOutput(name, value) {
-	if (!process.env.GITHUB_OUTPUT) {
-		return;
-	}
-	fs.appendFileSync(process.env.GITHUB_OUTPUT, `${name}=${value}\n`);
-}
 
 function previewBody(text) {
 	return String(text || '')

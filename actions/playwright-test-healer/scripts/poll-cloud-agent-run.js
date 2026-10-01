@@ -1,7 +1,7 @@
 'use strict';
 
-const fs = require('fs');
 const { gh } = require('./gh');
+const { setOutput } = require('./github-output');
 
 // Agent runs that reproduce, fix and verify have taken 6-22 minutes, so
 // checking before the first few minutes is only log noise.
@@ -57,13 +57,6 @@ const {
 	HEAL_BASE_REF,
 	GITHUB_REPOSITORY,
 } = process.env;
-
-function setOutput(name, value) {
-	if (!process.env.GITHUB_OUTPUT) {
-		return;
-	}
-	fs.appendFileSync(process.env.GITHUB_OUTPUT, `${name}=${value}\n`);
-}
 
 function sleep(ms) {
 	return new Promise((resolve) => setTimeout(resolve, ms));

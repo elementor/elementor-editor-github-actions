@@ -5,6 +5,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
+const { setOutput } = require('./github-output');
 const { loadProfile } = require('./profile');
 
 const CORE_BUILD_ARTIFACT_NAME = 'elementor-core-build';
@@ -239,14 +240,6 @@ function restoreEvidenceBuilds({ repo, runId, plan, workspaceDir }) {
 	} finally {
 		fs.rmSync(stagingDir, { recursive: true, force: true });
 	}
-}
-
-function setOutput(name, value) {
-	if (!process.env.GITHUB_OUTPUT) {
-		console.log(`${name}=${value}`);
-		return;
-	}
-	fs.appendFileSync(process.env.GITHUB_OUTPUT, `${name}=${value}\n`);
 }
 
 /**
