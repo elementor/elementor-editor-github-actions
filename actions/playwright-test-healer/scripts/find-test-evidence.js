@@ -371,7 +371,6 @@ if (require.main === module) {
 }
 
 module.exports = {
-	SHARD_ARTIFACT_PREFIX,
 	buildEvidenceCandidates,
 	findEvidenceInResultDirs,
 	isShardArtifact,

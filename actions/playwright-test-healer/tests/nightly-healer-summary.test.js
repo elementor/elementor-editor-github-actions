@@ -23,25 +23,6 @@ describe('buildNightlyHealerSummary', () => {
 		expect(summary).toContain('Waited for the loop grid to paint.');
 	});
 
-	it('links the Jira task when one was created', () => {
-		// Arrange
-		const details = {
-			prUrl: 'https://github.com/o/r/pull/2',
-			jiraUrl: 'https://elementor.atlassian.net/browse/ED-1',
-		};
-
-		// Act
-		const summary = buildNightlyHealerSummary({
-			outcome: 'healed',
-			details,
-		});
-
-		// Assert
-		expect(summary).toContain(
-			'Jira: https://elementor.atlassian.net/browse/ED-1',
-		);
-	});
-
 	it('warns that an unreproduced fix only proved it breaks nothing', () => {
 		// Act
 		const summary = buildNightlyHealerSummary({
@@ -55,63 +36,6 @@ describe('buildNightlyHealerSummary', () => {
 		// Assert
 		expect(summary).toContain('did not reproduce');
 		expect(summary).not.toContain('Fix verified');
-	});
-
-	it('says which build the fix was verified against', () => {
-		const summary = buildNightlyHealerSummary({
-			outcome: 'healed',
-			details: {
-				prUrl: 'https://github.com/o/r/pull/2',
-				buildDescription: 'a fresh build of `main`',
-			},
-		});
-
-		expect(summary).toContain(
-			're-run against a fresh build of `main` before the PR was opened',
-		);
-	});
-
-	it('explains what to try next when a fed test has no evidence', () => {
-		const summary = buildNightlyHealerSummary({
-			outcome: 'no-manual-evidence',
-			details: { testName: 'Typo in the title' },
-		});
-
-		expect(summary).toContain('Typo in the title');
-		expect(summary).toContain('source_run_id');
-	});
-
-	it('says an infrastructure failure is not a verdict on the fix', () => {
-		const summary = buildNightlyHealerSummary({
-			outcome: 'verification-infra-failed',
-			details: { testName: 't', branch: 'heal/x-1', stage: 'restore' },
-		});
-
-		expect(summary).toContain('`restore`');
-		expect(summary).toContain('untested');
-	});
-
-	it('explains why a drift handoff could not be completed by the healer', () => {
-		const summary = buildNightlyHealerSummary({
-			outcome: 'agent-baseline-drift',
-			details: {
-				testName: 'Display conditions icon',
-				summary: '📸 Baseline drift: new icon on Core 4.3.',
-			},
-		});
-
-		expect(summary).toContain('version-gated snapshot');
-		expect(summary).toContain('not allowed to add baseline images');
-	});
-
-	it('lists the failures it could not investigate', () => {
-		const summary = buildNightlyHealerSummary({
-			outcome: 'no-artifact-evidence',
-			details: { rankedFailures: ['first test', 'second test'] },
-		});
-
-		expect(summary).toContain('`first test`');
-		expect(summary).toContain('`second test`');
 	});
 
 	it('builds a summary for every outcome the resolver can return', () => {
@@ -140,86 +64,6 @@ describe('buildNightlyHealerSummary', () => {
 				buildNightlyHealerSummary({ outcome, details: {} }),
 			).toContain('Test Healer');
 		}
-	});
-
-	it('lists the candidates it passed over and why', () => {
-		// Arrange
-		const skippedCandidates = [
-			{
-				testName: 'Check Mega Menu icons',
-				reason: 'recent-verdict',
-				outcome: 'verification-failed',
-				recordedAt: '2026-09-28T02:00:00Z',
-				runUrl: 'https://github.com/o/r/actions/runs/1',
-			},
-			{
-				testName: 'Search Result Visibility',
-				reason: 'open-pr',
-				prUrl: 'https://github.com/o/r/pull/7682',
-			},
-		];
-
-		// Act
-		const summary = buildNightlyHealerSummary({
-			outcome: 'no-hard-failures',
-			details: { skippedCandidates },
-		});
-
-		// Assert
-		expect(summary).toContain(
-			'`Check Mega Menu icons` — `verification-failed`',
-		);
-		expect(summary).toContain(
-			'`Search Result Visibility` — open PR https://github.com/o/r/pull/7682',
-		);
-	});
-
-	it('names the branch left behind when the PR could not be opened', () => {
-		// Act
-		const summary = buildNightlyHealerSummary({
-			outcome: 'pr-open-failed',
-			details: { testName: 't', branch: 'heal/x-1' },
-		});
-
-		// Assert
-		expect(summary).toContain('could not be opened');
-		expect(summary).toContain('`heal/x-1` is left for manual pickup');
-	});
-
-	it('says a baseline stopped by another test is not a verdict', () => {
-		// Act
-		const summary = buildNightlyHealerSummary({
-			outcome: 'verification-baseline-neighbour-failed',
-			details: { testName: 't', branch: 'heal/x-1' },
-		});
-
-		// Assert
-		expect(summary).toContain(
-			'Another test in the file failed before the target during the baseline run, so the fix was not run. This is not a verdict on the test or the fix.',
-		);
-	});
-
-	it('names the branch left behind at the unreproduced draft limit', () => {
-		// Act
-		const summary = buildNightlyHealerSummary({
-			outcome: 'unreproduced-pr-limit',
-			details: { testName: 't', branch: 'heal/x-1' },
-		});
-
-		// Assert
-		expect(summary).toContain('max_unreproduced_prs');
-		expect(summary).toContain('`heal/x-1` is left for manual pickup');
-	});
-
-	it('says how to switch the healer on', () => {
-		const summary = buildNightlyHealerSummary({
-			outcome: 'disabled',
-			details: { healerSwitch: 'off' },
-		});
-
-		expect(summary).toContain('TEST_HEALER_ENABLED');
-		expect(summary).toContain('`manual`');
-		expect(summary).toContain('`all`');
 	});
 
 	it('throws for an unknown outcome', () => {

@@ -30,4 +30,4 @@ function setOutput(name, value) {
 	);
 }
 
-module.exports = { formatOutput, setOutput };
+module.exports = { setOutput };

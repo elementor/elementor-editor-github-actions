@@ -108,4 +108,4 @@ if (require.main === module) {
 	}
 }
 
-module.exports = { DEFAULT_HARD_FAILURES_PATH, parseHardFailureTitles };
+module.exports = { DEFAULT_HARD_FAILURES_PATH };

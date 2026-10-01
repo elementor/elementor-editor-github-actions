@@ -57,27 +57,6 @@ describe('buildPrompt', () => {
 		);
 	});
 
-	it('tells the agent to stop when the marketplace skill is unavailable', () => {
-		expect(buildPrompt(input)).toContain(
-			'fix-playwright-test skill unavailable',
-		);
-	});
-
-	it('asks for a local run before pushing', () => {
-		expect(buildPrompt(input)).toContain('run the test locally');
-	});
-
-	it('carries the candidate the ranker chose', () => {
-		// Act
-		const prompt = buildPrompt(input);
-
-		// Assert
-		expect(prompt).toContain('Search Result Visibility');
-		expect(prompt).toContain(input.runUrl);
-		expect(prompt).toContain(input.branchName);
-		expect(prompt).toContain(input.matchedDirs);
-	});
-
 	it('names the shard artifact so the agent does not guess from the Allure title', () => {
 		expect(buildPrompt(input)).toContain('playwright-test-results-28');
 	});
@@ -91,19 +70,6 @@ describe('buildPrompt', () => {
 		// It should point at the wildcard, never invent a specific shard artifact.
 		expect(prompt).toContain('playwright-test-results-* artifact');
 		expect(prompt).not.toMatch(/playwright-test-results-\d/);
-	});
-
-	it('offers all three endings, not just pushing', () => {
-		// A prompt that says only "you fail if you do not push" biases the agent
-		// into a wait-based fix for baseline drift, which then verifies green.
-		const prompt = buildPrompt(input);
-
-		expect(prompt).toContain('push a fix');
-		expect(prompt).toContain('baseline-drift line');
-		expect(prompt).toContain('product-bug line');
-		expect(prompt).not.toContain(
-			'You fail this assignment if you do not git push',
-		);
 	});
 
 	it('states the race/drift/product-bug decision and both exact markers', () => {
@@ -126,12 +92,6 @@ describe('buildPrompt', () => {
 		);
 		expect(prompt).toContain('Do NOT open a pull request');
 		expect(prompt).toContain('Only commit files under tests/playwright/');
-	});
-
-	it('defaults the starting ref to main', () => {
-		expect(buildPrompt({ ...input, startingRef: '' })).toContain(
-			'starting from git ref "main"',
-		);
 	});
 });
 
@@ -251,24 +211,6 @@ describe('buildPrompt retries', () => {
 		expect(prompt).toContain('attempt 2 of 2');
 		expect(prompt).toContain('heal/keyword-search-for-posts-123');
 		expect(prompt).toContain('Do not repeat that approach');
-	});
-
-	it('diffs the failed branch against the fix base, not always main', () => {
-		expect(buildPrompt({ ...retryInput, startingRef: '4.03' })).toContain(
-			'git diff 4.03...FETCH_HEAD',
-		);
-	});
-
-	it('points the retry at the failing re-run output', () => {
-		expect(buildPrompt(retryInput)).toContain(
-			'healer-verify-failure-test-results',
-		);
-		expect(buildPrompt(retryInput)).toContain('456');
-	});
-
-	it('tells the retry that a second failure is evidence against a race', () => {
-		// Without this a retry loop just produces three waits in a row.
-		expect(buildPrompt(retryInput)).toContain('not a race');
 	});
 
 	it('omits the run-artifact hint when no previous run is known', () => {

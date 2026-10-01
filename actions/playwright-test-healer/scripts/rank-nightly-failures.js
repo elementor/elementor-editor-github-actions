@@ -388,10 +388,8 @@ if (require.main === module) {
 }
 
 module.exports = {
-	slugify,
 	flattenAllureFailures,
 	matchResultDirectories,
-	readResultDirs,
 	selectHealCandidate,
 	shardIndexForMatchedDirs,
 };

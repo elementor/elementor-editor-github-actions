@@ -148,7 +148,6 @@ if (require.main === module) {
 
 module.exports = {
 	buildGrepPattern,
-	escapeRegExp,
 	filterHealableArtifactNames,
 	isHealableShard,
 	isNamedShard,

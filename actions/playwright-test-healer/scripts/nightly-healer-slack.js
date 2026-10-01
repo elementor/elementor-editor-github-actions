@@ -177,4 +177,4 @@ function buildNightlyHealerSlackPayload({ outcome, details }) {
 	return builder(details);
 }
 
-module.exports = { buildNightlyHealerSlackPayload, escapeMrkdwn };
+module.exports = { buildNightlyHealerSlackPayload };

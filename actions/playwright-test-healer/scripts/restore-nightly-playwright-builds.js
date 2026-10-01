@@ -353,10 +353,4 @@ if (require.main === module) {
 	}
 }
 
-module.exports = {
-	BUILD_SOURCE_EVIDENCE,
-	BUILD_SOURCE_FRESH,
-	CORE_BUILD_ARTIFACT_NAME,
-	planBuildRestore,
-	planCoreBuildRestore,
-};
+module.exports = { planCoreBuildRestore };

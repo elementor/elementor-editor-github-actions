@@ -217,4 +217,4 @@ function resolveHealerOutcome(state) {
 	};
 }
 
-module.exports = { VERIFY_INFRA_STAGES, resolveHealerOutcome };
+module.exports = { resolveHealerOutcome };

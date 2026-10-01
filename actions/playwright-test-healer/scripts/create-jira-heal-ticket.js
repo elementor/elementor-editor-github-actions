@@ -155,12 +155,3 @@ if (require.main === module) {
 		process.exit(1);
 	});
 }
-
-module.exports = {
-	buildBasicAuthHeader,
-	formatHttpError,
-	normalizeBaseUrl,
-	previewBody,
-	readHttpBody,
-	resolveJiraSiteUrl,
-};

@@ -294,13 +294,10 @@ async function main() {
 }
 
 module.exports = {
-	BASELINE_DRIFT_MARKER,
-	PRODUCT_BUG_ESCALATION_MARKER,
 	countCommitsAhead,
 	detectHandoff,
 	evaluateHealerAgentRun,
 	fetchRun,
-	isRetryableFetchStatus,
 	resolveHealerBranch,
 	shouldWaitForCursorBranch,
 	withResolvedBranch,

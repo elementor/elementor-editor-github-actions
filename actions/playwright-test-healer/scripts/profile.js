@@ -24,4 +24,4 @@ function loadProfile(product = process.env.HEALER_PRODUCT) {
 	);
 }
 
-module.exports = { SUPPORTED_PRODUCTS, loadProfile };
+module.exports = { loadProfile };

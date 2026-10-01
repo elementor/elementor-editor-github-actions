@@ -38,4 +38,4 @@ function gh(args, { exec = execFileSync, wait = sleep } = {}) {
 	}
 }
 
-module.exports = { MAX_ATTEMPTS, gh };
+module.exports = { gh };

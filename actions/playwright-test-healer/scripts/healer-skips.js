@@ -261,7 +261,6 @@ if (require.main === module) {
 }
 
 module.exports = {
-	ATTEMPT_ARTIFACT_NAME,
 	ATTEMPT_RECORD_FILE,
 	COOLDOWN_DAYS,
 	COOLDOWN_OUTCOMES,
