@@ -1,0 +1,40 @@
+{
+	"product": "pro",
+	"displayName": "Elementor Pro",
+	"evidenceWorkflows": ["playwright-custom-core.yml"],
+	"evidenceEvents": ["schedule", "workflow_dispatch", "push"],
+	"artifactRunPrefixes": ["nightly-", "rc-"],
+	"artifactSuffixes": [],
+	"maxShardArtifactsPerRun": 12,
+	"defaultNpmScript": "test:playwright",
+	"testSetupScript": "test:setup",
+	"namedShards": {
+		"template_tests_1": {
+			"npmScript": "test:playwright:template-tests",
+			"tag": "@template_test_1"
+		},
+		"template_tests_2": {
+			"npmScript": "test:playwright:template-tests",
+			"tag": "@template_test_2"
+		},
+		"plugin_tester": { "tag": "@pluginTester", "requiresTestSetup": true },
+		"loop_taxonomy": { "tag": "@loop_taxonomy" },
+		"taxonomy_filter_1": { "tag": "@taxonomyFilter-1" },
+		"taxonomy_filter_2": { "tag": "@taxonomyFilter-2" },
+		"taxonomy_filter_3": { "tag": "@taxonomyFilter-3" },
+		"wc_archive_styling_1": { "tag": "@woocommerce-archive-1" },
+		"wc_archive_styling_2": { "tag": "@woocommerce-archive-2" },
+		"wc_product_styling_1": { "tag": "@woocommerce-product-1" },
+		"wc_product_styling_2": { "tag": "@woocommerce-product-2" },
+		"import_export_customization": {
+			"tag": "@import_export_customization",
+			"proPlan": "expert"
+		}
+	},
+	"unhealableShards": [],
+	"agent": {
+		"evidence": "Failed Playwright jobs upload `test-results/` as `playwright-test-results-{shardIndex}` — job `Playwright - {shardIndex}` (custom-core) or `Nightly Full - Shard {shardIndex}` / `RC Full ... - Shard {shardIndex}`. Nightly/RC prefixes: `playwright-test-results-nightly-27`, `playwright-test-results-rc-27`. Named shards keep their suffix (`playwright-test-results-taxonomy_filter_1`).",
+		"localRun": "Follow `AGENTS.md`: Core must be built at `../elementor`, then start `npm run wp-playground` in the background. The playground stack (PHP 8.3, SQLite, latest WordPress, no Pro licence) is not the CI stack.",
+		"baselineDrift": "Drift here usually means the run paired a different Core version with Pro. `tests/playwright/assets/test-helper.ts` exports a family of helpers for baselines that legitimately differ by Core version — `expectScreenshotWithFallback`, `expectScreenshotWithFallbackByVersion`, `expectMatchSnapshotWithFallbackByVersion`, and `expectScreenshotByVersionThresholds`. Grep the area for the whole family, not one name. Do not grep for `getCoreVersion()`: many files use it to gate test logic, which is a different thing."
+	}
+}
