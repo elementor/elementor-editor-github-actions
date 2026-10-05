@@ -352,3 +352,5 @@ if (require.main === module) {
 		process.exit(1);
 	}
 }
+
+module.exports = { LOCAL_HELLO_THEME_PATH, patchWpEnvHelloTheme };

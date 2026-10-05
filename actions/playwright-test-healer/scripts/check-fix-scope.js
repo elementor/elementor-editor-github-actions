@@ -37,7 +37,7 @@ const FORBIDDEN_PATHS = [
 const SNAPSHOT_DIR = /(?:-snapshots|__snapshots__)\//i;
 const ARIA_SNAPSHOT = /\.aria\.ya?ml$/i;
 const DIFF_FILE_HEADER = /^(?:\+\+\+|---) (?:[ab]\/|\/dev\/null)/;
-const NEW_FILE_HEADER = /^\+\+\+ b\/(.+)$/;
+const FILE_HEADER = /^(?:--- a|\+\+\+ b)\/(.+)$/;
 const ASSERTION = /\bexpect(?:\.poll)?\s*(?:\(|$)/g;
 const AWAITED_ASSERTION = /\bawait\s+expect\b/g;
 const LINE_COMMENT = /(^|[^:])\/\/.*$/;
@@ -130,8 +130,18 @@ function findScopeViolations(files) {
 }
 
 /**
+ * A deleted or renamed spec takes its assertions with it, and the same title
+ * can come back elsewhere asserting nothing. Run with `--no-renames`, so a
+ * rename shows up here as the deletion of its old path.
+ */
+function findDeletions(deletedFiles) {
+	return (deletedFiles || []).map((file) => `${file}: deleted or renamed`);
+}
+
+/**
  * Groups changed lines by file, so an assertion removed from the failing
- * test cannot be balanced by a trivial one added somewhere else.
+ * test cannot be balanced by a trivial one added somewhere else. A deleted
+ * file's new side is `/dev/null`, so its old side names it.
  */
 function parseDiffFiles(diff) {
 	const files = new Map();
@@ -139,7 +149,7 @@ function parseDiffFiles(diff) {
 	files.set('', current);
 
 	for (const line of String(diff || '').split('\n')) {
-		const header = NEW_FILE_HEADER.exec(line);
+		const header = FILE_HEADER.exec(line);
 
 		if (header) {
 			current = files.get(header[1]) || { added: [], removed: [] };
@@ -242,6 +252,15 @@ function diffTestCode(range, cwd) {
 	);
 }
 
+function listDeletedFiles(range, cwd) {
+	return git(
+		['diff', '--no-renames', '--name-only', '--diff-filter=D', range],
+		cwd,
+	)
+		.split('\n')
+		.filter(Boolean);
+}
+
 function main() {
 	const baseRef = process.env.BASE_REF;
 
@@ -266,6 +285,7 @@ function main() {
 
 	const problems = [
 		...findScopeViolations(files),
+		...findDeletions(listDeletedFiles(range)),
 		...findWeakening(diffTestCode(range)),
 	];
 
@@ -288,4 +308,10 @@ if (require.main === module) {
 	}
 }
 
-module.exports = { diffTestCode, findScopeViolations, findWeakening };
+module.exports = {
+	diffTestCode,
+	findDeletions,
+	findScopeViolations,
+	findWeakening,
+	listDeletedFiles,
+};

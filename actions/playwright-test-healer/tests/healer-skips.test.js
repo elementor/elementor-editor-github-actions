@@ -6,6 +6,8 @@ const {
 	findOpenPrForTest,
 	findRecentVerdict,
 	findSkipReason,
+	isTrustedAttemptRun,
+	parseAttemptRecord,
 } = require('../scripts/healer-skips');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -218,6 +220,66 @@ describe('findRecentVerdict', () => {
 
 	it('never cools down a PR that could not be opened', () => {
 		expect(COOLDOWN_OUTCOMES.has('pr-open-failed')).toBe(false);
+	});
+});
+
+describe('isTrustedAttemptRun', () => {
+	const healerRun = {
+		repositoryId: 1,
+		headRepositoryId: 1,
+		headBranch: 'main',
+		event: 'schedule',
+	};
+
+	it('trusts a scheduled or dispatched run of this repo on a healable branch', () => {
+		expect(isTrustedAttemptRun(healerRun)).toBe(true);
+		expect(
+			isTrustedAttemptRun({
+				...healerRun,
+				headBranch: '4.03',
+				event: 'workflow_dispatch',
+			}),
+		).toBe(true);
+	});
+
+	it("does not trust a fork's pull request run", () => {
+		expect(
+			isTrustedAttemptRun({
+				...healerRun,
+				headRepositoryId: 2,
+				event: 'pull_request',
+			}),
+		).toBe(false);
+	});
+
+	it('does not trust a run on a feature branch or from another event', () => {
+		expect(
+			isTrustedAttemptRun({ ...healerRun, headBranch: 'ED-1-feature' }),
+		).toBe(false);
+		expect(isTrustedAttemptRun({ ...healerRun, event: 'push' })).toBe(
+			false,
+		);
+	});
+});
+
+describe('parseAttemptRecord', () => {
+	it('reads a record the report job wrote', () => {
+		expect(
+			parseAttemptRecord(
+				JSON.stringify({
+					testName: TEST_NAME,
+					outcome: 'agent-escalated',
+				}),
+			),
+		).toEqual({ testName: TEST_NAME, outcome: 'agent-escalated' });
+	});
+
+	it('rejects bad JSON and records without a test name', () => {
+		expect(() => parseAttemptRecord('{')).toThrow();
+		expect(() => parseAttemptRecord('null')).toThrow();
+		expect(() =>
+			parseAttemptRecord(JSON.stringify({ outcome: 'agent-escalated' })),
+		).toThrow('it has no testName or outcome');
 	});
 });
 

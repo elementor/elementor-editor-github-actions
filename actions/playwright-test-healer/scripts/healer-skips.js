@@ -18,6 +18,7 @@ const { execFileSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { isHealableBase } = require('./evidence-run');
 const { gh } = require('./gh');
 
 const ATTEMPT_ARTIFACT_NAME = 'healer-attempt';
@@ -29,6 +30,7 @@ const HEAL_BRANCH_SLUG_MAX_LENGTH = 40;
 const COOLDOWN_DAYS = 7;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MAX_OPEN_PRS = 500;
+const HEALER_RUN_EVENTS = new Set(['schedule', 'workflow_dispatch']);
 
 /**
  * Outcomes that are a verdict on the test, or that left a fix branch waiting
@@ -163,6 +165,40 @@ function listOpenPrs(repo) {
 	);
 }
 
+/**
+ * The artifact list is repo-wide, so it also holds whatever a fork's pull
+ * request run uploaded under the same name. Only the healer's own runs, on a
+ * branch it heals, may bench a test.
+ */
+function isTrustedAttemptRun({
+	repositoryId,
+	headRepositoryId,
+	headBranch,
+	event,
+}) {
+	return (
+		Boolean(repositoryId) &&
+		repositoryId === headRepositoryId &&
+		isHealableBase(headBranch) &&
+		HEALER_RUN_EVENTS.has(event)
+	);
+}
+
+function parseAttemptRecord(text) {
+	const record = JSON.parse(text);
+
+	if (
+		!record ||
+		'string' !== typeof record.testName ||
+		!record.testName.trim() ||
+		'string' !== typeof record.outcome
+	) {
+		throw new Error('it has no testName or outcome');
+	}
+
+	return record;
+}
+
 function listRecentAttemptArtifacts(repo, now) {
 	const since = now - COOLDOWN_DAYS * DAY_MS;
 	const output = gh([
@@ -170,17 +206,23 @@ function listRecentAttemptArtifacts(repo, now) {
 		`repos/${repo}/actions/artifacts?name=${ATTEMPT_ARTIFACT_NAME}&per_page=100`,
 		'--paginate',
 		'--jq',
-		'.artifacts[] | select(.expired == false) | [.workflow_run.id, .created_at] | @tsv',
+		'.artifacts[] | select(.expired == false) | {runId: .workflow_run.id, createdAt: .created_at, repositoryId: .workflow_run.repository_id, headRepositoryId: .workflow_run.head_repository_id, headBranch: .workflow_run.head_branch} | tojson',
 	]);
 
 	return output
 		.split('\n')
 		.filter(Boolean)
-		.map((line) => {
-			const [runId, createdAt] = line.split('\t');
-			return { runId, createdAt };
-		})
+		.map((line) => JSON.parse(line))
 		.filter((artifact) => Date.parse(artifact.createdAt) >= since);
+}
+
+function readRunEvent(repo, runId) {
+	return gh([
+		'api',
+		`repos/${repo}/actions/runs/${runId}`,
+		'--jq',
+		'.event',
+	]).trim();
 }
 
 function readAttempt(repo, { runId, createdAt }) {
@@ -204,7 +246,7 @@ function readAttempt(repo, { runId, createdAt }) {
 			],
 			{ stdio: 'inherit' },
 		);
-		const record = JSON.parse(
+		const record = parseAttemptRecord(
 			fs.readFileSync(
 				path.join(downloadDir, ATTEMPT_RECORD_FILE),
 				'utf8',
@@ -234,8 +276,28 @@ function main() {
 
 	const now = Date.now();
 	const openPrs = listOpenPrs(repo);
-	const attempts = listRecentAttemptArtifacts(repo, now).map((artifact) =>
-		readAttempt(repo, artifact),
+	const attempts = listRecentAttemptArtifacts(repo, now).flatMap(
+		(artifact) => {
+			const runUrl = `https://github.com/${repo}/actions/runs/${artifact.runId}`;
+
+			try {
+				const event = readRunEvent(repo, artifact.runId);
+
+				if (!isTrustedAttemptRun({ ...artifact, event })) {
+					console.log(
+						`::warning::Ignoring the ${ATTEMPT_ARTIFACT_NAME} record from ${runUrl}: a ${event} run on ${artifact.headBranch}, not a healer run here.`,
+					);
+					return [];
+				}
+
+				return [readAttempt(repo, artifact)];
+			} catch (error) {
+				console.log(
+					`::warning::Ignoring the ${ATTEMPT_ARTIFACT_NAME} record from ${runUrl}: ${error.message}`,
+				);
+				return [];
+			}
+		},
 	);
 
 	fs.writeFileSync(openPrsPath, JSON.stringify(openPrs));
@@ -269,6 +331,8 @@ module.exports = {
 	findOpenPrForTest,
 	findRecentVerdict,
 	findSkipReason,
+	isTrustedAttemptRun,
 	listOpenPrs,
+	parseAttemptRecord,
 	readSkipSources,
 };

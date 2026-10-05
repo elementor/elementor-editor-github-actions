@@ -5,8 +5,10 @@ const path = require('path');
 
 const {
 	diffTestCode,
+	findDeletions,
 	findScopeViolations,
 	findWeakening,
+	listDeletedFiles,
 } = require('../scripts/check-fix-scope');
 
 function diff(lines) {
@@ -359,6 +361,44 @@ describe('git attributes', () => {
 		expect(violations).toEqual([
 			'tests/playwright/.gitattributes: git attributes, which can hide changes from this check',
 			'tests/playwright/sanity/.gitattributes: git attributes, which can hide changes from this check',
+		]);
+	});
+
+	it('rejects a spec deleted and its title re-added asserting nothing', () => {
+		// Arrange
+		run('rm', '-q', 'tests/playwright/sanity/a.test.ts');
+		write(
+			'tests/playwright/sanity/b.test.ts',
+			"test('a', async () => {\n\texpect(1).toBe(1);\n});\n",
+		);
+		run('add', '.');
+		run('commit', '-q', '-m', 'fix');
+
+		// Act
+		const problems = [
+			...findDeletions(listDeletedFiles('main...HEAD', repo)),
+			...findWeakening(diffTestCode('main...HEAD', repo)),
+		];
+
+		// Assert
+		expect(problems).toEqual([
+			'tests/playwright/sanity/a.test.ts: deleted or renamed',
+			'removes 1 expect() assertion(s) in tests/playwright/sanity/a.test.ts',
+		]);
+	});
+
+	it('rejects a renamed spec as the deletion of its old path', () => {
+		// Arrange
+		run(
+			'mv',
+			'tests/playwright/sanity/a.test.ts',
+			'tests/playwright/sanity/c.test.ts',
+		);
+		run('commit', '-q', '-m', 'fix');
+
+		// Act & Assert
+		expect(findDeletions(listDeletedFiles('main...HEAD', repo))).toEqual([
+			'tests/playwright/sanity/a.test.ts: deleted or renamed',
 		]);
 	});
 
