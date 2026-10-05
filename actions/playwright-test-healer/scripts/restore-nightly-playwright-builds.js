@@ -353,4 +353,4 @@ if (require.main === module) {
 	}
 }
 
-module.exports = { LOCAL_HELLO_THEME_PATH, patchWpEnvHelloTheme };
+module.exports = { patchWpEnvHelloTheme, planCoreBuildRestore };

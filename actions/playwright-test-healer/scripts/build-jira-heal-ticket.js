@@ -110,4 +110,9 @@ function buildJiraIssuePayload({
 	};
 }
 
-module.exports = { buildHealPrTitle, buildJiraIssuePayload };
+module.exports = {
+	PR_TITLE_MAX_LENGTH,
+	buildHealPrTitle,
+	buildTicketSummary,
+	buildJiraIssuePayload,
+};
