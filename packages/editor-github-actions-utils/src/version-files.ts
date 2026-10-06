@@ -33,10 +33,12 @@ export function patchPhpHeaderField(
  *   * Version: X.Y.Z
  *   define( '<constant>', 'X.Y.Z' )
  */
+export type VersionConstant = 'ELEMENTOR_VERSION' | 'ELEMENTOR_PRO_VERSION';
+
 export function patchPhpVersion(
 	content: string,
 	version: string,
-	constant = 'ELEMENTOR_VERSION',
+	constant: VersionConstant = 'ELEMENTOR_VERSION',
 ): string {
 	const definePattern = new RegExp(
 		`(define\\( '${escapeRegExp(constant)}', ')[^']*'`,
