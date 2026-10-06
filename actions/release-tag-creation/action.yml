@@ -16,7 +16,8 @@ inputs:
         required: true
         description: 'Git user.email for the version-bump commit.'
     plugin:
-        required: true
+        required: false
+        default: 'core'
         description: 'Plugin being released: "core" (bumps elementor.php and readme.txt) or "pro" (bumps elementor-pro.php and sets "Elementor tested up to" from Core release/<channel>).'
 
 outputs:
