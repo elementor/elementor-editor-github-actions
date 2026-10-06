@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
 	parseLatestTagFromLsRemote,
+	patchPhpHeaderField,
 	patchPhpVersion,
 	patchReadmeTxt,
 } from './version-files';
@@ -41,6 +42,83 @@ describe('patchPhpVersion', () => {
 		const result = patchPhpVersion(original, '4.1.0');
 		expect(result).toContain(' * Plugin Name: Elementor');
 		expect(result).toContain(' * Description: Drag & drop website builder');
+	});
+
+	it('throws when the version constant is missing', () => {
+		expect(() => {
+			patchPhpVersion(original, '4.1.0', 'ELEMENTOR_PRO_VERSION');
+		}).toThrow('"ELEMENTOR_PRO_VERSION" define not found');
+	});
+
+	it('throws when the Version header is missing', () => {
+		const noHeader = "define( 'ELEMENTOR_VERSION', '3.10.0' );";
+		expect(() => {
+			patchPhpVersion(noHeader, '4.1.0');
+		}).toThrow('"Version:" header not found');
+	});
+
+	describe('with a custom constant (Pro)', () => {
+		const pro = [
+			'<?php',
+			'/**',
+			' * Plugin Name: Elementor Pro',
+			' * Version: 4.3.0',
+			' * Elementor tested up to: 4.3.0',
+			' */',
+			"define( 'ELEMENTOR_PRO_VERSION', '4.3.0' );",
+			"define( 'ELEMENTOR_PRO_REQUIRED_CORE_VERSION', '4.0' );",
+		].join('\n');
+
+		it('updates the header and the given constant', () => {
+			const result = patchPhpVersion(
+				pro,
+				'4.4.0-beta1',
+				'ELEMENTOR_PRO_VERSION',
+			);
+			expect(result).toContain(' * Version: 4.4.0-beta1');
+			expect(result).toContain(
+				"define( 'ELEMENTOR_PRO_VERSION', '4.4.0-beta1' );",
+			);
+		});
+
+		it('does not touch other constants or headers', () => {
+			const result = patchPhpVersion(
+				pro,
+				'4.4.0-beta1',
+				'ELEMENTOR_PRO_VERSION',
+			);
+			expect(result).toContain(
+				"define( 'ELEMENTOR_PRO_REQUIRED_CORE_VERSION', '4.0' );",
+			);
+			expect(result).toContain(' * Elementor tested up to: 4.3.0');
+		});
+	});
+});
+
+// ─── patchPhpHeaderField ──────────────────────────────────────────────────────
+
+describe('patchPhpHeaderField', () => {
+	const original = [
+		'/**',
+		' * Version: 4.3.0',
+		' * Elementor tested up to: 4.3.0',
+		' */',
+	].join('\n');
+
+	it('updates the given header field only', () => {
+		const result = patchPhpHeaderField(
+			original,
+			'Elementor tested up to',
+			'4.10.2',
+		);
+		expect(result).toContain(' * Elementor tested up to: 4.10.2');
+		expect(result).toContain(' * Version: 4.3.0');
+	});
+
+	it('throws when the header field is missing', () => {
+		expect(() => {
+			patchPhpHeaderField(original, 'Requires PHP', '8.0');
+		}).toThrow('"Requires PHP:" header not found');
 	});
 });
 

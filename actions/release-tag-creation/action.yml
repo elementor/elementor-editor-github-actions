@@ -15,6 +15,9 @@ inputs:
     maintain_email:
         required: true
         description: 'Git user.email for the version-bump commit.'
+    plugin:
+        required: true
+        description: 'Plugin being released: "core" (bumps elementor.php and readme.txt) or "pro" (bumps elementor-pro.php and sets "Elementor tested up to" from Core release/<channel>).'
 
 outputs:
     channel:
@@ -32,6 +35,9 @@ outputs:
     readme_beta_tag:
         description: 'The Beta tag value written to readme.txt.'
         value: ${{ steps.capture-readme.outputs.readme_beta_tag }}
+    elementor_tested_up_to:
+        description: 'The "Elementor tested up to" value written to the plugin file. Empty when not updated.'
+        value: ${{ steps.capture-readme.outputs.elementor_tested_up_to }}
 
 runs:
     using: composite
@@ -77,6 +83,7 @@ runs:
               INPUT_VERSION: ${{ inputs.version }}
               INPUT_CHANNEL: ${{ steps.handle-version-input.outputs.channel }}
               INPUT_COMPANION_TAG: ${{ steps.handle-version-input.outputs.companion_tag }}
+              INPUT_PLUGIN: ${{ inputs.plugin }}
               ACTION_PATH: ${{ github.action_path }}
           run: node "$ACTION_PATH/update-version-files.ts"
 
@@ -85,12 +92,18 @@ runs:
           env:
               VERSION: ${{ inputs.version }}
               DRY_RUN: ${{ inputs.dry_run }}
+              PLUGIN_FILE: ${{ steps.capture-readme.outputs.plugin_file }}
+              UPDATE_README: ${{ steps.capture-readme.outputs.update_readme }}
           run: |
               if [[ "${DRY_RUN}" == "true" ]]; then
                 echo "Dry run — skipping commit."
                 exit 0
               fi
-              git add elementor.php readme.txt
+              FILES_TO_COMMIT=("${PLUGIN_FILE}")
+              if [[ "${UPDATE_README}" == "true" ]]; then
+                FILES_TO_COMMIT+=("readme.txt")
+              fi
+              git add "${FILES_TO_COMMIT[@]}"
               if git diff --cached --quiet; then
                 echo "No changes to commit — version files already at ${VERSION}."
                 exit 0
@@ -124,6 +137,9 @@ runs:
               BRANCH: ${{ steps.handle-version-input.outputs.checkout_branch }}
               STABLE_TAG: ${{ steps.capture-readme.outputs.readme_stable_tag }}
               BETA_TAG: ${{ steps.capture-readme.outputs.readme_beta_tag }}
+              TESTED_UP_TO: ${{ steps.capture-readme.outputs.elementor_tested_up_to }}
+              PLUGIN_FILE: ${{ steps.capture-readme.outputs.plugin_file }}
+              UPDATE_README: ${{ steps.capture-readme.outputs.update_readme }}
               VERSION: ${{ inputs.version }}
           run: |
               if [[ "${DRY_RUN}" == "true" ]]; then
@@ -148,6 +164,12 @@ runs:
                 echo "| **Channel** | ${CHANNEL} |"
                 echo "| **Branch** | \`${BRANCH}\` |"
                 echo "| **Tag pushed** | ${TAG_STATUS} |"
-                echo "| **readme.txt stable tag** | \`${STABLE_TAG}\` |"
-                echo "| **readme.txt beta tag** | \`${BETA_TAG}\` |"
+                echo "| **Plugin file** | \`${PLUGIN_FILE}\` |"
+                if [[ "${UPDATE_README}" == "true" ]]; then
+                  echo "| **readme.txt stable tag** | \`${STABLE_TAG}\` |"
+                  echo "| **readme.txt beta tag** | \`${BETA_TAG}\` |"
+                fi
+                if [[ -n "${TESTED_UP_TO}" ]]; then
+                  echo "| **Elementor tested up to** | \`${TESTED_UP_TO}\` |"
+                fi
               } >> "$GITHUB_STEP_SUMMARY"
