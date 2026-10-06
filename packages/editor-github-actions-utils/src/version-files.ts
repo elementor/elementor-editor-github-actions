@@ -28,13 +28,13 @@ export function patchPhpHeaderField(
 	return content.replace(pattern, `$1${value}`);
 }
 
+export type VersionConstant = 'ELEMENTOR_VERSION' | 'ELEMENTOR_PRO_VERSION';
+
 /**
  * Replaces the two version markers in the plugin main file content:
  *   * Version: X.Y.Z
  *   define( '<constant>', 'X.Y.Z' )
  */
-export type VersionConstant = 'ELEMENTOR_VERSION' | 'ELEMENTOR_PRO_VERSION';
-
 export function patchPhpVersion(
 	content: string,
 	version: string,

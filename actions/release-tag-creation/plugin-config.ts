@@ -1,8 +1,10 @@
+import type { VersionConstant } from '@elementor/editor-github-actions-utils';
+
 export type Plugin = 'core' | 'pro';
 
 export type PluginConfig = {
 	pluginFile: string;
-	versionConstant: string;
+	versionConstant: VersionConstant;
 	updateReadme: boolean;
 	updateElementorTestedUpTo: boolean;
 };
