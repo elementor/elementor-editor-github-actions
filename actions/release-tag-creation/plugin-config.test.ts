@@ -21,7 +21,7 @@ describe('resolvePluginConfig', () => {
 		});
 	});
 
-	it.each(['', 'Core', 'elementor'])('throws on "%s"', (plugin) => {
+	it.each(['', 'Core', 'elementor', 'koko'])('throws on "%s"', (plugin) => {
 		expect(() => resolvePluginConfig(plugin)).toThrow(
 			'plugin must be "core" or "pro"',
 		);

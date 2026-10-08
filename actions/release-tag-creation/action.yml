@@ -60,6 +60,7 @@ runs:
           shell: bash
           env:
               INPUT_VERSION: ${{ inputs.version }}
+              INPUT_PLUGIN: ${{ inputs.plugin }}
               ACTION_PATH: ${{ github.action_path }}
           run: node "$ACTION_PATH/main.ts"
 
