@@ -1,15 +1,59 @@
 import * as semver from 'semver';
-// ─── elementor.php ────────────────────────────────────────────────────────────
+// ─── plugin main file (elementor.php / elementor-pro.php) ────────────────────
+
+function escapeRegExp(value: string): string {
+	return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 /**
- * Replaces the two version markers in elementor.php file content:
- *   * Version: X.Y.Z
- *   define( 'ELEMENTOR_VERSION', 'X.Y.Z' )
+ * Replaces a ` * <field>: <value>` line in the plugin header.
+ * Throws if the field is missing so a wrong field name can't silently ship.
+ *
+ * Example — patchPhpHeaderField(content, 'Elementor tested up to', '4.4.0'):
+ *   * Elementor tested up to: 4.3.0  →  * Elementor tested up to: 4.4.0
  */
-export function patchPhpVersion(content: string, version: string): string {
-	return content
-		.replace(/( \* Version: ).*/, `$1${version}`)
-		.replace(/(define\( 'ELEMENTOR_VERSION', ')[^']*'/, `$1${version}'`);
+export function patchPhpHeaderField(
+	content: string,
+	field: string,
+	value: string,
+): string {
+	const pattern = new RegExp(`^( \\* ${escapeRegExp(field)}: ).*$`, 'm');
+
+	if (!pattern.test(content)) {
+		throw new Error(
+			`patchPhpHeaderField: "${field}:" header not found in plugin file`,
+		);
+	}
+
+	return content.replace(pattern, `$1${value}`);
+}
+
+export type VersionConstant = 'ELEMENTOR_VERSION' | 'ELEMENTOR_PRO_VERSION';
+
+/**
+ * Replaces the two version markers in the plugin main file content:
+ *   * Version: X.Y.Z
+ *   define( '<constant>', 'X.Y.Z' )
+ */
+export function patchPhpVersion(
+	content: string,
+	version: string,
+	constant: VersionConstant = 'ELEMENTOR_VERSION',
+): string {
+	const definePattern = new RegExp(
+		`(define\\( '${escapeRegExp(constant)}', ')[^']*'`,
+	);
+
+	if (!definePattern.test(content)) {
+		throw new Error(
+			`patchPhpVersion: "${constant}" define not found in plugin file`,
+		);
+	}
+
+	return patchPhpHeaderField(content, 'Version', version).replace(
+		definePattern,
+		`$1${version}'`,
+	);
 }
 
 // ─── readme.txt ───────────────────────────────────────────────────────────────
