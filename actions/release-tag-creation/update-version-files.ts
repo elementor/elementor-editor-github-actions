@@ -137,7 +137,3 @@ export async function run(): Promise<void> {
 		process.exit(1);
 	}
 }
-
-if (process.env['NODE_ENV'] !== 'test') {
-	void run();
-}

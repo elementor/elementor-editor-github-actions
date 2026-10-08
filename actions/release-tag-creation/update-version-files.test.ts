@@ -21,7 +21,7 @@ beforeEach(() => {
 	testDir = mkdtempSync(join(tmpdir(), 'update-version-files-test-'));
 	originalCwd = process.cwd();
 	originalEnv = { ...process.env };
-	process.env = { ...originalEnv, NODE_ENV: 'test' };
+	process.env = { ...originalEnv };
 	process.chdir(testDir);
 });
 

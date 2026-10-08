@@ -91,7 +91,7 @@ runs:
               INPUT_PLUGIN: ${{ inputs.plugin }}
               INPUT_GITHUB_TOKEN: ${{ inputs.github_token }}
               ACTION_PATH: ${{ github.action_path }}
-          run: node "$ACTION_PATH/update-version-files.ts"
+          run: node "$ACTION_PATH/run-update-version-files.ts"
 
         - name: Commit version bump
           shell: bash
