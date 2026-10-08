@@ -6,6 +6,7 @@ import {
 	checkVersionIsNext,
 	fetchCompanionTag,
 } from './current-version-validation.ts';
+import { resolvePluginConfig } from './plugin-config.ts';
 
 // ─── I/O helpers ──────────────────────────────────────────────────────────────
 
@@ -19,6 +20,10 @@ export function getVersion(): string {
 	}
 
 	return version;
+}
+
+export function getPlugin(): string {
+	return (process.env['INPUT_PLUGIN'] ?? 'core').trim();
 }
 
 export function setOutput(name: string, value: string): void {
@@ -101,6 +106,10 @@ export function deriveBranch(channel: 'stable' | 'beta'): string {
 export function run(): void {
 	try {
 		const version = getVersion();
+		const plugin = getPlugin();
+
+		resolvePluginConfig(plugin);
+		console.log(`✅ Plugin input is valid: ${plugin}`);
 
 		validateFormat(version);
 		checkCurrentTagDoesNotExist(version);
