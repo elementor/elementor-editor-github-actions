@@ -72,8 +72,9 @@ function updateReadme(
 
 async function resolveElementorTestedUpTo(
 	channel: ReleaseChannel,
+	token?: string,
 ): Promise<string> {
-	const coreVersion = await fetchCoreReleaseVersion(channel);
+	const coreVersion = await fetchCoreReleaseVersion(channel, token);
 	const testedUpTo = toTestedUpToVersion(coreVersion);
 	console.log(
 		`✅ Core release/${channel} is at ${coreVersion} — ${ELEMENTOR_TESTED_UP_TO_HEADER}: ${testedUpTo}`,
@@ -87,6 +88,7 @@ export async function run(): Promise<void> {
 		const version = getEnv('INPUT_VERSION');
 		const channel = getChannelEnv('INPUT_CHANNEL');
 		const plugin = getEnv('INPUT_PLUGIN');
+		const githubToken = process.env['INPUT_GITHUB_TOKEN'];
 		const {
 			pluginFile,
 			versionConstant,
@@ -102,9 +104,6 @@ export async function run(): Promise<void> {
 		console.log('Update readme', shouldUpdateReadme);
 		console.log('Update Elementor tested up to', shouldUpdateTestedUpTo);
 
-		setOutput('plugin_file', pluginFile);
-		setOutput('update_readme', String(shouldUpdateReadme));
-
 		let patchedPhp = patchPhpVersion(
 			readFileSync(pluginFile, 'utf8'),
 			version,
@@ -112,7 +111,10 @@ export async function run(): Promise<void> {
 		);
 
 		if (shouldUpdateTestedUpTo) {
-			const testedUpTo = await resolveElementorTestedUpTo(channel);
+			const testedUpTo = await resolveElementorTestedUpTo(
+				channel,
+				githubToken,
+			);
 			patchedPhp = patchPhpHeaderField(
 				patchedPhp,
 				ELEMENTOR_TESTED_UP_TO_HEADER,
@@ -124,6 +126,9 @@ export async function run(): Promise<void> {
 		writeFileSync(pluginFile, patchedPhp, 'utf8');
 		console.log(`✅ ${pluginFile} patched to ${version}`);
 
+		setOutput('plugin_file', pluginFile);
+		setOutput('update_readme', String(shouldUpdateReadme));
+
 		if (shouldUpdateReadme) {
 			updateReadme(version, channel, getEnv('INPUT_COMPANION_TAG'));
 		}
@@ -133,4 +138,6 @@ export async function run(): Promise<void> {
 	}
 }
 
-void run();
+if (process.env['NODE_ENV'] !== 'test') {
+	void run();
+}

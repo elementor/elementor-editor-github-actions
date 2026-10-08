@@ -3,10 +3,6 @@ import { parseHeaderField } from '@elementor/editor-github-actions-utils';
 
 export type ReleaseChannel = 'stable' | 'beta';
 
-export function coreReleasePluginFileUrl(channel: ReleaseChannel): string {
-	return `https://raw.githubusercontent.com/elementor/elementor/refs/heads/release/${channel}/elementor.php`;
-}
-
 export function toTestedUpToVersion(coreVersion: string): string {
 	const parsed = semver.parse(coreVersion);
 
@@ -19,9 +15,21 @@ export function toTestedUpToVersion(coreVersion: string): string {
 
 export async function fetchCoreReleaseVersion(
 	channel: ReleaseChannel,
+	token?: string,
 ): Promise<string> {
-	const url = coreReleasePluginFileUrl(channel);
-	const response = await fetch(url);
+	const ref = `release/${channel}`;
+	const url = `https://api.github.com/repos/elementor/elementor/contents/elementor.php?ref=${ref}`;
+
+	const headers: HeadersInit = {
+		Accept: 'application/vnd.github.raw',
+		'User-Agent': 'elementor-editor-github-actions',
+	};
+
+	if (token) {
+		headers['Authorization'] = `Bearer ${token}`;
+	}
+
+	const response = await fetch(url, { headers });
 
 	if (!response.ok) {
 		throw new Error(

@@ -19,6 +19,10 @@ inputs:
         required: false
         default: 'core'
         description: 'Plugin being released: "core" (bumps elementor.php and readme.txt) or "pro" (bumps elementor-pro.php and sets "Elementor tested up to" from Core release/<channel>).'
+    github_token:
+        required: false
+        default: ${{ github.token }}
+        description: 'GitHub token for fetching Core release version (optional, improves rate limits and avoids CDN cache).'
 
 outputs:
     channel:
@@ -85,6 +89,7 @@ runs:
               INPUT_CHANNEL: ${{ steps.handle-version-input.outputs.channel }}
               INPUT_COMPANION_TAG: ${{ steps.handle-version-input.outputs.companion_tag }}
               INPUT_PLUGIN: ${{ inputs.plugin }}
+              INPUT_GITHUB_TOKEN: ${{ inputs.github_token }}
               ACTION_PATH: ${{ github.action_path }}
           run: node "$ACTION_PATH/update-version-files.ts"
 
