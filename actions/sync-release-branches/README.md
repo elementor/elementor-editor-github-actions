@@ -4,10 +4,14 @@ Creates downstream PRs after a release-branch merge using isolated git worktrees
 
 ## Cascade rules
 
-| Merged into      | PR targets             |
-| ---------------- | ---------------------- |
-| `release/stable` | `release/beta`, `main` |
-| `release/beta`   | `main`                 |
+| Merged into      | PR targets                           |
+| ---------------- | ------------------------------------ |
+| `release/stable` | `release/beta` (when active), `main` |
+| `release/beta`   | `main`                               |
+
+**Beta gating:** A sync PR to `release/beta` is created only when beta is **active**. Beta is active when the X.Y version on `release/beta` is greater than the X.Y version of the latest published stable GitHub Release (non-draft, non-prerelease). This prevents noisy sync PRs to beta when there is no active beta cycle.
+
+If the beta check fails (API error, unparsable version, etc.), the action fails open and includes the beta target.
 
 Branch names are configurable via inputs.
 

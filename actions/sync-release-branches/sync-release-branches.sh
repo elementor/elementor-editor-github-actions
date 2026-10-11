@@ -53,9 +53,36 @@ target_to_safe() {
 	echo "$1" | sed 's/[\/\.]/_/g'
 }
 
+check_beta_active() {
+	local check_result beta_active
+
+	if ! command -v node >/dev/null 2>&1; then
+		echo "::warning::node not found, failing open (including beta target)"
+		return 0
+	fi
+
+	if ! check_result="$(npx --yes tsx "${ACTION_PATH}/check-beta-active.ts" 2>&1)"; then
+		echo "::warning::Beta check failed: ${check_result}. Failing open (including beta target)"
+		return 0
+	fi
+
+	beta_active="$(echo "$check_result" | jq -r '.isActive')"
+	if [ "$beta_active" = "true" ]; then
+		return 0
+	else
+		return 1
+	fi
+}
+
 resolve_targets_csv() {
 	case "$1" in
-		"$STABLE_BRANCH") echo "${BETA_BRANCH},${MAIN_BRANCH}" ;;
+		"$STABLE_BRANCH")
+			if check_beta_active; then
+				echo "${BETA_BRANCH},${MAIN_BRANCH}"
+			else
+				echo "${MAIN_BRANCH}"
+			fi
+			;;
 		"$BETA_BRANCH") echo "${MAIN_BRANCH}" ;;
 		*) echo "" ;;
 	esac
@@ -455,6 +482,15 @@ TARGETS_CSV="$(resolve_targets_csv "$BASE_REF")"
 if [ -z "$TARGETS_CSV" ]; then
 	echo "No sync targets configured for base branch: ${BASE_REF}"
 	exit 0
+fi
+
+# Log the beta gating decision for release/stable merges
+if [ "$BASE_REF" = "$STABLE_BRANCH" ]; then
+	if echo "$TARGETS_CSV" | grep -q "$BETA_BRANCH"; then
+		echo "::notice::Beta sync is ACTIVE - including release/beta in sync targets"
+	else
+		echo "::notice::Beta sync is INACTIVE - excluding release/beta from sync targets"
+	fi
 fi
 
 git config user.name "github-actions[bot]"
