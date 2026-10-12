@@ -56,21 +56,33 @@ target_to_safe() {
 check_beta_active() {
 	local check_result beta_active
 
-	if ! command -v node >/dev/null 2>&1; then
-		echo "::warning::node not found, failing open (including beta target)"
+	if ! command -v jq >/dev/null 2>&1; then
+		echo "::warning::jq not found, failing open (including beta target)" >&2
 		return 0
 	fi
 
-	if ! check_result="$(npx --yes tsx "${ACTION_PATH}/check-beta-active.ts" 2>&1)"; then
-		echo "::warning::Beta check failed: ${check_result}. Failing open (including beta target)"
+	if ! check_result="$(bash "${ACTION_PATH}/check-beta-active.sh" 2>&1)"; then
+		echo "::warning::Beta check script failed, failing open (including beta target)" >&2
 		return 0
 	fi
 
-	beta_active="$(echo "$check_result" | jq -r '.isActive')"
+	if [ -z "$check_result" ]; then
+		echo "::warning::Beta check returned empty output, failing open (including beta target)" >&2
+		return 0
+	fi
+
+	if ! beta_active="$(echo "$check_result" | jq -r '.isActive' 2>/dev/null)"; then
+		echo "::warning::Failed to parse beta check result, failing open (including beta target)" >&2
+		return 0
+	fi
+
 	if [ "$beta_active" = "true" ]; then
 		return 0
-	else
+	elif [ "$beta_active" = "false" ]; then
 		return 1
+	else
+		echo "::warning::Beta check returned unexpected value '${beta_active}', failing open (including beta target)" >&2
+		return 0
 	fi
 }
 
@@ -486,10 +498,19 @@ fi
 
 # Log the beta gating decision for release/stable merges
 if [ "$BASE_REF" = "$STABLE_BRANCH" ]; then
-	if echo "$TARGETS_CSV" | grep -q "$BETA_BRANCH"; then
-		echo "::notice::Beta sync is ACTIVE - including release/beta in sync targets"
+	local found_beta=false
+	IFS=',' read -ra TARGETS_ARRAY <<< "$TARGETS_CSV"
+	for target in "${TARGETS_ARRAY[@]}"; do
+		if [ "$target" = "$BETA_BRANCH" ]; then
+			found_beta=true
+			break
+		fi
+	done
+	
+	if [ "$found_beta" = "true" ]; then
+		echo "::notice::Beta sync is ACTIVE - including ${BETA_BRANCH} in sync targets"
 	else
-		echo "::notice::Beta sync is INACTIVE - excluding release/beta from sync targets"
+		echo "::notice::Beta sync is INACTIVE - excluding ${BETA_BRANCH} from sync targets"
 	fi
 fi
 

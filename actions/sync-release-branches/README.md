@@ -9,9 +9,25 @@ Creates downstream PRs after a release-branch merge using isolated git worktrees
 | `release/stable` | `release/beta` (when active), `main` |
 | `release/beta`   | `main`                               |
 
-**Beta gating:** A sync PR to `release/beta` is created only when beta is **active**. Beta is active when the X.Y version on `release/beta` is greater than the X.Y version of the latest published stable GitHub Release (non-draft, non-prerelease). This prevents noisy sync PRs to beta when there is no active beta cycle.
+**Beta gating:** A sync PR to `release/beta` is created only when beta is **active**. Beta is active when the X.Y version on `release/beta` is greater than the X.Y version of the latest published stable release.
 
-If the beta check fails (API error, unparsable version, etc.), the action fails open and includes the beta target.
+**Latest published stable release** is determined by:
+
+1. Listing all releases via GitHub API
+2. Excluding drafts and prereleases
+3. Excluding automated build tags (matching `-latest-`, `nightly`)
+4. Excluding pre-release version strings (matching `-beta`, `-dev`, `-rc`)
+5. Taking the highest remaining semver by tag
+
+This filtering is necessary because:
+
+- Automated `-latest-` builds (e.g., `4.4.0-latest-1791784999`) are published as non-prerelease but are not stable releases
+- Beta tags (e.g., `4.3.0-beta3`) can be published as non-prerelease in some repos
+- The GitHub "Latest" release may be an automated build rather than a hand-published stable
+
+**Edge case:** If a hotfix release on an older stable line becomes "Latest" (e.g., `4.3.7` published while `4.4.0` already exists), it can lower the stable X.Y baseline and make beta appear active again, reopening the noisy sync PR issue this gating aims to prevent.
+
+If the beta check fails (API error, unparsable version, missing branch, etc.), the action fails open and includes the beta target with clear logging.
 
 Branch names are configurable via inputs.
 
