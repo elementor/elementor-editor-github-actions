@@ -53,9 +53,44 @@ target_to_safe() {
 	echo "$1" | sed 's/[\/\.]/_/g'
 }
 
+check_beta_active() {
+	local check_result beta_active
+
+	if ! command -v jq >/dev/null 2>&1; then
+		echo "::warning::jq not found, failing open (including beta target)" >&2
+		return 0
+	fi
+
+	if ! check_result="$(bash "${ACTION_PATH}/check-beta-active.sh")"; then
+		echo "::warning::Beta check script failed, failing open (including beta target)" >&2
+		return 0
+	fi
+
+	if [ -z "$check_result" ]; then
+		echo "::warning::Beta check returned empty output, failing open (including beta target)" >&2
+		return 0
+	fi
+
+	if ! beta_active="$(echo "$check_result" | jq -r '.isActive' 2>/dev/null)"; then
+		echo "::warning::Failed to parse beta check result, failing open (including beta target)" >&2
+		return 0
+	fi
+
+	if [ "$beta_active" = "true" ]; then
+		return 0
+	elif [ "$beta_active" = "false" ]; then
+		return 1
+	else
+		echo "::warning::Beta check returned unexpected value '${beta_active}', failing open (including beta target)" >&2
+		return 0
+	fi
+}
+
 resolve_targets_csv() {
 	case "$1" in
-		"$STABLE_BRANCH") echo "${BETA_BRANCH},${MAIN_BRANCH}" ;;
+		"$STABLE_BRANCH")
+			echo "${MAIN_BRANCH}"
+			;;
 		"$BETA_BRANCH") echo "${MAIN_BRANCH}" ;;
 		*) echo "" ;;
 	esac
@@ -466,5 +501,15 @@ IFS=',' read -ra TARGETS <<< "$TARGETS_CSV"
 for target in "${TARGETS[@]}"; do
 	sync_to_target "$target"
 done
+
+# After syncing to main, check if beta sync is needed for release/stable merges
+if [ "$BASE_REF" = "$STABLE_BRANCH" ]; then
+	if check_beta_active; then
+		echo "::notice::Beta sync is ACTIVE - syncing to ${BETA_BRANCH}"
+		sync_to_target "$BETA_BRANCH"
+	else
+		echo "::notice::Beta sync is INACTIVE - skipping ${BETA_BRANCH}"
+	fi
+fi
 
 rm -rf "$WORKTREE_ROOT"

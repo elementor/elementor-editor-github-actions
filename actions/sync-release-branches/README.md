@@ -4,10 +4,30 @@ Creates downstream PRs after a release-branch merge using isolated git worktrees
 
 ## Cascade rules
 
-| Merged into      | PR targets             |
-| ---------------- | ---------------------- |
-| `release/stable` | `release/beta`, `main` |
-| `release/beta`   | `main`                 |
+| Merged into      | PR targets                                      |
+| ---------------- | ----------------------------------------------- |
+| `release/stable` | `main` first, then `release/beta` (when active) |
+| `release/beta`   | `main`                                          |
+
+**Beta gating:** When a PR is merged into `release/stable`, the action first opens a PR to `main`. After that completes, it checks whether beta is **active**. If beta is active, it opens a PR to `release/beta`. Beta is active when the X.Y version on `release/beta` is greater than the X.Y version of the latest published stable release.
+
+**Latest published stable release** is determined by:
+
+1. Listing all releases via GitHub API
+2. Excluding drafts and prereleases
+3. Excluding automated build tags (matching `-latest-`, `nightly`)
+4. Excluding pre-release version strings (matching `-beta`, `-dev`, `-rc`)
+5. Taking the highest remaining semver by tag
+
+This filtering is necessary because:
+
+- Automated `-latest-` builds (e.g., `4.4.0-latest-1791784999`) are published as non-prerelease but are not stable releases
+- Beta tags (e.g., `4.3.0-beta3`) can be published as non-prerelease in some repos
+- The GitHub "Latest" release may be an automated build rather than a hand-published stable
+
+By taking the highest semver tag instead of GitHub's "Latest" release, the action correctly handles cases where hotfix releases on older lines (e.g., `4.3.7`) are published after newer releases (e.g., `4.4.0`).
+
+If the beta check fails (API error, unparsable version, missing branch, etc.), the action fails open and includes the beta target with clear logging.
 
 Branch names are configurable via inputs.
 

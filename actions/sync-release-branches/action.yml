@@ -2,7 +2,8 @@ name: Sync Release Branches
 description: >-
     Create PRs on downstream release branches after a merge using isolated git worktrees.
     Merges the PR source branch (merge commits) or applies squash commit patches.
-    release/stable merges open PRs to release/beta and main; release/beta merges open a PR to main.
+    release/stable merges open a PR to main first, then to release/beta only when beta is active
+    (beta X.Y > latest published stable X.Y). release/beta merges open a PR to main.
 
 inputs:
     token:

@@ -1,0 +1,9 @@
+{
+	"name": "@elementor/sync-release-branches",
+	"author": "Elementor Team",
+	"license": "GPL-3.0-or-later",
+	"private": true,
+	"scripts": {
+		"test": "bash check-beta-active.test.sh"
+	}
+}
