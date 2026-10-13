@@ -61,7 +61,7 @@ check_beta_active() {
 		return 0
 	fi
 
-	if ! check_result="$(bash "${ACTION_PATH}/check-beta-active.sh" 2>&1)"; then
+	if ! check_result="$(bash "${ACTION_PATH}/check-beta-active.sh")"; then
 		echo "::warning::Beta check script failed, failing open (including beta target)" >&2
 		return 0
 	fi
@@ -89,11 +89,7 @@ check_beta_active() {
 resolve_targets_csv() {
 	case "$1" in
 		"$STABLE_BRANCH")
-			if check_beta_active; then
-				echo "${BETA_BRANCH},${MAIN_BRANCH}"
-			else
-				echo "${MAIN_BRANCH}"
-			fi
+			echo "${MAIN_BRANCH}"
 			;;
 		"$BETA_BRANCH") echo "${MAIN_BRANCH}" ;;
 		*) echo "" ;;
@@ -496,24 +492,6 @@ if [ -z "$TARGETS_CSV" ]; then
 	exit 0
 fi
 
-# Log the beta gating decision for release/stable merges
-if [ "$BASE_REF" = "$STABLE_BRANCH" ]; then
-	local found_beta=false
-	IFS=',' read -ra TARGETS_ARRAY <<< "$TARGETS_CSV"
-	for target in "${TARGETS_ARRAY[@]}"; do
-		if [ "$target" = "$BETA_BRANCH" ]; then
-			found_beta=true
-			break
-		fi
-	done
-	
-	if [ "$found_beta" = "true" ]; then
-		echo "::notice::Beta sync is ACTIVE - including ${BETA_BRANCH} in sync targets"
-	else
-		echo "::notice::Beta sync is INACTIVE - excluding ${BETA_BRANCH} from sync targets"
-	fi
-fi
-
 git config user.name "github-actions[bot]"
 git config user.email "github-actions[bot]@users.noreply.github.com"
 
@@ -523,5 +501,15 @@ IFS=',' read -ra TARGETS <<< "$TARGETS_CSV"
 for target in "${TARGETS[@]}"; do
 	sync_to_target "$target"
 done
+
+# After syncing to main, check if beta sync is needed for release/stable merges
+if [ "$BASE_REF" = "$STABLE_BRANCH" ]; then
+	if check_beta_active; then
+		echo "::notice::Beta sync is ACTIVE - syncing to ${BETA_BRANCH}"
+		sync_to_target "$BETA_BRANCH"
+	else
+		echo "::notice::Beta sync is INACTIVE - skipping ${BETA_BRANCH}"
+	fi
+fi
 
 rm -rf "$WORKTREE_ROOT"

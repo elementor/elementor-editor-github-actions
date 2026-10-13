@@ -4,12 +4,12 @@ Creates downstream PRs after a release-branch merge using isolated git worktrees
 
 ## Cascade rules
 
-| Merged into      | PR targets                           |
-| ---------------- | ------------------------------------ |
-| `release/stable` | `release/beta` (when active), `main` |
-| `release/beta`   | `main`                               |
+| Merged into      | PR targets                                      |
+| ---------------- | ----------------------------------------------- |
+| `release/stable` | `main` first, then `release/beta` (when active) |
+| `release/beta`   | `main`                                          |
 
-**Beta gating:** A sync PR to `release/beta` is created only when beta is **active**. Beta is active when the X.Y version on `release/beta` is greater than the X.Y version of the latest published stable release.
+**Beta gating:** When a PR is merged into `release/stable`, the action first opens a PR to `main`. After that completes, it checks whether beta is **active**. If beta is active, it opens a PR to `release/beta`. Beta is active when the X.Y version on `release/beta` is greater than the X.Y version of the latest published stable release.
 
 **Latest published stable release** is determined by:
 
@@ -25,7 +25,7 @@ This filtering is necessary because:
 - Beta tags (e.g., `4.3.0-beta3`) can be published as non-prerelease in some repos
 - The GitHub "Latest" release may be an automated build rather than a hand-published stable
 
-**Edge case:** If a hotfix release on an older stable line becomes "Latest" (e.g., `4.3.7` published while `4.4.0` already exists), it can lower the stable X.Y baseline and make beta appear active again, reopening the noisy sync PR issue this gating aims to prevent.
+By taking the highest semver tag instead of GitHub's "Latest" release, the action correctly handles cases where hotfix releases on older lines (e.g., `4.3.7`) are published after newer releases (e.g., `4.4.0`).
 
 If the beta check fails (API error, unparsable version, missing branch, etc.), the action fails open and includes the beta target with clear logging.
 

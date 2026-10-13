@@ -46,6 +46,11 @@ version_gt() {
 
 # Detect plugin file (elementor.php or elementor-pro.php)
 detect_plugin_file() {
+	if ! git rev-parse --verify --quiet origin/release/beta >/dev/null; then
+		log_stderr "origin/release/beta ref not found"
+		return 1
+	fi
+	
 	if git show origin/release/beta:elementor.php >/dev/null 2>&1; then
 		echo "elementor.php"
 	elif git show origin/release/beta:elementor-pro.php >/dev/null 2>&1; then
@@ -85,6 +90,11 @@ extract_version_from_file() {
 # Get version from release/beta
 get_beta_version() {
 	local plugin_file content version
+	
+	if ! git rev-parse --verify --quiet origin/release/beta >/dev/null; then
+		log_stderr "origin/release/beta ref not found"
+		return 1
+	fi
 	
 	if ! plugin_file="$(detect_plugin_file)"; then
 		log_stderr "Error: Could not find plugin file (elementor.php or elementor-pro.php) on origin/release/beta"
@@ -230,4 +240,6 @@ check_beta_active() {
 	fi
 }
 
-check_beta_active
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+	check_beta_active
+fi
