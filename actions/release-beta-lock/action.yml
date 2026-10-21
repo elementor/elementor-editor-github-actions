@@ -30,4 +30,5 @@ runs:
               STATE: ${{ inputs.state }}
               BRANCH: ${{ inputs.branch }}
               RULESET_NAME: ${{ inputs.ruleset-name }}
-          run: bash "${{ github.action_path }}/release-beta-lock.sh"
+              ACTION_PATH: ${{ github.action_path }}
+          run: bash "$ACTION_PATH/release-beta-lock.sh"

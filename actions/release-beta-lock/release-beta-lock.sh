@@ -18,7 +18,9 @@ resolve_enforcement() {
 }
 
 find_ruleset_id() {
-	gh api "repos/${REPO}/rulesets" --paginate --jq '.[] | select(.name == env.RULESET_NAME) | .id' | head -n 1
+	local ids
+	ids="$(gh api "repos/${REPO}/rulesets" --paginate --jq '.[] | select(.name == env.RULESET_NAME and .source_type == "Repository") | .id')" || return $?
+	echo "$ids" | head -n 1
 }
 
 build_ruleset_payload() {
