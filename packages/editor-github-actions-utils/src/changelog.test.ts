@@ -4,7 +4,6 @@ import {
 	assertValidVersion,
 	getChangelogSection,
 	isPrereleaseVersion,
-	resolveChangelogRef,
 } from './changelog';
 
 const CORE_CHANGELOG = [
@@ -82,24 +81,5 @@ describe('getChangelogSection', () => {
 		].join('\n');
 
 		expect(getChangelogSection(emptySection, '4.2.2')).toBeNull();
-	});
-});
-
-describe('resolveChangelogRef', () => {
-	it('uses the version tag when no ref is given', () => {
-		expect(resolveChangelogRef(null, '4.3.5')).toBe('4.3.5');
-		expect(resolveChangelogRef('', '4.3.5')).toBe('4.3.5');
-		expect(resolveChangelogRef('   ', '4.3.5')).toBe('4.3.5');
-	});
-
-	it('keeps an explicit ref, including main', () => {
-		expect(resolveChangelogRef('main', '4.3.5')).toBe('main');
-		expect(resolveChangelogRef('release/stable', '4.3.5')).toBe(
-			'release/stable',
-		);
-	});
-
-	it('returns an empty ref when neither ref nor version is set', () => {
-		expect(resolveChangelogRef(null, null)).toBe('');
 	});
 });

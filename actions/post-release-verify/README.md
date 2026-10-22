@@ -5,7 +5,7 @@ Checks a published Elementor Core (and optionally Pro) release. This is the API/
 ## What it checks
 
 1. GitHub release API for `elementor/elementor` (`/releases/tags/{version}`) and, if requested, `elementor/elementor-pro`.
-2. Non-empty changelog section for that version on the version tag (`changelog.txt`; Core also `readme.txt`). Pass `main` to check `main` instead. **Skipped for prereleases** (`4.3.0-beta2`, any tag with `-`).
+2. Non-empty changelog section for that version on the given git ref (`changelog.txt`; Core also `readme.txt`). The action defaults to `main`. The post-release workflow passes the version tag when its ref input is empty. **Skipped for prereleases** (`4.3.0-beta2`, any tag with `-`).
 3. wordpress.org SVN tag `readme.txt`: `Stable tag` and changelog (Core GA only). A 404 is **skipped**, not failed — `.org` can lag GitHub by up to a day.
 4. Downloaded zip headers: Core `Version` / `ELEMENTOR_VERSION` / `Stable tag`; Pro `Version`, required Core (must be satisfied by the Core version you passed), recommended Core (warn on mismatch).
 
@@ -19,8 +19,8 @@ Changelog prose is dumped on the job summary for a quick human read. The action 
 | -------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `core-version`       | yes      | e.g. `4.2.2`                                                                                                                                                  |
 | `pro-version`        | no       | Empty = Core-only                                                                                                                                             |
-| `core-changelog-ref` | no       | Git ref for the Core changelog. Empty uses the Core version tag. Pass `main` to check `main`.                                                                 |
-| `pro-changelog-ref`  | no       | Git ref for the Pro changelog. Empty uses the Pro version tag. Pass `main` to check `main`.                                                                   |
+| `core-changelog-ref` | no       | Git ref for the Core changelog. Defaults to `main`.                                                                                                           |
+| `pro-changelog-ref`  | no       | Git ref for the Pro changelog. Defaults to `main`.                                                                                                            |
 | `github-token`       | yes      | `github.token` is enough for public Core. **Pro needs a PAT** with `repo` on `elementor/elementor-pro` (same token used for releases, e.g. `MAINTAIN_TOKEN`). |
 | `skip-wordpress-org` | no       | Force-skip SVN/download even if the tag exists                                                                                                                |
 | `dry-run`            | no       | Write failures to the summary without failing the step                                                                                                        |

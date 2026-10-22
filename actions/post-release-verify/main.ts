@@ -4,7 +4,6 @@ import * as core from '@actions/core';
 import {
 	getBooleanInput,
 	getStringInput,
-	resolveChangelogRef,
 	setOutput,
 } from '@elementor/editor-github-actions-utils';
 
@@ -23,14 +22,8 @@ export async function run() {
 		}
 
 		const proVersion = getStringInput('pro-version');
-		const coreChangelogRef = resolveChangelogRef(
-			getStringInput('core-changelog-ref'),
-			coreVersion,
-		);
-		const proChangelogRef = resolveChangelogRef(
-			getStringInput('pro-changelog-ref'),
-			proVersion,
-		);
+		const coreChangelogRef = getStringInput('core-changelog-ref') || 'main';
+		const proChangelogRef = getStringInput('pro-changelog-ref') || 'main';
 		const skipWordpressOrg = getBooleanInput('skip-wordpress-org');
 		const dryRun = getBooleanInput('dry-run');
 		const workDir = path.resolve(process.cwd(), 'post-release-artifacts');

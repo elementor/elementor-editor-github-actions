@@ -1,5 +1,5 @@
 name: Post-release verify
-description: Verify published Core/Pro GitHub releases, changelog on the version tag, wordpress.org, and zip version headers.
+description: Verify published Core/Pro GitHub releases, changelog on a git ref, wordpress.org, and zip version headers.
 
 inputs:
     core-version:
@@ -10,13 +10,13 @@ inputs:
         required: false
         default: ''
     core-changelog-ref:
-        description: 'Git ref for the Core changelog. Empty uses the Core version tag. Pass main to check main.'
+        description: 'Git ref for the Core changelog. Defaults to main. The post-release workflow passes the version tag when this is empty.'
         required: false
-        default: ''
+        default: 'main'
     pro-changelog-ref:
-        description: 'Git ref for the Pro changelog. Empty uses the Pro version tag. Pass main to check main.'
+        description: 'Git ref for the Pro changelog. Defaults to main. The post-release workflow passes the version tag when this is empty.'
         required: false
-        default: ''
+        default: 'main'
     github-token:
         description: 'GitHub token. Use a PAT with repo access for private Pro releases.'
         required: true
