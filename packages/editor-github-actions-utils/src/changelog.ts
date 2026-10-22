@@ -63,3 +63,16 @@ export function getChangelogSection(
 
 	return null;
 }
+
+export function resolveChangelogRef(
+	explicitRef: string | null,
+	version: string | null,
+): string {
+	const ref = explicitRef?.trim() ?? '';
+
+	if (ref) {
+		return ref;
+	}
+
+	return version?.trim() ?? '';
+}
