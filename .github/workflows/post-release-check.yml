@@ -12,6 +12,16 @@ on:
                 required: false
                 type: string
                 default: ''
+            core_changelog_ref:
+                description: 'Git ref for the Core changelog. Empty uses the version tag. Pass main to check main.'
+                required: false
+                type: string
+                default: ''
+            pro_changelog_ref:
+                description: 'Git ref for the Pro changelog. Empty uses the Pro version tag. Pass main to check main.'
+                required: false
+                type: string
+                default: ''
             skip_wordpress_org:
                 description: 'Skip wordpress.org SVN/download (use when the tag is not on .org yet)'
                 required: false
@@ -36,6 +46,16 @@ on:
                 default: ''
             pro_version:
                 description: 'Pro version. Leave empty for Core-only.'
+                required: false
+                type: string
+                default: ''
+            core_changelog_ref:
+                description: 'Git ref for the Core changelog. Empty uses the version tag. Pass main to check main.'
+                required: false
+                type: string
+                default: ''
+            pro_changelog_ref:
+                description: 'Git ref for the Pro changelog. Empty uses the Pro version tag. Pass main to check main.'
                 required: false
                 type: string
                 default: ''
@@ -126,6 +146,8 @@ jobs:
               with:
                   core-version: ${{ steps.versions.outputs.core }}
                   pro-version: ${{ steps.versions.outputs.pro }}
+                  core-changelog-ref: ${{ inputs.core_changelog_ref || steps.versions.outputs.core }}
+                  pro-changelog-ref: ${{ inputs.pro_changelog_ref || steps.versions.outputs.pro }}
                   github-token: ${{ secrets.MAINTAIN_TOKEN || github.token }}
                   skip-wordpress-org: ${{ inputs.skip_wordpress_org || false }}
                   dry-run: ${{ inputs.dry_run || false }}

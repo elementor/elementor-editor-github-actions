@@ -5,7 +5,7 @@ Checks a published Elementor Core (and optionally Pro) release. This is the API/
 ## What it checks
 
 1. GitHub release API for `elementor/elementor` (`/releases/tags/{version}`) and, if requested, `elementor/elementor-pro`.
-2. Non-empty changelog section for that version on `main` (`changelog.txt`; Core also `readme.txt`). **Skipped for prereleases** (`4.3.0-beta2`, any tag with `-`).
+2. Non-empty changelog section for that version on the given git ref (`changelog.txt`; Core also `readme.txt`). The action defaults to `main`. The post-release workflow passes the version tag when its ref input is empty. **Skipped for prereleases** (`4.3.0-beta2`, any tag with `-`).
 3. wordpress.org SVN tag `readme.txt`: `Stable tag` and changelog (Core GA only). A 404 is **skipped**, not failed — `.org` can lag GitHub by up to a day.
 4. Downloaded zip headers: Core `Version` / `ELEMENTOR_VERSION` / `Stable tag`; Pro `Version`, required Core (must be satisfied by the Core version you passed), recommended Core (warn on mismatch).
 
@@ -19,6 +19,8 @@ Changelog prose is dumped on the job summary for a quick human read. The action 
 | -------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `core-version`       | yes      | e.g. `4.2.2`                                                                                                                                                  |
 | `pro-version`        | no       | Empty = Core-only                                                                                                                                             |
+| `core-changelog-ref` | no       | Git ref for the Core changelog. Defaults to `main`.                                                                                                           |
+| `pro-changelog-ref`  | no       | Git ref for the Pro changelog. Defaults to `main`.                                                                                                            |
 | `github-token`       | yes      | `github.token` is enough for public Core. **Pro needs a PAT** with `repo` on `elementor/elementor-pro` (same token used for releases, e.g. `MAINTAIN_TOKEN`). |
 | `skip-wordpress-org` | no       | Force-skip SVN/download even if the tag exists                                                                                                                |
 | `dry-run`            | no       | Write failures to the summary without failing the step                                                                                                        |
@@ -34,7 +36,7 @@ Add a thin workflow in `elementor` / `elementor-pro` that `uses` this repo. `act
 
 In the reusable workflow, `github.event_name` is the **caller's** event (e.g. `workflow_dispatch`). Checkout of this repo is keyed off `github.repository`, not `workflow_call`.
 
-Merge this repo first. Core/Pro callers that pin `@main` will fail until then.
+Callers can omit the changelog refs. Once this repo is on `main`, an empty ref checks the version tag, so Core and Pro do not need to pass one. Pass `main` only to keep the old check. Merging a caller that passes `core_changelog_ref` or `pro_changelog_ref` before this repo is on `main` fails the workflow call.
 
 This repo must allow GitHub Actions access from other Elementor repositories (Settings → Actions → General → Access).
 
