@@ -48,6 +48,8 @@ const PRO_REPO = 'elementor-pro' as const;
 export type VerifyInputs = {
 	coreVersion: string;
 	proVersion: string | null;
+	coreChangelogRef: string;
+	proChangelogRef: string;
 	githubToken: string;
 	skipWordpressOrg: boolean;
 	workDir: string;
@@ -126,9 +128,10 @@ export async function runVerify(
 
 	await checkMainChangelog({
 		id: 'core-changelog-main',
-		title: 'Changelog on main (Core)',
+		title: `Changelog on ${inputs.coreChangelogRef} (Core)`,
 		repo: CORE_REPO,
 		version: inputs.coreVersion,
+		ref: inputs.coreChangelogRef,
 		files: ['changelog.txt', 'readme.txt'],
 		get: deps.get,
 		headers: githubRaw,
@@ -139,9 +142,10 @@ export async function runVerify(
 	if (inputs.proVersion) {
 		await checkMainChangelog({
 			id: 'pro-changelog-main',
-			title: 'Changelog on main (Pro)',
+			title: `Changelog on ${inputs.proChangelogRef} (Pro)`,
 			repo: PRO_REPO,
 			version: inputs.proVersion,
+			ref: inputs.proChangelogRef,
 			files: ['changelog.txt'],
 			get: deps.get,
 			headers: githubRaw,
@@ -335,6 +339,7 @@ async function checkMainChangelog(params: {
 	title: string;
 	repo: typeof CORE_REPO | typeof PRO_REPO;
 	version: string;
+	ref: string;
 	files: string[];
 	get: HttpGet;
 	headers: Record<string, string>;
@@ -346,7 +351,7 @@ async function checkMainChangelog(params: {
 			skipped(
 				params.id,
 				params.title,
-				`Prerelease ${params.version} has no changelog on main`,
+				`Prerelease ${params.version} has no changelog on ${params.ref}`,
 			),
 		);
 		return;
@@ -358,7 +363,7 @@ async function checkMainChangelog(params: {
 		for (const filePath of params.files) {
 			const content = await requireOk(
 				params.get,
-				contentsApiUrl(params.repo, filePath),
+				contentsApiUrl(params.repo, filePath, params.ref),
 				{ headers: params.headers },
 			);
 			const section = getChangelogSection(content, params.version);
@@ -389,7 +394,7 @@ async function checkMainChangelog(params: {
 			passed(
 				params.id,
 				params.title,
-				`Found ${params.version} in ${params.files.join(', ')} on main`,
+				`Found ${params.version} in ${params.files.join(', ')} on ${params.ref}`,
 			),
 		);
 	} catch (error) {

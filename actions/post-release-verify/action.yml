@@ -9,6 +9,14 @@ inputs:
         description: 'Pro version to verify. Leave empty for Core-only.'
         required: false
         default: ''
+    core-changelog-ref:
+        description: 'Git ref to check for Core changelog (defaults to main).'
+        required: false
+        default: 'main'
+    pro-changelog-ref:
+        description: 'Git ref to check for Pro changelog (defaults to main).'
+        required: false
+        default: 'main'
     github-token:
         description: 'GitHub token. Use a PAT with repo access for private Pro releases.'
         required: true
