@@ -439,8 +439,15 @@ function findTokenEvidence(tokens, changedFiles) {
 	return evidence;
 }
 
-function firstChangedLine(changedFile) {
-	const line = parsePatch(changedFile && changedFile.patch)[0];
+/**
+ * The changed line to show as evidence: the first one holding `preferText`
+ * (in a spec, the failing test's own title), otherwise the first change.
+ */
+function changedLineEvidence(changedFile, preferText = '') {
+	const lines = parsePatch(changedFile && changedFile.patch);
+	const line =
+		(preferText && lines.find((item) => item.text.includes(preferText))) ||
+		lines[0];
 	return line
 		? {
 				line: line.line,
@@ -450,13 +457,13 @@ function firstChangedLine(changedFile) {
 		: { line: 0, side: 'head', text: '' };
 }
 
-function fileEvidence(filename, changedFiles) {
+function fileEvidence(filename, changedFiles, preferText = '') {
 	const changed = (changedFiles || []).find(
 		(file) =>
 			normalizePath(file.filename) === filename ||
 			normalizePath(file.previous_filename) === filename,
 	);
-	return { file: filename, ...firstChangedLine(changed) };
+	return { file: filename, ...changedLineEvidence(changed, preferText) };
 }
 
 /**
@@ -478,7 +485,7 @@ function triageFailure({
 	const changedSpecs = specFiles.filter((file) => changed.has(file));
 	for (const file of changedSpecs) {
 		reasons.push(`The PR changes the test's own spec, \`${file}\`.`);
-		evidence.push(fileEvidence(file, changedFiles));
+		evidence.push(fileEvidence(file, changedFiles, failure.testName));
 	}
 
 	for (const file of specFiles) {

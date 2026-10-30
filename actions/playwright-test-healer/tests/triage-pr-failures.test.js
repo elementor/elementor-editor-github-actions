@@ -245,6 +245,34 @@ describe('triagePrFailures', () => {
 		expect(result.evidence[0]).toMatchObject({ file: SPEC, line: 4 });
 	});
 
+	it("points the spec evidence at the failing test's own line", () => {
+		// Arrange
+		const dir = repoWithSpecs();
+		const changedFiles = [
+			{
+				filename: SPEC,
+				patch: [
+					'@@ -1,0 +1,4 @@',
+					"+import { test } from '../../../parallelTest';",
+					'+',
+					"+test( 'Submit button is visible', async () => {} );",
+					'+',
+				].join('\n'),
+			},
+		];
+
+		// Act
+		const [result] = triagePrFailures({
+			failures: [failure()],
+			changedFiles,
+			repoDir: dir,
+			profile,
+		});
+
+		// Assert
+		expect(result.evidence[0]).toMatchObject({ file: SPEC, line: 3 });
+	});
+
 	it('links a failure to a PR that changes a helper the spec imports indirectly', () => {
 		// Arrange
 		const dir = repoWithSpecs();
