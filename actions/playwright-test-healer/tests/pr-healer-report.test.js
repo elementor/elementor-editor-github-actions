@@ -265,6 +265,19 @@ describe('buildPrComment', () => {
 		expect(comment).toContain('were not re-run or changed');
 	});
 
+	it('escapes a backslash before a pipe, so a title cannot break the table', () => {
+		// Arrange
+		const verdicts = resolvePrVerdicts({
+			triage: [triaged('a\\|b', { rerunnable: false })],
+		});
+
+		// Act
+		const comment = buildPrComment({ ...LINKS, state: 'ok', verdicts });
+
+		// Assert
+		expect(comment).toContain('| `a\\\\\\|b` |');
+	});
+
 	it('says there was nothing to heal when the run has no failures', () => {
 		// Act
 		const comment = buildPrComment({ ...LINKS, state: 'ok', verdicts: [] });

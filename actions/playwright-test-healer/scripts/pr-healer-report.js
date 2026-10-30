@@ -254,7 +254,10 @@ function planFlakyFixes({ flakyTests, openPrs, baseRef, maxFixes }) {
 }
 
 function escapeCell(text) {
+	// Backslashes first, so a `\|` in the input cannot turn the added escape
+	// back into a column break.
 	return String(text || '')
+		.replace(/\\/g, '\\\\')
 		.replace(/\|/g, '\\|')
 		.replace(/\r?\n/g, ' ');
 }
