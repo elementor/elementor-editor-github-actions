@@ -3,6 +3,8 @@
 	"displayName": "Elementor Pro",
 	"evidenceWorkflows": ["playwright-custom-core.yml"],
 	"evidenceEvents": ["schedule", "workflow_dispatch", "push"],
+	"prWorkflow": "pr.yml",
+	"moduleRoots": ["modules", "core/app/modules"],
 	"artifactRunPrefixes": ["nightly-", "rc-"],
 	"artifactSuffixes": [],
 	"maxShardArtifactsPerRun": 12,

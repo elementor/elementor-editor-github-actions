@@ -391,6 +391,8 @@ module.exports = {
 	flattenAllureFailures,
 	hasTraceInDirectory,
 	matchResultDirectories,
+	readHardFailureSource,
+	readResultDirs,
 	selectHealCandidate,
 	shardIndexForMatchedDirs,
 };

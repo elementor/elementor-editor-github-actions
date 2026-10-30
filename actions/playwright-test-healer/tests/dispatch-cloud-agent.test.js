@@ -35,6 +35,21 @@ describe('readHealerSkills', () => {
 });
 
 describe('buildPrompt', () => {
+	it("adds the caller's context after the evidence, and nothing when there is none", () => {
+		// Act
+		const withContext = buildPrompt({
+			...input,
+			context: 'Failed on a PR, then passed a re-run.',
+		});
+		const without = buildPrompt({ ...input, context: '' });
+
+		// Assert
+		expect(withContext).toMatch(
+			/inspect for error-context.md\/trace.zip: .*\n\nFailed on a PR, then passed a re-run.\n/,
+		);
+		expect(without).not.toContain('Failed on a PR');
+	});
+
 	it('embeds every skill in full, so the agent has them whatever its base ref carries', () => {
 		// Arrange
 		const skills = [

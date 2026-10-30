@@ -77,6 +77,7 @@ const {
 	HEAL_MAX_ATTEMPTS,
 	HEAL_PREVIOUS_BRANCH,
 	HEAL_PREVIOUS_RUN_ID,
+	HEAL_CONTEXT,
 } = process.env;
 
 /**
@@ -94,6 +95,7 @@ function buildPrompt({
 	maxAttempts = HEAL_MAX_ATTEMPTS,
 	previousBranch = HEAL_PREVIOUS_BRANCH,
 	previousRunId = HEAL_PREVIOUS_RUN_ID,
+	context = HEAL_CONTEXT,
 	skills = readHealerSkills(),
 	profile = loadProfile(),
 } = {}) {
@@ -135,6 +137,7 @@ function buildPrompt({
 			? `Failed shard: ${shardIndex} — the evidence is in that run's playwright-test-results artifact for this shard ("playwright-test-results-${shardIndex}", named as the Repository notes describe). Download that one; do not guess from the Allure title.`
 			: 'Failed shard: unknown — find the failed job in that run and download its playwright-test-results-* artifact.',
 		`Matching test-results directories inside that artifact to inspect for error-context.md/trace.zip: ${matchedDirs}`,
+		...(context ? ['', context] : []),
 		'',
 		`Commit and push your fix to a new branch named exactly "${branchName}", starting from git ref "${baseRef}" (the PR base, not the failing CI run). Only commit files under tests/playwright/. Do not commit healer workflow or skill files. Do NOT open a pull request — a separate CI job verifies the fix and opens the PR.`,
 		'Decide race vs baseline drift vs product bug before changing anything; the skill has the decision table.',
