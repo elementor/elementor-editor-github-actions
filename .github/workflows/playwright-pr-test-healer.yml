@@ -351,9 +351,11 @@ jobs:
                   repository: ${{ job.workflow_repository }}
                   ref: ${{ job.workflow_sha }}
                   path: .healer
+                  # resolve-core-nightly sources its tag rule from publish-nightly-release.
                   sparse-checkout: |
                       actions/playwright-test-healer
                       actions/resolve-core-nightly
+                      actions/publish-nightly-release
                   persist-credentials: false
 
             - uses: actions/setup-node@v6
