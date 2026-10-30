@@ -278,6 +278,21 @@ describe('buildPrComment', () => {
 		expect(comment).toContain('| `a\\\\\\|b` |');
 	});
 
+	it('names the earlier commit when the run read is not on the PR head', () => {
+		// Act
+		const comment = buildPrComment({
+			...LINKS,
+			state: 'ok',
+			verdicts: [],
+			sourceSha: '7e6ba49a0e68',
+		});
+
+		// Assert
+		expect(comment).toContain(
+			'on `7e6ba49`, an earlier commit of this PR (the head, `abcdef1`, has no finished Playwright run yet)',
+		);
+	});
+
 	it('says there was nothing to heal when the run has no failures', () => {
 		// Act
 		const comment = buildPrComment({ ...LINKS, state: 'ok', verdicts: [] });

@@ -328,11 +328,17 @@ function buildPrComment({
 	headSha,
 	baseSha,
 	sourceRunUrl,
+	sourceSha,
 	healerRunUrl,
 	fixPrUrl,
 	label,
 }) {
 	const shortSha = code(String(headSha || '').slice(0, 7));
+	// Bots merge main into PR branches, so the run read may be a commit behind.
+	const runCommit =
+		sourceSha && sourceSha !== headSha
+			? `${code(sourceSha.slice(0, 7))}, an earlier commit of this PR (the head, ${shortSha}, has no finished Playwright run yet)`
+			: shortSha;
 	const footer = `<sub>[Healer run](${healerRunUrl}) · Remove and re-add the \`${label}\` label to run it again.</sub>`;
 	const lines = [COMMENT_MARKER, '## 🩺 Playwright test healer', ''];
 
@@ -350,15 +356,15 @@ function buildPrComment({
 		);
 	} else if ('no-run' === state) {
 		lines.push(
-			`No Playwright run on ${shortSha} has finished, so there is nothing to heal yet. Wait for the PR checks, then add the label again.`,
+			"No Playwright run on this PR's branch has finished, so there is nothing to heal yet. Wait for the PR checks, then add the label again.",
 		);
 	} else if (!verdicts.length) {
 		lines.push(
-			`The [latest Playwright run](${sourceRunUrl}) on ${shortSha} has no failed tests — nothing to heal.`,
+			`The [latest Playwright run](${sourceRunUrl}) on ${runCommit} has no failed tests — nothing to heal.`,
 		);
 	} else {
 		lines.push(
-			`Checked the ${verdicts.length} failed test${1 === verdicts.length ? '' : 's'} from the [latest Playwright run](${sourceRunUrl}) on ${shortSha}.`,
+			`Checked the ${verdicts.length} failed test${1 === verdicts.length ? '' : 's'} from the [latest Playwright run](${sourceRunUrl}) on ${runCommit}.`,
 			'',
 			countLine(verdicts),
 			'',
@@ -552,6 +558,7 @@ function reportMain(env) {
 		headSha: env.PR_HEAD_SHA,
 		baseSha: env.PR_BASE_SHA,
 		sourceRunUrl: env.SOURCE_RUN_URL,
+		sourceSha: env.SOURCE_SHA,
 		healerRunUrl: env.HEALER_RUN_URL,
 		fixPrUrl: env.FIX_PR_URL,
 		label: env.HEAL_LABEL,

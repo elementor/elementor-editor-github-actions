@@ -2,8 +2,12 @@
 
 /**
  * Finds the pull request run whose Playwright failures the PR healer reads:
- * the newest run of the product's PR workflow on the PR's head commit that
- * started before the healer did and actually ran Playwright.
+ * the newest run of the product's PR workflow on the PR's branch that started
+ * before the healer did and actually ran Playwright.
+ *
+ * The run may be on an earlier commit than the head. Bots merge main into PR
+ * branches, which moves the head to a commit whose run has not finished, or
+ * never ran Playwright; the failures the person saw are on the commit before.
  *
  * Runs that start with or after the healer are left out. Adding the label is
  * itself a `labeled` event the PR workflow listens to, so it starts a fresh
@@ -27,11 +31,11 @@ function sleep(ms) {
 	Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
-function listPrRuns({ repo, workflow, headSha }) {
+function listPrRuns({ repo, workflow, headRef }) {
 	return JSON.parse(
 		gh([
 			'api',
-			`repos/${repo}/actions/workflows/${workflow}/runs?head_sha=${headSha}&per_page=50`,
+			`repos/${repo}/actions/workflows/${workflow}/runs?branch=${encodeURIComponent(headRef)}&per_page=50`,
 		]),
 	).workflow_runs;
 }
@@ -54,8 +58,8 @@ function listJobs(repo, runId) {
 }
 
 /**
- * Pull request runs of this workflow on this commit, from the PR's own head
- * repository, created more than a margin before the healer, newest first.
+ * Pull request runs of this workflow on the PR's branch, from the PR's own
+ * head repository, created more than a margin before the healer, newest first.
  */
 function candidateRuns(runs, { healerCreatedAt, headRepository }) {
 	const cutoff = healerCreatedAt
@@ -106,25 +110,31 @@ function waitForRun(repo, run, wait = sleep, fetch = getRun) {
 function main() {
 	const repo = process.env.GITHUB_REPOSITORY;
 	const headSha = process.env.PR_HEAD_SHA;
+	const headRef = process.env.PR_HEAD_REF;
 	const headRepository = process.env.PR_HEAD_REPOSITORY;
 	const healerRunId = process.env.HEALER_RUN_ID;
 	const workflow = loadProfile().prWorkflow;
 
-	if (!repo || !headSha || !healerRunId) {
+	if (!repo || !headSha || !headRef || !healerRunId) {
 		throw new Error(
-			'GITHUB_REPOSITORY, PR_HEAD_SHA and HEALER_RUN_ID are required.',
+			'GITHUB_REPOSITORY, PR_HEAD_SHA, PR_HEAD_REF and HEALER_RUN_ID are required.',
 		);
 	}
 
 	const healerCreatedAt = getRun(repo, healerRunId).created_at;
-	const runs = candidateRuns(listPrRuns({ repo, workflow, headSha }), {
+	const runs = candidateRuns(listPrRuns({ repo, workflow, headRef }), {
 		healerCreatedAt,
 		headRepository,
 	});
 
-	// Only the newest run is waited for: the person who added the label most
-	// likely added it while looking at that run.
-	if (runs.length && 'completed' !== runs[0].status) {
+	// Only the newest run on the head commit is waited for: the person who
+	// added the label most likely added it while looking at that run. One on
+	// an older commit is being cancelled as superseded.
+	if (
+		runs.length &&
+		'completed' !== runs[0].status &&
+		headSha === runs[0].head_sha
+	) {
 		runs[0] = waitForRun(repo, runs[0]);
 	}
 
@@ -136,18 +146,24 @@ function main() {
 
 	if (!run) {
 		console.log(
-			`::notice::No ${workflow} run on ${headSha.slice(0, 12)} ran Playwright.`,
+			`::notice::No finished ${workflow} run on ${headRef} ran Playwright.`,
 		);
 		setOutput('found', 'false');
 		return;
 	}
 
 	console.log(
-		`Reading failures from ${workflow} run ${run.id} (${run.conclusion}): ${run.html_url}`,
+		`Reading failures from ${workflow} run ${run.id} (${run.conclusion}) on ${run.head_sha.slice(0, 12)}: ${run.html_url}`,
 	);
+	if (run.head_sha !== headSha) {
+		console.log(
+			`::notice::The PR head ${headSha.slice(0, 12)} has no finished run that ran Playwright; using the one on ${run.head_sha.slice(0, 12)}.`,
+		);
+	}
 	setOutput('found', 'true');
 	setOutput('source_run_id', String(run.id));
 	setOutput('source_run_url', run.html_url);
+	setOutput('source_sha', run.head_sha);
 }
 
 if (require.main === module) {
