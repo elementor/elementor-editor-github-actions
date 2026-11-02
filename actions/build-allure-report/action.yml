@@ -7,16 +7,12 @@ inputs:
     results-pattern:
         description: Glob pattern passed to actions/download-artifact (e.g. allure-results-*)
         required: true
-    results-path:
-        description: Directory where result artifacts are merged
-        required: false
-        default: allure-results
     preprocess-command:
         description: Shell command run after download when non-empty (e.g. node path/to/script.js ./allure-results)
         required: false
         default: ''
     categories-file:
-        description: When set, copied to categories.json under the results directory before generate
+        description: When set, copied to allure-results/categories.json before generate
         required: false
         default: ''
     gcs-upload:
@@ -71,7 +67,7 @@ runs:
           uses: actions/download-artifact@v8
           with:
               pattern: ${{ inputs.results-pattern }}
-              path: ${{ inputs.results-path }}
+              path: allure-results
               merge-multiple: true
 
         - name: Install Node.js
@@ -86,16 +82,6 @@ runs:
           with:
               workload_identity_provider: 'projects/${{ inputs.gcp-project-number }}/locations/global/workloadIdentityPools/prod-pool/providers/github-provider'
               service_account: 'github-actions-sa@${{ inputs.gcp-project-id }}.iam.gserviceaccount.com'
-
-        - name: Display GCP bucket information
-          if: inputs.gcs-upload == 'true'
-          shell: bash
-          env:
-              GCS_BUCKET: ${{ inputs.gcs-bucket }}
-              GCS_DEST: ${{ inputs.gcs-dest }}
-          run: |
-              echo "GCP Bucket Name: ${GCS_BUCKET}"
-              echo "Destination path: gs://${GCS_BUCKET}/${GCS_DEST}"
 
         - name: Install gcloud CLI
           if: inputs.gcs-upload == 'true' && inputs.gcs-dest == 'main'
@@ -114,12 +100,10 @@ runs:
         - name: Copy history for main branch
           if: inputs.gcs-upload == 'true' && inputs.gcs-dest == 'main'
           shell: bash
-          env:
-              RESULTS_PATH: ${{ inputs.results-path }}
           run: |
               if [ -d "previous-report/history" ]; then
-                  mkdir -p "${RESULTS_PATH}/history"
-                  cp -r previous-report/history/* "${RESULTS_PATH}/history/"
+                  mkdir -p allure-results/history
+                  cp -r previous-report/history/* allure-results/history/
               fi
 
         - name: Copy Allure categories config
@@ -127,10 +111,9 @@ runs:
           shell: bash
           env:
               CATEGORIES_FILE: ${{ inputs.categories-file }}
-              RESULTS_PATH: ${{ inputs.results-path }}
           run: |
-              if [ -d "./${RESULTS_PATH}" ]; then
-                  cp "${CATEGORIES_FILE}" "${RESULTS_PATH}/categories.json"
+              if [ -d "./allure-results" ]; then
+                  cp "${CATEGORIES_FILE}" allure-results/categories.json
               fi
 
         - name: Build test report
@@ -138,16 +121,15 @@ runs:
           shell: bash
           env:
               PREPROCESS_COMMAND: ${{ inputs.preprocess-command }}
-              RESULTS_PATH: ${{ inputs.results-path }}
               ALLURE_VERSION: ${{ inputs.allure-version }}
           run: |
               echo "report_dir=allure-report" >> "$GITHUB_OUTPUT"
 
-              if [ -d "./${RESULTS_PATH}" ] && [ -n "$(find "./${RESULTS_PATH}" -type f 2>/dev/null | head -1)" ]; then
+              if [ -d "./allure-results" ] && [ -n "$(find ./allure-results -type f 2>/dev/null | head -1)" ]; then
                   if [ -n "${PREPROCESS_COMMAND}" ]; then
                       bash -c "${PREPROCESS_COMMAND}"
                   fi
-                  npx --yes "allure-commandline@${ALLURE_VERSION}" generate --clean "${RESULTS_PATH}" -o allure-report || mkdir -p allure-report
+                  npx --yes "allure-commandline@${ALLURE_VERSION}" generate --clean allure-results -o allure-report || mkdir -p allure-report
               else
                   echo "No allure-results found. Creating empty report directory."
                   mkdir -p allure-report
@@ -184,10 +166,9 @@ runs:
               fi
 
         - name: Add Allure report link to summary
-          if: always()
+          if: always() && inputs.gcs-upload == 'true'
           shell: bash
           env:
-              GCS_UPLOAD: ${{ inputs.gcs-upload }}
               REPORT_URL_BASE: ${{ inputs.report-url-base }}
               GCS_DEST: ${{ inputs.gcs-dest }}
               UPLOADED: ${{ steps.gcs.outputs.uploaded }}
@@ -196,9 +177,7 @@ runs:
               if [ "${UPLOADED}" = "true" ] && [ -n "${REPORT_URL_BASE}" ] && [ -n "${GCS_DEST}" ]; then
                   base="${REPORT_URL_BASE%/}"
                   echo "[View Allure Report](${base}/${GCS_DEST}/)" >> "$GITHUB_STEP_SUMMARY"
-              elif [ "${GCS_UPLOAD}" = "true" ]; then
-                  echo "Allure report GCS upload was skipped or failed." >> "$GITHUB_STEP_SUMMARY"
               else
-                  echo "Allure report GCS upload was disabled for this run." >> "$GITHUB_STEP_SUMMARY"
+                  echo "Allure report GCS upload was skipped or failed." >> "$GITHUB_STEP_SUMMARY"
               fi
               echo "" >> "$GITHUB_STEP_SUMMARY"
