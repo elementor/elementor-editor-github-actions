@@ -13,12 +13,17 @@ name: Playwright PR Test Healer
 #                           and never "fixed".
 #   Flaky                   Not linked, and it passed at least one of three
 #                           re-runs on the PR's build. A Cloud agent fixes it
-#                           on main, the fix is verified on a main build, and
-#                           the fixes go out as one PR against main, never to
-#                           the PR's branch.
-#   Already failing on main Failed every re-run here and every run on main.
-#   Needs a human look      Failed every re-run here but not on main, or the
-#                           healer could not finish checking it.
+#                           on the target branch, the fix is verified on a
+#                           build of that branch, and the fixes go out as one
+#                           PR against it, never to the PR's branch.
+#   Already failing         Failed every re-run here and every run on the
+#                           target branch.
+#   Needs a human look      Failed every re-run here but not on the target
+#                           branch, or the healer could not finish checking it.
+#
+# The target branch is the PR's base, and a PR into a release branch is also
+# checked on main. Once PRs only go to main, drop check_pr_base and the `base`
+# entry in resolve-input: everything else follows the outputs set there.
 #
 # Linked failures are decided from the diff before anything runs, so a real
 # regression is never re-run into looking flaky.
@@ -26,7 +31,9 @@ name: Playwright PR Test Healer
 # The caller's job must grant contents: write (the fix PR's branch),
 # actions: read, and pull-requests: write, and pass its secrets. Only PRs
 # from branches of the calling repository are healed: the re-runs execute
-# the PR's code next to the Pro licence.
+# the PR's code next to the Pro licence, so anyone who can push a branch and
+# add the label can reach that licence, as they can through the PR's own run.
+# Pass a non-production licence.
 #
 # Healer scripts are always checked out from this workflow's own commit
 # (job.workflow_repository at job.workflow_sha), never from the PR.
@@ -52,7 +59,7 @@ on:
                 type: string
                 default: 'heal'
             rerun_repeat:
-                description: 'How many times each unlinked failure is re-run, on the PR build and on main.'
+                description: 'How many times each unlinked failure is re-run, on the PR build and on each baseline.'
                 required: false
                 type: string
                 default: '3'
@@ -67,10 +74,15 @@ on:
                 type: string
                 default: '5'
             verify_repeat:
-                description: 'How many runs in a row a fix must pass on main.'
+                description: 'How many runs in a row a fix must pass on the target branch.'
                 required: false
                 type: string
                 default: '10'
+            check_pr_base:
+                description: "Judge a PR against its own base branch and send its fixes there, as well as checking main. Set to 'false' to use only main."
+                required: false
+                type: string
+                default: 'true'
             jira_parent_key:
                 description: 'Jira key the fix PR title carries.'
                 required: false
@@ -117,7 +129,10 @@ jobs:
             base_sha: ${{ steps.pr.outputs.base_sha }}
             base_ref: ${{ steps.pr.outputs.base_ref }}
             pr_url: ${{ steps.pr.outputs.pr_url }}
-            main_sha: ${{ steps.pr.outputs.main_sha }}
+            target_ref: ${{ steps.pr.outputs.target_ref }}
+            target_key: ${{ steps.pr.outputs.target_key }}
+            baselines: ${{ steps.pr.outputs.baselines }}
+            builds: ${{ steps.pr.outputs.builds }}
         steps:
             - name: Validate inputs and check the switch
               id: set
@@ -147,12 +162,17 @@ jobs:
                     echo "::error::rerun_repeat must be 1-9, got '${RERUN_REPEAT}'."
                     exit 1
                   fi
-                  for N in "$MAX_RERUNS" "$MAX_FIXES" "$VERIFY_REPEAT"; do
+                  for N in "$MAX_RERUNS" "$MAX_FIXES"; do
                     if ! [[ "$N" =~ ^[0-9]{1,2}$ ]]; then
-                      echo "::error::max_reruns, max_fixes and verify_repeat must be 0-99, got '${N}'."
+                      echo "::error::max_reruns and max_fixes must be 0-99, got '${N}'."
                       exit 1
                     fi
                   done
+                  # Zero runs would mark a fix verified without running it.
+                  if ! [[ "$VERIFY_REPEAT" =~ ^[1-9][0-9]?$ ]]; then
+                    echo "::error::verify_repeat must be 1-99, got '${VERIFY_REPEAT}'."
+                    exit 1
+                  fi
 
                   # A person added the label, so `manual` is enough: the PR healer is
                   # never scheduled.
@@ -179,19 +199,38 @@ jobs:
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
                   PR_NUMBER: ${{ inputs.pr_number }}
+                  CHECK_PR_BASE: ${{ inputs.check_pr_base }}
               run: |
                   set -euo pipefail
                   PR=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}")
                   HEAD_REPOSITORY=$(jq -r '.head.repo.full_name // ""' <<< "$PR")
+                  HEAD_SHA=$(jq -r '.head.sha' <<< "$PR")
+                  BASE_SHA=$(jq -r '.base.sha' <<< "$PR")
+                  BASE_REF=$(jq -r '.base.ref' <<< "$PR")
+                  MAIN_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq '.sha')
+
+                  # main is always checked. A PR into another branch is judged
+                  # against that branch, and its fixes go there.
+                  BASELINES=$(jq -cn --arg sha "$MAIN_SHA" '[{key: "main", ref: "main", sha: $sha}]')
+                  TARGET_REF=main
+                  TARGET_KEY=main
+                  if [ "$CHECK_PR_BASE" = "true" ] && [ "$BASE_REF" != "main" ]; then
+                    BASELINES=$(jq -c --arg ref "$BASE_REF" --arg sha "$BASE_SHA" '. + [{key: "base", ref: $ref, sha: $sha}]' <<< "$BASELINES")
+                    TARGET_REF="$BASE_REF"
+                    TARGET_KEY=base
+                  fi
 
                   {
-                    echo "head_sha=$(jq -r '.head.sha' <<< "$PR")"
+                    echo "head_sha=${HEAD_SHA}"
                     echo "head_repository=${HEAD_REPOSITORY}"
                     echo "head_ref=$(jq -r '.head.ref' <<< "$PR")"
-                    echo "base_sha=$(jq -r '.base.sha' <<< "$PR")"
-                    echo "base_ref=$(jq -r '.base.ref' <<< "$PR")"
+                    echo "base_sha=${BASE_SHA}"
+                    echo "base_ref=${BASE_REF}"
                     echo "pr_url=$(jq -r '.html_url' <<< "$PR")"
-                    echo "main_sha=$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq '.sha')"
+                    echo "target_ref=${TARGET_REF}"
+                    echo "target_key=${TARGET_KEY}"
+                    echo "baselines=${BASELINES}"
+                    echo "builds=$(jq -c --arg sha "$HEAD_SHA" --arg ref "$BASE_REF" '[{key: "pr", ref: $ref, sha: $sha}] + .' <<< "$BASELINES")"
                   } >> "$GITHUB_OUTPUT"
 
                   if [ "$HEAD_REPOSITORY" != "$GITHUB_REPOSITORY" ]; then
@@ -325,11 +364,11 @@ jobs:
                   path: healer-data/pr-triage.json
                   retention-days: 7
 
-    # Builds the PR head and main where no secret is held and nothing is
+    # Builds the PR head and each baseline where no secret is held and nothing is
     # cached, since the PR's own build scripts run here. Pro gets the Core
     # nightly for the branch, as its PR runs do.
     prepare-builds:
-        name: Build ${{ matrix.target }}
+        name: Build ${{ matrix.build.key }}
         needs: [resolve-input, collect]
         if: needs.collect.outputs.has_reruns == 'true'
         runs-on: ubuntu-22.04
@@ -338,11 +377,11 @@ jobs:
         strategy:
             fail-fast: false
             matrix:
-                target: [pr, main]
+                build: ${{ fromJSON(needs.resolve-input.outputs.builds) }}
         steps:
             - uses: actions/checkout@v6
               with:
-                  ref: ${{ matrix.target == 'pr' && needs.resolve-input.outputs.head_sha || needs.resolve-input.outputs.main_sha }}
+                  ref: ${{ matrix.build.sha }}
                   persist-credentials: false
 
             - name: Check out the healer
@@ -371,14 +410,14 @@ jobs:
               if: inputs.product == 'pro'
               uses: ./.healer/actions/resolve-core-nightly
               with:
-                  core-branch: ${{ matrix.target == 'pr' && needs.resolve-input.outputs.base_ref || 'main' }}
+                  core-branch: ${{ matrix.build.ref }}
                   token: ${{ github.token }}
                   zip-path: elementor.zip
 
             - name: Build Pro
               if: inputs.product == 'pro'
               env:
-                  ELEMENTOR_CORE_BRANCH: ${{ matrix.target == 'pr' && needs.resolve-input.outputs.base_ref || 'main' }}
+                  ELEMENTOR_CORE_BRANCH: ${{ matrix.build.ref }}
               run: |
                   set -euo pipefail
                   unzip -qo elementor.zip
@@ -408,7 +447,7 @@ jobs:
 
             - uses: actions/upload-artifact@v7
               with:
-                  name: healer-builds-${{ matrix.target }}
+                  name: healer-builds-${{ matrix.build.key }}
                   path: ${{ runner.temp }}/healer-builds.tgz
                   if-no-files-found: error
                   retention-days: 1
@@ -417,7 +456,7 @@ jobs:
     rerun-on-pr:
         name: Re-run on the PR build
         needs: [resolve-input, collect, prepare-builds]
-        if: always() && needs.collect.outputs.has_reruns == 'true'
+        if: always() && needs.collect.outputs.has_reruns == 'true' && needs.prepare-builds.result == 'success'
         runs-on: ubuntu-22.04
         timeout-minutes: 150
         permissions:
@@ -448,7 +487,7 @@ jobs:
                   path: ${{ runner.temp }}/healer-builds
 
             - name: Unpack the build
-              run: tar -xzf "$RUNNER_TEMP/healer-builds/healer-builds.tgz"
+              run: bash "$HEALER_DIR/scripts/unpack-healer-build.sh" "$RUNNER_TEMP/healer-builds/healer-builds.tgz" "$HEALER_PRODUCT"
 
             - uses: actions/setup-node@v6
               with:
@@ -495,18 +534,22 @@ jobs:
                   if-no-files-found: ignore
                   retention-days: 3
 
-    rerun-on-main:
-        name: Check on main
+    rerun-on-baseline:
+        name: Check on ${{ matrix.baseline.ref }}
         needs: [resolve-input, collect, prepare-builds, rerun-on-pr]
-        if: always() && needs.rerun-on-pr.outputs.has_failed_every_run == 'true'
+        if: always() && needs.rerun-on-pr.outputs.has_failed_every_run == 'true' && needs.prepare-builds.result == 'success'
         runs-on: ubuntu-22.04
         timeout-minutes: 150
         permissions:
             contents: read
+        strategy:
+            fail-fast: false
+            matrix:
+                baseline: ${{ fromJSON(needs.resolve-input.outputs.baselines) }}
         steps:
             - uses: actions/checkout@v6
               with:
-                  ref: ${{ needs.resolve-input.outputs.main_sha }}
+                  ref: ${{ matrix.baseline.sha }}
                   persist-credentials: false
 
             - name: Check out the healer
@@ -520,11 +563,11 @@ jobs:
 
             - uses: actions/download-artifact@v8
               with:
-                  name: healer-builds-main
+                  name: healer-builds-${{ matrix.baseline.key }}
                   path: ${{ runner.temp }}/healer-builds
 
             - name: Unpack the build
-              run: tar -xzf "$RUNNER_TEMP/healer-builds/healer-builds.tgz"
+              run: bash "$HEALER_DIR/scripts/unpack-healer-build.sh" "$RUNNER_TEMP/healer-builds/healer-builds.tgz" "$HEALER_PRODUCT"
 
             - uses: actions/setup-node@v6
               with:
@@ -542,26 +585,27 @@ jobs:
               timeout-minutes: 30
               run: bash "$HEALER_DIR/scripts/setup-core-playwright.sh"
 
-            # The spec paths are the PR's; main may have the test elsewhere, so
-            # only the title selects it here.
-            - name: Run the hard failures on main
+            # The spec paths are the PR's; this branch may have the test
+            # elsewhere, so only the title selects it here.
+            - name: Run the hard failures
               id: rerun
               env:
                   RERUN_TESTS: ${{ needs.rerun-on-pr.outputs.failed_every_run }}
                   RERUN_REPEAT: ${{ inputs.rerun_repeat }}
+                  BASELINE_KEY: ${{ matrix.baseline.key }}
               run: |
                   set -euo pipefail
                   mkdir -p "$RUNNER_TEMP/healer-data"
                   printf '%s' "$RERUN_TESTS" | jq 'map(.specFiles = [])' > "$RUNNER_TEMP/rerun-tests.json"
                   RERUN_TESTS_PATH="$RUNNER_TEMP/rerun-tests.json" \
-                  RERUN_RESULTS_PATH="$RUNNER_TEMP/healer-data/main-rerun.json" \
+                  RERUN_RESULTS_PATH="$RUNNER_TEMP/healer-data/${BASELINE_KEY}-rerun.json" \
                     node "$HEALER_DIR/scripts/rerun-pr-failures.js"
 
             - uses: actions/upload-artifact@v7
               if: steps.rerun.outcome == 'success'
               with:
-                  name: pr-healer-rerun-main
-                  path: ${{ runner.temp }}/healer-data/main-rerun.json
+                  name: pr-healer-rerun-${{ matrix.baseline.key }}
+                  path: ${{ runner.temp }}/healer-data/${{ matrix.baseline.key }}-rerun.json
                   retention-days: 7
 
     plan-fixes:
@@ -588,11 +632,12 @@ jobs:
               with:
                   node-version: ${{ env.HEALER_NODE_VERSION }}
 
-            - name: List open PRs into main
+            - name: List open PRs into the target branch
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  TARGET_REF: ${{ needs.resolve-input.outputs.target_ref }}
               run: |
-                  gh pr list --repo "$GITHUB_REPOSITORY" --state open --base main --limit 500 \
+                  gh pr list --repo "$GITHUB_REPOSITORY" --state open --base "$TARGET_REF" --limit 500 \
                     --json number,url,title,body,headRefName,baseRefName > "$RUNNER_TEMP/open-prs.json"
 
             - name: Plan
@@ -600,6 +645,8 @@ jobs:
               env:
                   FLAKY_TESTS: ${{ needs.rerun-on-pr.outputs.flaky_tests }}
                   MAX_FIXES: ${{ inputs.max_fixes }}
+                  PR_NUMBER: ${{ inputs.pr_number }}
+                  TARGET_REF: ${{ needs.resolve-input.outputs.target_ref }}
               run: |
                   set -euo pipefail
                   mkdir -p "$RUNNER_TEMP/healer-data"
@@ -615,10 +662,10 @@ jobs:
                   path: ${{ runner.temp }}/healer-data/fix-skips.json
                   retention-days: 7
 
-    # One agent per flaky test, each on its own branch off main. Nothing from
+    # One agent per flaky test, each on its own branch off the target. Nothing from
     # the agent runs here: this job holds the Cursor key.
     fix-agent:
-        name: Fix ${{ matrix.fix.testName }}
+        name: Fix flaky test ${{ matrix.fix.index }}
         needs: [resolve-input, collect, plan-fixes]
         if: always() && needs.plan-fixes.outputs.has_fixes == 'true'
         runs-on: ubuntu-22.04
@@ -641,21 +688,6 @@ jobs:
               with:
                   node-version: ${{ env.HEALER_NODE_VERSION }}
 
-            - name: Compute branch name
-              id: branch
-              env:
-                  TEST_NAME: ${{ matrix.fix.testName }}
-                  PR_NUMBER: ${{ inputs.pr_number }}
-                  RUN_ID: ${{ github.run_id }}
-                  FIX_INDEX: ${{ matrix.fix.index }}
-              run: |
-                  set -euo pipefail
-                  node -e "
-                    const { buildHealBranchSlug } = require('./' + process.env.HEALER_DIR + '/scripts/healer-skips');
-                    const { PR_NUMBER, RUN_ID, FIX_INDEX, TEST_NAME } = process.env;
-                    process.stdout.write('branch_name=heal/pr-' + PR_NUMBER + '-' + buildHealBranchSlug(TEST_NAME) + '-' + RUN_ID + '-' + FIX_INDEX + '\n');
-                  " >> "$GITHUB_OUTPUT"
-
             - name: Dispatch
               id: dispatch
               continue-on-error: true
@@ -664,16 +696,16 @@ jobs:
                   GITHUB_REPOSITORY: ${{ github.repository }}
                   HEAL_TEST_NAME: ${{ matrix.fix.testName }}
                   HEAL_RUN_URL: ${{ needs.collect.outputs.source_run_url }}
-                  HEAL_BRANCH_NAME: ${{ steps.branch.outputs.branch_name }}
+                  HEAL_BRANCH_NAME: ${{ matrix.fix.branch }}
                   HEAL_SHARD_INDEX: ${{ matrix.fix.shardIndex }}
                   HEAL_MATCHED_DIRS: ${{ matrix.fix.matchedDirs }}
-                  HEAL_STARTING_REF: main
+                  HEAL_STARTING_REF: ${{ needs.resolve-input.outputs.target_ref }}
                   HEAL_ATTEMPT: '1'
                   HEAL_MAX_ATTEMPTS: '1'
                   HEAL_CONTEXT: >-
                       This test failed on pull request ${{ needs.resolve-input.outputs.pr_url }}, in the evidence run above, then passed
                       ${{ matrix.fix.passed }} of ${{ matrix.fix.runs }} re-runs on that PR's build with no change, so the PR healer judged
-                      it flaky rather than broken by that PR. Fix the flake on main: the PR's changes are not on your branch and are not
+                      it flaky rather than broken by that PR. Fix the flake on ${{ needs.resolve-input.outputs.target_ref }}: the PR's changes are not on your branch and are not
                       yours to change. The healer's re-run results are in the artifact "healer-rerun-test-results" on
                       run ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}.
               run: node "$HEALER_DIR/scripts/dispatch-cloud-agent.js"
@@ -686,8 +718,8 @@ jobs:
                   CURSOR_API_KEY: ${{ secrets.CURSOR_APIKEY }}
                   HEAL_AGENT_ID: ${{ steps.dispatch.outputs.agent_id }}
                   HEAL_AGENT_RUN_ID: ${{ steps.dispatch.outputs.run_id }}
-                  HEAL_BRANCH_NAME: ${{ steps.branch.outputs.branch_name }}
-                  HEAL_BASE_REF: main
+                  HEAL_BRANCH_NAME: ${{ matrix.fix.branch }}
+                  HEAL_BASE_REF: ${{ needs.resolve-input.outputs.target_ref }}
                   GITHUB_REPOSITORY: ${{ github.repository }}
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               run: node "$HEALER_DIR/scripts/poll-cloud-agent-run.js"
@@ -717,10 +749,10 @@ jobs:
                   path: ${{ runner.temp }}/healer-data/agent-${{ matrix.fix.index }}.json
                   retention-days: 7
 
-    # Runs the agent's branch against a fresh main build, so it holds only the
+    # Runs the agent's branch against a fresh build of the target, so it holds only the
     # Pro licence (a non-production one) and a read token.
     verify-fix:
-        name: Verify ${{ matrix.fix.testName }}
+        name: Verify fix ${{ matrix.fix.index }}
         needs: [resolve-input, prepare-builds, plan-fixes, fix-agent]
         if: always() && needs.plan-fixes.outputs.has_fixes == 'true'
         runs-on: ubuntu-22.04
@@ -743,12 +775,13 @@ jobs:
               id: agent
               env:
                   FIX_INDEX: ${{ matrix.fix.index }}
+                  EXPECTED_BRANCH: ${{ matrix.fix.branch }}
               run: |
                   set -euo pipefail
                   FILE="$RUNNER_TEMP/agent/agent-${FIX_INDEX}.json"
                   BRANCH=$( [ -f "$FILE" ] && jq -r '.branch // ""' "$FILE" || true )
-                  if [ -n "$BRANCH" ] && { ! [[ "$BRANCH" =~ ^heal/[A-Za-z0-9._/-]+$ ]] || [[ "$BRANCH" == *..* ]]; }; then
-                    echo "::error::Unexpected branch name '${BRANCH}'."
+                  if [ -n "$BRANCH" ] && [ "$BRANCH" != "$EXPECTED_BRANCH" ]; then
+                    echo "::error::Expected the agent to push '${EXPECTED_BRANCH}'."
                     BRANCH=""
                   fi
                   echo "branch=${BRANCH}" >> "$GITHUB_OUTPUT"
@@ -775,7 +808,7 @@ jobs:
               if: steps.agent.outputs.branch != ''
               continue-on-error: true
               env:
-                  BASE_REF: main
+                  BASE_REF: ${{ needs.resolve-input.outputs.target_ref }}
               run: |
                   set -euo pipefail
                   echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
@@ -794,14 +827,14 @@ jobs:
               if: steps.scope.outcome == 'success'
               continue-on-error: true
               with:
-                  name: healer-builds-main
+                  name: healer-builds-${{ needs.resolve-input.outputs.target_key }}
                   path: ${{ runner.temp }}/healer-builds
 
             - name: Unpack the build
               id: builds
               if: steps.download-builds.outcome == 'success'
               continue-on-error: true
-              run: tar -xzf "$RUNNER_TEMP/healer-builds/healer-builds.tgz"
+              run: bash "$HEALER_DIR/scripts/unpack-healer-build.sh" "$RUNNER_TEMP/healer-builds/healer-builds.tgz" "$HEALER_PRODUCT"
 
             - uses: actions/setup-node@v6
               id: setup-node
@@ -936,8 +969,10 @@ jobs:
         steps:
             - uses: actions/checkout@v6
               with:
-                  ref: main
+                  ref: ${{ needs.resolve-input.outputs.target_ref }}
                   fetch-depth: 0
+                  # The script gives the token to the git calls that reach the remote.
+                  persist-credentials: false
 
             - name: Check out the healer
               uses: actions/checkout@v6
@@ -965,6 +1000,7 @@ jobs:
                   HEALER_DATA_DIR: ${{ runner.temp }}/healer-data
                   FIX_MATRIX: ${{ needs.plan-fixes.outputs.fix_matrix }}
                   VERIFY_REPEAT: ${{ inputs.verify_repeat }}
+                  TARGET_REF: ${{ needs.resolve-input.outputs.target_ref }}
                   PR_NUMBER: ${{ inputs.pr_number }}
                   PR_URL: ${{ needs.resolve-input.outputs.pr_url }}
                   SOURCE_RUN_URL: ${{ needs.collect.outputs.source_run_url }}
@@ -991,7 +1027,7 @@ jobs:
                 collect,
                 prepare-builds,
                 rerun-on-pr,
-                rerun-on-main,
+                rerun-on-baseline,
                 plan-fixes,
                 fix-agent,
                 verify-fix,
@@ -1018,7 +1054,7 @@ jobs:
             - uses: actions/download-artifact@v8
               continue-on-error: true
               with:
-                  pattern: pr-healer-{triage,rerun-pr,rerun-main,fix-skips,fixes}
+                  pattern: pr-healer-{triage,rerun-pr,rerun-main,rerun-base,fix-skips,fixes}
                   path: ${{ runner.temp }}/healer-data
                   merge-multiple: true
 
@@ -1050,7 +1086,8 @@ jobs:
                   OVER_LIMIT: ${{ needs.collect.outputs.over_limit }}
                   RERUN_LIMIT: ${{ inputs.max_reruns }}
                   PR_RERUN_RESULT: ${{ needs.rerun-on-pr.result }}
-                  MAIN_RERUN_RESULT: ${{ needs.rerun-on-main.result }}
+                  BASELINE_RERUN_RESULT: ${{ needs.rerun-on-baseline.result }}
+                  TARGET_REF: ${{ needs.resolve-input.outputs.target_ref }}
                   PR_NUMBER: ${{ inputs.pr_number }}
                   PR_URL: ${{ needs.resolve-input.outputs.pr_url }}
                   PR_HEAD_SHA: ${{ needs.resolve-input.outputs.head_sha }}
@@ -1066,6 +1103,7 @@ jobs:
 
             # One comment per PR, replaced on every run.
             - name: Post the comment on the PR
+              id: comment
               continue-on-error: true
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -1084,7 +1122,9 @@ jobs:
                   fi
 
             # Removing the label lets the next "add the label" start a fresh run.
+            # With no comment posted, the label stays as the sign that it failed.
             - name: Remove the label
+              if: steps.comment.outcome == 'success'
               continue-on-error: true
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

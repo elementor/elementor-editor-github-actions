@@ -12,7 +12,7 @@
 
 const fs = require('fs');
 
-const { findOpenPrForTest } = require('./healer-skips');
+const { buildHealBranchSlug, findOpenPrForTest } = require('./healer-skips');
 const { setOutput } = require('./github-output');
 
 const COMMENT_MARKER = '<!-- playwright-pr-test-healer -->';
@@ -22,21 +22,23 @@ const TEST_MARKER_SUFFIX = ' -->';
 const VERDICTS = {
 	BROKEN: 'broken-by-pr',
 	FLAKY: 'flaky',
-	FAILING_ON_MAIN: 'failing-on-main',
+	ALREADY_FAILING: 'already-failing',
 	NEEDS_HUMAN: 'needs-human',
 };
 
-const VERDICT_LABELS = {
-	[VERDICTS.BROKEN]: '❌ Broken by this PR',
-	[VERDICTS.FLAKY]: '🔁 Flaky',
-	[VERDICTS.FAILING_ON_MAIN]: '🟠 Already failing on main',
-	[VERDICTS.NEEDS_HUMAN]: '👀 Needs a human look',
-};
+function verdictLabel(verdict, targetRef) {
+	return {
+		[VERDICTS.BROKEN]: '❌ Broken by this PR',
+		[VERDICTS.FLAKY]: '🔁 Flaky',
+		[VERDICTS.ALREADY_FAILING]: `🟠 Already failing on ${targetRef}`,
+		[VERDICTS.NEEDS_HUMAN]: '👀 Needs a human look',
+	}[verdict];
+}
 
 const VERDICT_ORDER = [
 	VERDICTS.BROKEN,
 	VERDICTS.NEEDS_HUMAN,
-	VERDICTS.FAILING_ON_MAIN,
+	VERDICTS.ALREADY_FAILING,
 	VERDICTS.FLAKY,
 ];
 
@@ -44,7 +46,28 @@ function byTestName(records) {
 	return new Map((records || []).map((record) => [record.testName, record]));
 }
 
-function decideAfterRerun(rerun, mainRun, rerunJobFailed, mainJobFailed) {
+/**
+ * What main did, for a PR that targets another branch. It never decides the
+ * verdict: the PR's own target is what the PR would break.
+ */
+function mainNote(mainRun) {
+	if (!mainRun || mainRun.error) {
+		return '';
+	}
+
+	return mainRun.failed === mainRun.runs
+		? ` On main it also failed all ${mainRun.runs} runs.`
+		: ` On main it passed ${mainRun.passed} of ${mainRun.runs} runs.`;
+}
+
+function decideAfterRerun({
+	rerun,
+	targetRun,
+	mainRun,
+	rerunJobFailed,
+	targetJobFailed,
+	targetRef,
+}) {
 	if (!rerun) {
 		return {
 			verdict: VERDICTS.NEEDS_HUMAN,
@@ -70,32 +93,34 @@ function decideAfterRerun(rerun, mainRun, rerunJobFailed, mainJobFailed) {
 
 	const here = `Failed all ${rerun.runs} re-runs on this PR's build`;
 
-	if (!mainRun) {
+	if (!targetRun) {
 		return {
 			verdict: VERDICTS.NEEDS_HUMAN,
-			reason: mainJobFailed
-				? `${here}, and the healer's run on main failed before it could check it there.`
-				: `${here}, and was not checked on main.`,
+			reason: targetJobFailed
+				? `${here}, and the healer's run on ${targetRef} failed before it could check it there.`
+				: `${here}, and was not checked on ${targetRef}.`,
 		};
 	}
 
-	if (mainRun.error) {
+	if (targetRun.error) {
 		return {
 			verdict: VERDICTS.NEEDS_HUMAN,
-			reason: `${here}; on main it could not run: ${mainRun.error}`,
+			reason: `${here}; on ${targetRef} it could not run: ${targetRun.error}`,
 		};
 	}
 
-	if (mainRun.failed === mainRun.runs) {
+	const onMain = 'main' === targetRef ? '' : mainNote(mainRun);
+
+	if (targetRun.failed === targetRun.runs) {
 		return {
-			verdict: VERDICTS.FAILING_ON_MAIN,
-			reason: `${here} and all ${mainRun.runs} runs on main, so this PR did not cause it.`,
+			verdict: VERDICTS.ALREADY_FAILING,
+			reason: `${here} and all ${targetRun.runs} runs on ${targetRef}, so this PR did not cause it.${onMain}`,
 		};
 	}
 
 	return {
 		verdict: VERDICTS.NEEDS_HUMAN,
-		reason: `${here}, but passed ${mainRun.passed} of ${mainRun.runs} runs on main. The PR may break it in a way the healer could not trace to the diff.`,
+		reason: `${here}, but passed ${targetRun.passed} of ${targetRun.runs} runs on ${targetRef}. The PR may break it in a way the healer could not trace to the diff.${onMain}`,
 	};
 }
 
@@ -116,24 +141,29 @@ function describeFix(fix) {
  * @param {Object[]} options.triage        From triage-pr-failures.js.
  * @param {Object[]} [options.prRerun]     Re-runs on the PR build.
  * @param {Object[]} [options.mainRerun]   Re-runs on main.
+ * @param {Object[]} [options.baseRerun]   Re-runs on the PR's base, when it is not main.
+ * @param {string}   [options.targetRef]   The branch the PR is judged against.
  * @param {Object[]} [options.fixes]       What happened to each flaky test's fix.
  * @param {string[]} [options.overLimit]   Tests not re-run because of the limit.
  * @param {boolean}  [options.prRerunFailed]   The PR re-run job did not finish.
- * @param {boolean}  [options.mainRerunFailed] The main re-run job did not finish.
+ * @param {boolean}  [options.baselineRerunFailed] A baseline re-run job did not finish.
  * @return {Object[]} One verdict per failure, most actionable first.
  */
 function resolvePrVerdicts({
 	triage,
 	prRerun,
 	mainRerun,
+	baseRerun,
+	targetRef = 'main',
 	fixes,
 	overLimit = [],
 	rerunLimit = 0,
 	prRerunFailed = false,
-	mainRerunFailed = false,
+	baselineRerunFailed = false,
 }) {
 	const prRuns = byTestName(prRerun);
 	const mainRuns = byTestName(mainRerun);
+	const targetRuns = 'main' === targetRef ? mainRuns : byTestName(baseRerun);
 	const fixRecords = byTestName(fixes);
 	const skipped = new Set(overLimit);
 
@@ -174,12 +204,14 @@ function resolvePrVerdicts({
 			};
 		}
 
-		const decision = decideAfterRerun(
-			base.rerun,
-			base.mainRun,
-			prRerunFailed,
-			mainRerunFailed,
-		);
+		const decision = decideAfterRerun({
+			rerun: base.rerun,
+			targetRun: targetRuns.get(failure.testName) || null,
+			mainRun: base.mainRun,
+			rerunJobFailed: prRerunFailed,
+			targetJobFailed: baselineRerunFailed,
+			targetRef,
+		});
 
 		return {
 			...base,
@@ -194,6 +226,14 @@ function resolvePrVerdicts({
 		(a, b) =>
 			VERDICT_ORDER.indexOf(a.verdict) - VERDICT_ORDER.indexOf(b.verdict),
 	);
+}
+
+/**
+ * The one branch a flaky test's agent may push. It is rebuilt from trusted
+ * inputs, so a record claiming another branch can be told apart.
+ */
+function buildFixBranch({ prNumber, testName, runId, index }) {
+	return `heal/pr-${prNumber}-${buildHealBranchSlug(testName)}-${runId}-${index}`;
 }
 
 function testMarker(testName) {
@@ -306,12 +346,12 @@ function whyCell(verdict) {
 	return parts.filter(Boolean).join(' ');
 }
 
-function countLine(verdicts) {
+function countLine(verdicts, targetRef) {
 	return VERDICT_ORDER.map((verdict) => {
 		const count = verdicts.filter(
 			(item) => item.verdict === verdict,
 		).length;
-		return count ? `${VERDICT_LABELS[verdict]}: **${count}**` : '';
+		return count ? `${verdictLabel(verdict, targetRef)}: **${count}**` : '';
 	})
 		.filter(Boolean)
 		.join(' · ');
@@ -332,6 +372,7 @@ function buildPrComment({
 	healerRunUrl,
 	fixPrUrl,
 	label,
+	targetRef = 'main',
 }) {
 	const shortSha = code(String(headSha || '').slice(0, 7));
 	// Bots merge main into PR branches, so the run read may be a commit behind.
@@ -339,7 +380,7 @@ function buildPrComment({
 		sourceSha && sourceSha !== headSha
 			? `${code(sourceSha.slice(0, 7))}, an earlier commit of this PR (the head, ${shortSha}, has no finished Playwright run yet)`
 			: shortSha;
-	const footer = `<sub>[Healer run](${healerRunUrl}) · Remove and re-add the \`${label}\` label to run it again.</sub>`;
+	const footer = `<sub>[Healer run](${healerRunUrl}) on ${shortSha} · Remove and re-add the \`${label}\` label to run it again.</sub>`;
 	const lines = [COMMENT_MARKER, '## 🩺 Playwright test healer', ''];
 
 	if ('disabled' === state) {
@@ -366,20 +407,20 @@ function buildPrComment({
 		lines.push(
 			`Checked the ${verdicts.length} failed test${1 === verdicts.length ? '' : 's'} from the [latest Playwright run](${sourceRunUrl}) on ${runCommit}.`,
 			'',
-			countLine(verdicts),
+			countLine(verdicts, targetRef),
 			'',
 			'| Test | Verdict | Why | Evidence |',
 			'| --- | --- | --- | --- |',
 			...verdicts.map(
 				(verdict) =>
-					`| ${escapeCell(code(verdict.testName))} | ${VERDICT_LABELS[verdict.verdict]} | ${escapeCell(whyCell(verdict))} | ${escapeCell(evidenceCell(verdict, { repo, headSha, baseSha, sourceRunUrl }))} |`,
+					`| ${escapeCell(code(verdict.testName))} | ${verdictLabel(verdict.verdict, targetRef)} | ${escapeCell(whyCell(verdict))} | ${escapeCell(evidenceCell(verdict, { repo, headSha, baseSha, sourceRunUrl }))} |`,
 			),
 		);
 
 		if (fixPrUrl) {
 			lines.push(
 				'',
-				`🩹 **Flaky fixes:** ${fixPrUrl} — opened against \`main\`, not this branch. It goes through normal review.`,
+				`🩹 **Flaky fixes:** ${fixPrUrl} — opened against \`${targetRef}\`, not this branch. It goes through normal review.`,
 			);
 		}
 
@@ -409,6 +450,7 @@ function buildFixPrBody({
 	healerRunUrl,
 	verifyRepeat,
 	jiraUrl,
+	targetRef = 'main',
 }) {
 	const safe = (text) => String(text || '').replace(/~~~/g, '~ ~ ~');
 
@@ -422,7 +464,7 @@ function buildFixPrBody({
 		`| Evidence run | ${sourceRunUrl} |`,
 		`| Healer run | ${healerRunUrl} |`,
 		'',
-		`Each fix was verified on its own against a fresh build of \`main\`: the test passed ${verifyRepeat}x in a row with it. They were not run together. The diff is gated to \`tests/playwright/\` with no snapshot-baseline or environment changes.`,
+		`Each fix was verified on its own against a fresh build of \`${targetRef}\`: the test passed ${verifyRepeat}x in a row with it. They were not run together. The diff is gated to \`tests/playwright/\` with no snapshot-baseline or environment changes.`,
 		'',
 		...fixes.flatMap((fix) => [
 			`### ${code(fix.testName)}`,
@@ -436,8 +478,19 @@ function buildFixPrBody({
 	].join('\n');
 }
 
+// Slack reads these as markup, so a test title could otherwise add links.
+function escapeSlack(text) {
+	return String(text || '')
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+		.replace(/`/g, "'");
+}
+
 function buildSlackPayload({ repo, prNumber, prUrl, fixPrUrl, fixes }) {
-	const tests = fixes.map((fix) => `• \`${fix.testName}\``).join('\n');
+	const tests = fixes
+		.map((fix) => `• \`${escapeSlack(fix.testName)}\``)
+		.join('\n');
 	const text = `🩹 Flaky test fixes from <${prUrl}|${repo}#${prNumber}>: <${fixPrUrl}|review the fix PR>`;
 
 	return {
@@ -463,7 +516,12 @@ const HANDOFF_NOTES = {
  * Why a flaky test's fix did or did not make it into the fix PR, from the
  * agent's and the verification's records.
  */
-function describeFixOutcome({ agent, verify, verifyRepeat }) {
+function describeFixOutcome({
+	agent,
+	verify,
+	verifyRepeat,
+	targetRef = 'main',
+}) {
 	if ('true' === String(verify?.passed)) {
 		return { status: 'verified' };
 	}
@@ -508,7 +566,7 @@ function describeFixOutcome({ agent, verify, verifyRepeat }) {
 	if ('test' === verify.stage) {
 		return {
 			status: 'not-fixed',
-			note: `Not fixed: the agent's fix on \`${agent.branch}\` did not pass ${verifyRepeat} runs in a row on main.`,
+			note: `Not fixed: the agent's fix on \`${agent.branch}\` did not pass ${verifyRepeat} runs in a row on ${targetRef}.`,
 		};
 	}
 
@@ -543,11 +601,14 @@ function reportMain(env) {
 					triage: data('pr-triage.json'),
 					prRerun: data('pr-rerun.json', null),
 					mainRerun: data('main-rerun.json', null),
+					baseRerun: data('base-rerun.json', null),
+					targetRef: env.TARGET_REF || 'main',
 					fixes,
 					overLimit: JSON.parse(env.OVER_LIMIT || '[]'),
 					rerunLimit: Number(env.RERUN_LIMIT) || 0,
 					prRerunFailed: 'success' !== env.PR_RERUN_RESULT,
-					mainRerunFailed: 'success' !== env.MAIN_RERUN_RESULT,
+					baselineRerunFailed:
+						'success' !== env.BASELINE_RERUN_RESULT,
 				})
 			: [];
 
@@ -562,6 +623,7 @@ function reportMain(env) {
 		healerRunUrl: env.HEALER_RUN_URL,
 		fixPrUrl: env.FIX_PR_URL,
 		label: env.HEAL_LABEL,
+		targetRef: env.TARGET_REF || 'main',
 	});
 
 	fs.writeFileSync(env.COMMENT_PATH, comment);
@@ -596,12 +658,25 @@ function planMain(env) {
 	const { toFix, skipped } = planFlakyFixes({
 		flakyTests: readJson(env.FLAKY_TESTS_PATH, []),
 		openPrs: readJson(env.OPEN_PRS_PATH, []),
-		baseRef: 'main',
+		baseRef: env.TARGET_REF || 'main',
 		maxFixes: Number(env.MAX_FIXES) || 0,
 	});
 
 	fs.writeFileSync(env.FIX_SKIPS_PATH, JSON.stringify(skipped, null, 2));
-	setOutput('fix_matrix', JSON.stringify(toFix));
+	setOutput(
+		'fix_matrix',
+		JSON.stringify(
+			toFix.map((fix) => ({
+				...fix,
+				branch: buildFixBranch({
+					prNumber: env.PR_NUMBER,
+					testName: fix.testName,
+					runId: env.GITHUB_RUN_ID,
+					index: fix.index,
+				}),
+			})),
+		),
+	);
 	setOutput('has_fixes', String(toFix.length > 0));
 }
 
@@ -623,6 +698,7 @@ if (require.main === module) {
 module.exports = {
 	COMMENT_MARKER,
 	VERDICTS,
+	buildFixBranch,
 	buildFixPrBody,
 	buildFixPrTitle,
 	buildPrComment,

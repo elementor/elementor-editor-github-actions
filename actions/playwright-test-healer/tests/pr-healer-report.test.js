@@ -1,6 +1,7 @@
 const {
 	COMMENT_MARKER,
 	VERDICTS,
+	buildFixBranch,
 	buildFixPrBody,
 	buildFixPrTitle,
 	buildPrComment,
@@ -91,7 +92,7 @@ describe('resolvePrVerdicts', () => {
 			verdict: VERDICTS.FLAKY,
 			fix: 'fixed',
 		});
-		expect(byName['On main'].verdict).toBe(VERDICTS.FAILING_ON_MAIN);
+		expect(byName['On main'].verdict).toBe(VERDICTS.ALREADY_FAILING);
 		expect(byName['Only here'].verdict).toBe(VERDICTS.NEEDS_HUMAN);
 		expect(byName['Only here'].reason).toContain(
 			'passed 2 of 3 runs on main',
@@ -120,7 +121,7 @@ describe('resolvePrVerdicts', () => {
 			triage: [triaged('No rerun'), triaged('No main')],
 			prRerun: [rerun('No main', 0, 3)],
 			prRerunFailed: true,
-			mainRerunFailed: true,
+			baselineRerunFailed: true,
 		});
 
 		// Assert
@@ -130,6 +131,95 @@ describe('resolvePrVerdicts', () => {
 		]);
 		expect(verdicts[0].reason).toContain('failed before it could re-run');
 		expect(verdicts[1].reason).toContain('run on main failed');
+	});
+});
+
+describe('resolvePrVerdicts on a PR into a release branch', () => {
+	const targetRef = 'release/4.0';
+
+	it('judges against the base branch, and says what main did', () => {
+		// Act
+		const verdicts = resolvePrVerdicts({
+			triage: [triaged('Base fails'), triaged('Only main fails')],
+			prRerun: [
+				rerun('Base fails', 0, 3),
+				rerun('Only main fails', 0, 3),
+			],
+			baseRerun: [
+				rerun('Base fails', 0, 3),
+				rerun('Only main fails', 3, 0),
+			],
+			mainRerun: [
+				rerun('Base fails', 3, 0),
+				rerun('Only main fails', 0, 3),
+			],
+			targetRef,
+		});
+
+		// Assert
+		const byName = Object.fromEntries(
+			verdicts.map((verdict) => [verdict.testName, verdict]),
+		);
+		expect(byName['Base fails'].verdict).toBe(VERDICTS.ALREADY_FAILING);
+		expect(byName['Base fails'].reason).toContain(
+			'all 3 runs on release/4.0, so this PR did not cause it. On main it passed 3 of 3 runs.',
+		);
+		expect(byName['Only main fails'].verdict).toBe(VERDICTS.NEEDS_HUMAN);
+		expect(byName['Only main fails'].reason).toContain(
+			'On main it also failed all 3 runs.',
+		);
+	});
+
+	it('needs a human when the base was not checked, even if main failed', () => {
+		// Act
+		const [verdict] = resolvePrVerdicts({
+			triage: [triaged('No base')],
+			prRerun: [rerun('No base', 0, 3)],
+			mainRerun: [rerun('No base', 0, 3)],
+			targetRef,
+			baselineRerunFailed: true,
+		});
+
+		// Assert
+		expect(verdict.verdict).toBe(VERDICTS.NEEDS_HUMAN);
+		expect(verdict.reason).toContain('run on release/4.0 failed');
+	});
+
+	it('names the base branch in the comment', () => {
+		// Arrange
+		const verdicts = resolvePrVerdicts({
+			triage: [triaged('Base fails')],
+			prRerun: [rerun('Base fails', 0, 3)],
+			baseRerun: [rerun('Base fails', 0, 3)],
+			targetRef,
+		});
+
+		// Act
+		const comment = buildPrComment({
+			...LINKS,
+			state: 'ok',
+			verdicts,
+			targetRef,
+			fixPrUrl: 'https://x/pr/9',
+		});
+
+		// Assert
+		expect(comment).toContain('🟠 Already failing on release/4.0');
+		expect(comment).toContain('opened against `release/4.0`');
+	});
+});
+
+describe('buildFixBranch', () => {
+	it('builds the branch from the PR, the test and the run', () => {
+		// Assert
+		expect(
+			buildFixBranch({
+				prNumber: '7',
+				testName: 'Some Test: name',
+				runId: '99',
+				index: 1,
+			}),
+		).toBe('heal/pr-7-some-test-name-99-1');
 	});
 });
 
@@ -353,5 +443,21 @@ describe('fix PR texts', () => {
 		// Assert
 		expect(payload.text).toContain('<https://x/pr/9|review the fix PR>');
 		expect(payload.blocks[1].text.text).toContain('`Flaky one`');
+	});
+
+	it('escapes a test title so it cannot add Slack markup', () => {
+		// Act
+		const payload = buildSlackPayload({
+			repo: 'elementor/elementor-pro',
+			prNumber: '7850',
+			prUrl: 'https://x/pr/7850',
+			fixPrUrl: 'https://x/pr/9',
+			fixes: [{ testName: 'a `b` <https://evil|click> & c' }],
+		});
+
+		// Assert
+		expect(payload.blocks[1].text.text).toContain(
+			"`a 'b' &lt;https://evil|click&gt; &amp; c`",
+		);
 	});
 });

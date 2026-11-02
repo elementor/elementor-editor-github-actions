@@ -32,12 +32,16 @@ function sleep(ms) {
 }
 
 function listPrRuns({ repo, workflow, headRef }) {
-	return JSON.parse(
-		gh([
-			'api',
-			`repos/${repo}/actions/workflows/${workflow}/runs?branch=${encodeURIComponent(headRef)}&per_page=50`,
-		]),
-	).workflow_runs;
+	return gh([
+		'api',
+		`repos/${repo}/actions/workflows/${workflow}/runs?branch=${encodeURIComponent(headRef)}&per_page=100`,
+		'--paginate',
+		'--jq',
+		'.workflow_runs[] | tojson',
+	])
+		.split('\n')
+		.filter(Boolean)
+		.map((line) => JSON.parse(line));
 }
 
 function getRun(repo, runId) {

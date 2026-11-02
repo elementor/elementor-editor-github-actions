@@ -220,6 +220,40 @@ describe('specCoversModule', () => {
 	});
 });
 
+describe('token evidence', () => {
+	it('matches a token as a whole word, not inside another word', () => {
+		// Arrange
+		const failure = {
+			testName: 'A test',
+			shardIndex: '1',
+			rerunnable: true,
+			errorText: "locator('.e-form') not found",
+			specFile: '',
+		};
+		const patched = (line) => ({
+			filename: 'modules/forms/widget.php',
+			status: 'modified',
+			patch: `@@ -1,1 +1,1 @@\n+${line}`,
+		});
+
+		// Act
+		const [inside] = triagePrFailures({
+			failures: [failure],
+			changedFiles: [patched('$a = "x.e-form-extra";')],
+			repoDir: os.tmpdir(),
+		});
+		const [whole] = triagePrFailures({
+			failures: [failure],
+			changedFiles: [patched('$a = "x e-form y";')],
+			repoDir: os.tmpdir(),
+		});
+
+		// Assert
+		expect(inside.evidence).toEqual([]);
+		expect(whole.evidence[0]).toMatchObject({ token: 'e-form' });
+	});
+});
+
 describe('triagePrFailures', () => {
 	const profile = loadProfile('pro');
 

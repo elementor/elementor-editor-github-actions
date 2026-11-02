@@ -1,14 +1,23 @@
 'use strict';
 
 /**
- * Collects the PR healer's verified flaky fixes into one branch off main and
- * opens one PR for them, so a PR with three flakes leaves one fix PR to
- * review, not three.
+ * Collects the PR healer's verified flaky fixes into one branch off the target
+ * branch and opens one PR for them, so a PR with three flakes leaves one fix
+ * PR to review, not three.
  *
  * Each fix was verified on its own branch. A fix whose branch has moved since
  * verification is left out, because the PR would show unverified code under
  * a "verified" body; so is one that conflicts with a fix merged before it.
  * Merged per-test branches are deleted, since the fix PR now carries them.
+ *
+ * The agent and verify records are artifacts, and the PR's code ran earlier in
+ * this workflow run, so it could have uploaded forged ones. Nothing here takes
+ * them at their word: the branch must be the one rebuilt from the plan, the
+ * fetched commit must be the verified SHA, and the scope check runs again.
+ * The records can still claim a test passed, which is why the PR needs review.
+ *
+ * This job keeps no credentials in the checkout. Only the git calls that reach
+ * the remote are given the token.
  */
 
 const { execFileSync } = require('child_process');
@@ -26,6 +35,8 @@ const {
 
 const BOT_NAME = 'github-actions[bot]';
 const BOT_EMAIL = '41898282+github-actions[bot]@users.noreply.github.com';
+const FULL_SHA = /^[0-9a-f]{40}$/;
+const SCOPE_CHECK = path.join(__dirname, 'check-fix-scope.js');
 
 function git(args, options = {}) {
 	return execFileSync('git', args, {
@@ -35,9 +46,37 @@ function git(args, options = {}) {
 	}).trim();
 }
 
+function remoteGit(args) {
+	const auth = Buffer.from(`x-access-token:${process.env.GH_TOKEN}`).toString(
+		'base64',
+	);
+
+	return git(args, {
+		env: {
+			...process.env,
+			GIT_CONFIG_COUNT: '1',
+			GIT_CONFIG_KEY_0: 'http.https://github.com/.extraheader',
+			GIT_CONFIG_VALUE_0: `AUTHORIZATION: basic ${auth}`,
+		},
+	});
+}
+
 function remoteHead(branch) {
-	const line = git(['ls-remote', 'origin', `refs/heads/${branch}`]);
+	const line = remoteGit(['ls-remote', 'origin', `refs/heads/${branch}`]);
 	return line.split(/\s+/)[0] || '';
+}
+
+function fetchCommit(sha) {
+	remoteGit(['fetch', '--quiet', 'origin', sha]);
+	return git(['rev-parse', 'FETCH_HEAD']);
+}
+
+// Run on the checked out fix, without the token.
+function checkScope(targetRef) {
+	const env = { ...process.env, BASE_REF: targetRef };
+	delete env.GH_TOKEN;
+
+	execFileSync(process.execPath, [SCOPE_CHECK], { stdio: 'inherit', env });
 }
 
 /**
@@ -45,9 +84,10 @@ function remoteHead(branch) {
  * @param {Object[]} options.matrix  The planned fixes.
  * @param {string}   options.dataDir Where the agent and verify records are.
  * @param {number}   options.verifyRepeat
+ * @param {string}   [options.targetRef]
  * @return {Object[]} Each fix with its outcome; verified ones carry their branch and SHA.
  */
-function readOutcomes({ matrix, dataDir, verifyRepeat }) {
+function readOutcomes({ matrix, dataDir, verifyRepeat, targetRef = 'main' }) {
 	return matrix.map((fix) => {
 		const agent = readJson(
 			path.join(dataDir, `agent-${fix.index}.json`),
@@ -58,27 +98,52 @@ function readOutcomes({ matrix, dataDir, verifyRepeat }) {
 			null,
 		);
 
-		return {
+		const outcome = {
 			testName: fix.testName,
-			branch: agent?.branch || '',
+			branch: fix.branch,
 			verifiedSha: verify?.sha || '',
 			resultText: agent?.resultText || '',
-			...describeFixOutcome({ agent, verify, verifyRepeat }),
+			...describeFixOutcome({ agent, verify, verifyRepeat, targetRef }),
 		};
+
+		if (
+			'verified' === outcome.status &&
+			(agent?.branch !== fix.branch ||
+				verify?.branch !== fix.branch ||
+				!FULL_SHA.test(outcome.verifiedSha))
+		) {
+			return {
+				...outcome,
+				status: 'not-fixed',
+				note: "Not fixed: the fix's records do not match the branch the healer planned, so it was left out.",
+			};
+		}
+
+		return outcome;
 	});
 }
 
-function mergeVerifiedFixes(outcomes, { combinedBranch }) {
-	git(['config', 'user.name', BOT_NAME]);
-	git(['config', 'user.email', BOT_EMAIL]);
-	git(['checkout', '-B', combinedBranch, 'origin/main']);
+function mergeVerifiedFixes(
+	outcomes,
+	{
+		combinedBranch,
+		targetRef = 'main',
+		runGit = git,
+		getRemoteHead = remoteHead,
+		fetch = fetchCommit,
+		scopeCheck = checkScope,
+	},
+) {
+	runGit(['config', 'user.name', BOT_NAME]);
+	runGit(['config', 'user.email', BOT_EMAIL]);
+	runGit(['checkout', '-B', combinedBranch, `origin/${targetRef}`]);
 
 	return outcomes.map((outcome) => {
 		if ('verified' !== outcome.status) {
 			return outcome;
 		}
 
-		const head = remoteHead(outcome.branch);
+		const head = getRemoteHead(outcome.branch);
 		if (!head || head !== outcome.verifiedSha) {
 			return {
 				...outcome,
@@ -87,12 +152,33 @@ function mergeVerifiedFixes(outcomes, { combinedBranch }) {
 			};
 		}
 
-		git(['fetch', '--quiet', 'origin', outcome.branch]);
+		if (fetch(outcome.verifiedSha) !== outcome.verifiedSha) {
+			return {
+				...outcome,
+				status: 'not-fixed',
+				note: `Not fixed: fetching \`${outcome.branch}\` did not return the verified commit, so it was left out.`,
+			};
+		}
+
+		runGit(['checkout', '--quiet', '--detach', outcome.verifiedSha]);
 
 		try {
-			git(['merge', '--no-ff', '--no-edit', 'FETCH_HEAD']);
+			scopeCheck(targetRef);
 		} catch {
-			git(['merge', '--abort']);
+			runGit(['checkout', '--quiet', combinedBranch]);
+			return {
+				...outcome,
+				status: 'not-fixed',
+				note: `Not fixed: the fix on \`${outcome.branch}\` changes files the healer may not touch.`,
+			};
+		}
+
+		runGit(['checkout', '--quiet', combinedBranch]);
+
+		try {
+			runGit(['merge', '--no-ff', '--no-edit', outcome.verifiedSha]);
+		} catch {
+			runGit(['merge', '--abort']);
 			return {
 				...outcome,
 				status: 'not-fixed',
@@ -127,19 +213,21 @@ function main() {
 	const repo = env.GITHUB_REPOSITORY;
 	const combinedBranch = `heal/pr-${env.PR_NUMBER}-${env.GITHUB_RUN_ID}`;
 	const verifyRepeat = Number(env.VERIFY_REPEAT);
+	const targetRef = env.TARGET_REF || 'main';
 
 	let outcomes = readOutcomes({
 		matrix: JSON.parse(env.FIX_MATRIX || '[]'),
 		dataDir: env.HEALER_DATA_DIR,
 		verifyRepeat,
+		targetRef,
 	});
 
-	outcomes = mergeVerifiedFixes(outcomes, { combinedBranch });
+	outcomes = mergeVerifiedFixes(outcomes, { combinedBranch, targetRef });
 	const merged = outcomes.filter((outcome) => 'merged' === outcome.status);
 	let prUrl = '';
 
 	if (merged.length) {
-		git(['push', 'origin', `HEAD:refs/heads/${combinedBranch}`]);
+		remoteGit(['push', 'origin', `HEAD:refs/heads/${combinedBranch}`]);
 		ensureLabel(repo, env.FIX_LABEL);
 
 		prUrl = gh([
@@ -148,7 +236,7 @@ function main() {
 			'--repo',
 			repo,
 			'--base',
-			'main',
+			targetRef,
 			'--head',
 			combinedBranch,
 			'--title',
@@ -160,6 +248,7 @@ function main() {
 				sourceRunUrl: env.SOURCE_RUN_URL,
 				healerRunUrl: env.HEALER_RUN_URL,
 				verifyRepeat,
+				targetRef,
 				jiraUrl: `https://elementor.atlassian.net/browse/${env.JIRA_KEY}`,
 			}),
 			'--label',
@@ -185,7 +274,7 @@ function main() {
 
 		for (const outcome of merged) {
 			try {
-				git(['push', 'origin', '--delete', outcome.branch]);
+				remoteGit(['push', 'origin', '--delete', outcome.branch]);
 			} catch {
 				console.log(`::warning::Could not delete ${outcome.branch}.`);
 			}
@@ -223,4 +312,4 @@ if (require.main === module) {
 	}
 }
 
-module.exports = { readOutcomes };
+module.exports = { mergeVerifiedFixes, readOutcomes };

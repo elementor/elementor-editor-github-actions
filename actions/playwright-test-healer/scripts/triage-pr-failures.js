@@ -401,6 +401,14 @@ function trimLine(text) {
 		: line;
 }
 
+// A token counts only as a whole word: "form" must not match "transform".
+function containsToken(text, token) {
+	const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+	return new RegExp(`(?<![A-Za-z0-9_-])${escaped}(?![A-Za-z0-9_-])`).test(
+		text,
+	);
+}
+
 function findTokenEvidence(tokens, changedFiles) {
 	const evidence = [];
 
@@ -417,7 +425,7 @@ function findTokenEvidence(tokens, changedFiles) {
 
 		for (const line of parsePatch(file.patch)) {
 			const token = tokens.find((candidate) =>
-				line.text.includes(candidate),
+				containsToken(line.text, candidate),
 			);
 
 			if (token) {
