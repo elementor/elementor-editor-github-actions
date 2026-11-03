@@ -1,0 +1,9 @@
+{
+	"name": "@elementor/release-beta-lock",
+	"author": "Elementor Team",
+	"license": "GPL-3.0-or-later",
+	"private": true,
+	"scripts": {
+		"test": "bash release-beta-lock.test.sh"
+	}
+}
