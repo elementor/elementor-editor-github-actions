@@ -1,0 +1,185 @@
+name: Build Allure report
+description: >-
+    Download merged Playwright Allure result artifacts, optionally preprocess them,
+    generate an Allure HTML report, upload it as a workflow artifact, and publish to GCS.
+
+inputs:
+    results-pattern:
+        description: Glob pattern passed to actions/download-artifact (e.g. allure-results-*)
+        required: true
+    preprocess-command:
+        description: Shell command run after download when non-empty (e.g. node path/to/script.js ./allure-results)
+        required: false
+        default: ''
+    categories-file:
+        description: When set, copied to allure-results/categories.json before generate
+        required: false
+        default: ''
+    gcs-upload:
+        description: When true, authenticate to GCP and upload the report to Cloud Storage
+        required: false
+        default: 'true'
+    gcs-bucket:
+        description: GCS bucket name (without gs://)
+        required: false
+        default: ''
+    gcs-dest:
+        description: Object prefix inside the bucket; use main to restore and merge history from main/history first
+        required: false
+        default: ''
+    gcp-project-number:
+        description: GCP project number for Workload Identity Federation
+        required: false
+        default: ''
+    gcp-project-id:
+        description: GCP project ID for the GitHub Actions service account
+        required: false
+        default: ''
+    report-url-base:
+        description: Base URL for the published report (no trailing slash), used in the job summary link
+        required: false
+        default: ''
+    artifact-name:
+        description: Name of the uploaded Allure report workflow artifact
+        required: false
+        default: allure-report
+    allure-version:
+        description: allure-commandline version for npx generate
+        required: false
+        default: '2.41.0'
+    fail-on-upload-error:
+        description: When true, fail the job if GCS upload fails; when false, continue-on-error on upload
+        required: false
+        default: 'false'
+
+outputs:
+    report-dir:
+        description: Path to the generated Allure HTML report directory
+        value: ${{ steps.build.outputs.report_dir }}
+    uploaded:
+        description: true when the report was uploaded to GCS successfully
+        value: ${{ steps.gcs.outputs.uploaded }}
+
+runs:
+    using: composite
+    steps:
+        - name: Download Allure results
+          uses: actions/download-artifact@v8
+          with:
+              pattern: ${{ inputs.results-pattern }}
+              path: allure-results
+              merge-multiple: true
+
+        - name: Install Node.js
+          uses: actions/setup-node@v6
+          with:
+              node-version: 24.15.0
+              package-manager-cache: false
+
+        - name: GCP Authentication
+          if: inputs.gcs-upload == 'true'
+          uses: google-github-actions/auth@v2
+          with:
+              workload_identity_provider: 'projects/${{ inputs.gcp-project-number }}/locations/global/workloadIdentityPools/prod-pool/providers/github-provider'
+              service_account: 'github-actions-sa@${{ inputs.gcp-project-id }}.iam.gserviceaccount.com'
+
+        - name: Install gcloud CLI
+          if: inputs.gcs-upload == 'true' && inputs.gcs-dest == 'main'
+          uses: google-github-actions/setup-gcloud@v3
+
+        - name: Download previous report for main branch
+          if: inputs.gcs-upload == 'true' && inputs.gcs-dest == 'main'
+          shell: bash
+          env:
+              GCS_BUCKET: ${{ inputs.gcs-bucket }}
+          run: |
+              mkdir -p previous-report
+              echo "Copying main/history trend data"
+              gsutil -m cp -r "gs://${GCS_BUCKET}/main/history" "previous-report/" || echo "No previous report history found, skipping."
+
+        - name: Copy history for main branch
+          if: inputs.gcs-upload == 'true' && inputs.gcs-dest == 'main'
+          shell: bash
+          run: |
+              if [ -d "previous-report/history" ]; then
+                  mkdir -p allure-results/history
+                  cp -r previous-report/history/* allure-results/history/
+              fi
+
+        - name: Copy Allure categories config
+          if: inputs.categories-file != ''
+          shell: bash
+          env:
+              CATEGORIES_FILE: ${{ inputs.categories-file }}
+          run: |
+              if [ -d "./allure-results" ]; then
+                  cp "${CATEGORIES_FILE}" allure-results/categories.json
+              fi
+
+        - name: Build test report
+          id: build
+          shell: bash
+          env:
+              PREPROCESS_COMMAND: ${{ inputs.preprocess-command }}
+              ALLURE_VERSION: ${{ inputs.allure-version }}
+          run: |
+              echo "report_dir=allure-report" >> "$GITHUB_OUTPUT"
+
+              if [ -d "./allure-results" ] && [ -n "$(find ./allure-results -type f 2>/dev/null | head -1)" ]; then
+                  if [ -n "${PREPROCESS_COMMAND}" ]; then
+                      bash -c "${PREPROCESS_COMMAND}"
+                  fi
+                  npx --yes "allure-commandline@${ALLURE_VERSION}" generate --clean allure-results -o allure-report || mkdir -p allure-report
+              else
+                  echo "No allure-results found. Creating empty report directory."
+                  mkdir -p allure-report
+              fi
+
+        - name: Upload generated Allure report
+          uses: actions/upload-artifact@v7
+          with:
+              name: ${{ inputs.artifact-name }}
+              path: allure-report
+              if-no-files-found: ignore
+              retention-days: 1
+
+        - name: Upload Allure report to GCP bucket
+          id: gcs_upload
+          if: inputs.gcs-upload == 'true' && hashFiles('allure-report/**') != ''
+          uses: google-github-actions/upload-cloud-storage@v3
+          continue-on-error: ${{ inputs.fail-on-upload-error != 'true' }}
+          with:
+              path: allure-report/
+              destination: ${{ inputs.gcs-bucket }}/${{ inputs.gcs-dest }}
+              parent: false
+              glob: '**'
+
+        - name: Record GCS upload status
+          id: gcs
+          if: always()
+          shell: bash
+          env:
+              OUTCOME: ${{ steps.gcs_upload.outcome }}
+          run: |
+              if [ "${OUTCOME}" = "success" ]; then
+                  echo "uploaded=true" >> "$GITHUB_OUTPUT"
+              else
+                  echo "uploaded=false" >> "$GITHUB_OUTPUT"
+              fi
+
+        - name: Add Allure report link to summary
+          if: always() && inputs.gcs-upload == 'true'
+          shell: bash
+          env:
+              REPORT_URL_BASE: ${{ inputs.report-url-base }}
+              GCS_DEST: ${{ inputs.gcs-dest }}
+              UPLOADED: ${{ steps.gcs.outputs.uploaded }}
+          run: |
+              echo "" >> "$GITHUB_STEP_SUMMARY"
+              if [ "${UPLOADED}" = "true" ] && [ -n "${REPORT_URL_BASE}" ] && [ -n "${GCS_DEST}" ]; then
+                  base="${REPORT_URL_BASE%/}"
+                  echo "[View Allure Report](${base}/${GCS_DEST}/)" >> "$GITHUB_STEP_SUMMARY"
+              else
+                  echo "Allure report GCS upload was skipped or failed." >> "$GITHUB_STEP_SUMMARY"
+              fi
+              echo "" >> "$GITHUB_STEP_SUMMARY"
