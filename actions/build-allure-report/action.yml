@@ -158,8 +158,10 @@ runs:
           id: gcs
           if: always()
           shell: bash
+          env:
+              OUTCOME: ${{ steps.gcs_upload.outcome }}
           run: |
-              if [ "${{ steps.gcs_upload.outcome }}" = "success" ]; then
+              if [ "${OUTCOME}" = "success" ]; then
                   echo "uploaded=true" >> "$GITHUB_OUTPUT"
               else
                   echo "uploaded=false" >> "$GITHUB_OUTPUT"
