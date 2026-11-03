@@ -3,6 +3,13 @@
 	"displayName": "Elementor Core",
 	"evidenceWorkflows": ["playwright.yml"],
 	"evidenceEvents": ["schedule"],
+	"prWorkflow": "pr.yml",
+	"moduleRoots": [
+		"modules",
+		"app/modules",
+		"packages/packages/core",
+		"packages/packages/libs"
+	],
 	"artifactRunPrefixes": [],
 	"artifactSuffixes": ["-chromium", "-firefox", "-webkit"],
 	"maxShardArtifactsPerRun": 30,

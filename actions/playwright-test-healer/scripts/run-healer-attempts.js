@@ -368,9 +368,11 @@ module.exports = {
 	SCOPE_FILE,
 	SCOPE_TEST,
 	assertTestsRan,
+	collectSpecs,
 	parseTestFile,
 	requiredFixRepeat,
 	summarizeReport,
 	testProcessEnv,
+	testStatus,
 	unreproducedFixRepeat,
 };
