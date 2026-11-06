@@ -387,10 +387,13 @@ if (require.main === module) {
 	}
 }
 
+// collect-pr-failures.js also uses these, so a change here affects the PR healer.
 module.exports = {
 	flattenAllureFailures,
 	hasTraceInDirectory,
 	matchResultDirectories,
+	readHardFailureSource,
+	readResultDirs,
 	selectHealCandidate,
 	shardIndexForMatchedDirs,
 };
