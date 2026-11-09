@@ -1,0 +1,45 @@
+name: Force Push Beta To Stable
+description: >-
+    Replaces release/stable with the tip of release/beta using a force push with lease,
+    and reports the PRs in release/stable that are not in release/beta (commits whose patch
+    is already in release/beta are skipped). The list goes to the job summary and the outputs.
+    The caller must check out the repository with fetch-depth 0 and a token that may
+    force push to the target branch.
+
+inputs:
+    dry-run:
+        description: When "true", only report the PRs and do not push
+        required: false
+        default: 'true'
+    source-branch:
+        description: Branch whose tip replaces the target branch
+        required: false
+        default: release/beta
+    target-branch:
+        description: Branch that is overwritten
+        required: false
+        default: release/stable
+
+outputs:
+    count:
+        description: Number of commits in the target branch that are not in the source branch
+        value: ${{ steps.force-push.outputs.count }}
+    prs:
+        description: JSON array of the PR numbers in the target branch that are not in the source branch
+        value: ${{ steps.force-push.outputs.prs }}
+    rollback-sha:
+        description: Target branch SHA before the push
+        value: ${{ steps.force-push.outputs.rollback-sha }}
+
+runs:
+    using: composite
+    steps:
+        - name: Force push and report target-only PRs
+          id: force-push
+          shell: bash
+          env:
+              DRY_RUN: ${{ inputs.dry-run }}
+              SOURCE_BRANCH: ${{ inputs.source-branch }}
+              TARGET_BRANCH: ${{ inputs.target-branch }}
+              ACTION_PATH: ${{ github.action_path }}
+          run: bash "$ACTION_PATH/force-push-beta-to-stable.sh"
