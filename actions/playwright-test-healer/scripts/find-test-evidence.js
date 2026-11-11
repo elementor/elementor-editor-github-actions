@@ -48,6 +48,11 @@ function isShardArtifact(artifact) {
 /**
  * Trace-backed evidence beats log-only evidence, because the healer skill
  * can replay a trace but can only read an `error-context.md`.
+ * 
+ * When choosing between evidence from different attempts, prefer:
+ * 1. Evidence with traces over log-only evidence
+ * 2. Evidence from later attempts (more recent failures)
+ * 3. Earlier shard indices (arbitrary tiebreaker)
  */
 function pickBestEvidence(candidates) {
 	const usable = (candidates || []).filter(
@@ -59,9 +64,17 @@ function pickBestEvidence(candidates) {
 	}
 
 	const sorted = [...usable].sort((a, b) => {
+		// Prefer trace-backed evidence
 		if (a.hasTrace !== b.hasTrace) {
 			return a.hasTrace ? -1 : 1;
 		}
+		// Prefer later attempts (more recent)
+		const attemptA = a.attempt || 1;
+		const attemptB = b.attempt || 1;
+		if (attemptA !== attemptB) {
+			return attemptB - attemptA;
+		}
+		// Tiebreaker: shard index
 		return String(a.shardIndex).localeCompare(String(b.shardIndex));
 	});
 
@@ -72,21 +85,32 @@ function pickBestEvidence(candidates) {
  * Groups already-discovered result directories by the shard artifact they
  * came from, so the shard index travels with the evidence. Verification
  * needs it to re-run the test the way that shard ran it.
+ * 
+ * When a run has been re-run, directories from different attempts of the
+ * same artifact name are kept separate, annotated with their attempt number.
  */
 function buildEvidenceCandidates(testName, resultDirs) {
-	const byArtifact = new Map();
+	// Key by artifact name + attempt to keep attempts separate
+	const byArtifactAndAttempt = new Map();
 
 	for (const dir of resultDirs || []) {
 		const artifactName = dir.artifactName || '';
-		if (!byArtifact.has(artifactName)) {
-			byArtifact.set(artifactName, []);
+		const attempt = dir.attempt || 1;
+		const key = `${artifactName}::attempt-${attempt}`;
+		
+		if (!byArtifactAndAttempt.has(key)) {
+			byArtifactAndAttempt.set(key, {
+				artifactName,
+				attempt,
+				dirs: [],
+			});
 		}
-		byArtifact.get(artifactName).push(dir);
+		byArtifactAndAttempt.get(key).dirs.push(dir);
 	}
 
 	const candidates = [];
 
-	for (const [artifactName, dirs] of byArtifact) {
+	for (const { artifactName, attempt, dirs } of byArtifactAndAttempt.values()) {
 		const matched = matchResultDirectories(testName, dirs);
 
 		if (matched.length === 0) {
@@ -95,6 +119,7 @@ function buildEvidenceCandidates(testName, resultDirs) {
 
 		candidates.push({
 			artifactName,
+			attempt,
 			shardIndex: shardIndexFromArtifactName(artifactName),
 			matchedDirs: matched.map((dir) => dir.dirName),
 			hasTrace: matched.some((dir) => dir.hasTrace),
@@ -127,16 +152,8 @@ function pickShardArtifacts(artifacts, profile = loadProfile()) {
 }
 
 function listShardArtifacts(repo, runId, profile) {
-	const artifacts = gh([
-		'api',
-		`repos/${repo}/actions/runs/${runId}/artifacts?per_page=100`,
-		'--paginate',
-		'--jq',
-		'.artifacts[] | tojson',
-	])
-		.split('\n')
-		.filter(Boolean)
-		.map((line) => JSON.parse(line));
+	const { listArtifactsAcrossAttempts } = require('./run-attempts');
+	const artifacts = listArtifactsAcrossAttempts(repo, runId);
 	return pickShardArtifacts(artifacts, profile);
 }
 
@@ -236,29 +253,23 @@ function listRecentRunIds(repo, profile) {
 /**
  * Reads one shard artifact's directory names without keeping the download:
  * only the layout matters here, and trace zips are large.
+ * 
+ * @param {string} repo - Repository in "owner/repo" format
+ * @param {object} artifact - Artifact metadata with {id, name, attempt}
+ * @returns {Array<{dirName: string, artifactName: string, attempt: number, hasTrace: boolean}>}
  */
-function readArtifactResultDirs(repo, runId, artifactName) {
+function readArtifactResultDirs(repo, artifact) {
+	const { downloadArtifactById } = require('./run-attempts');
 	const downloadDir = fs.mkdtempSync(
 		path.join(os.tmpdir(), 'heal-evidence-'),
 	);
 
 	try {
-		execFileSync(
-			'gh',
-			[
-				'run',
-				'download',
-				String(runId),
-				'--repo',
-				repo,
-				'-n',
-				artifactName,
-				'-D',
-				downloadDir,
-			],
-			{ stdio: 'inherit' },
+		downloadArtifactById(repo, artifact.id, downloadDir);
+	} catch (error) {
+		console.log(
+			`::warning::Could not download artifact ${artifact.name} (attempt ${artifact.attempt}, id ${artifact.id}): ${error.message}`,
 		);
-	} catch {
 		fs.rmSync(downloadDir, { recursive: true, force: true });
 		return [];
 	}
@@ -269,7 +280,8 @@ function readArtifactResultDirs(repo, runId, artifactName) {
 			.filter((entry) => entry.isDirectory())
 			.map((entry) => ({
 				dirName: entry.name,
-				artifactName,
+				artifactName: artifact.name,
+				attempt: artifact.attempt,
 				hasTrace: hasTraceInDirectory(
 					path.join(downloadDir, entry.name),
 				),
@@ -288,8 +300,30 @@ function findEvidenceInRun(repo, runId, testName, profile) {
 
 	const resultDirs = [];
 
+	// Group artifacts by name to identify duplicates across attempts
+	const artifactsByName = new Map();
 	for (const artifact of artifacts) {
-		resultDirs.push(...readArtifactResultDirs(repo, runId, artifact.name));
+		if (!artifactsByName.has(artifact.name)) {
+			artifactsByName.set(artifact.name, []);
+		}
+		artifactsByName.get(artifact.name).push(artifact);
+	}
+
+	// For each artifact name, try latest attempt first, then earlier ones
+	for (const [name, versions] of artifactsByName) {
+		const sorted = [...versions].sort((a, b) => b.attempt - a.attempt);
+		
+		for (const artifact of sorted) {
+			const dirs = readArtifactResultDirs(repo, artifact);
+			resultDirs.push(...dirs);
+			
+			// If we found evidence for this test in this artifact, we can stop
+			// checking earlier attempts of this same artifact name
+			const evidence = findEvidenceInResultDirs(testName, dirs);
+			if (evidence) {
+				break;
+			}
+		}
 	}
 
 	const evidence = findEvidenceInResultDirs(testName, resultDirs);

@@ -68,9 +68,17 @@ function listFailedJobIds(repo, runId) {
 }
 
 function collectHardFailureTitles(repo, runId) {
+	const { listFailedJobsAcrossAttempts } = require('./run-attempts');
 	const titles = new Set();
 
-	for (const jobId of listFailedJobIds(repo, runId)) {
+	// Collect failures from all attempts of the run, not just the latest
+	const failedJobs = listFailedJobsAcrossAttempts(repo, runId);
+
+	console.log(
+		`Collecting hard failures from ${failedJobs.length} failed job(s) across ${Math.max(...failedJobs.map((j) => j.attempt), 1)} attempt(s)`,
+	);
+
+	for (const { attempt, jobId } of failedJobs) {
 		const log = fetchJobLog(repo, jobId);
 
 		for (const title of parseHardFailureTitles(log)) {
