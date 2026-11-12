@@ -298,6 +298,23 @@ function findEvidenceInRun(repo, runId, testName, profile) {
 		return null;
 	}
 
+	// Determine which attempts this test actually failed in by checking job logs
+	const {
+		collectHardFailuresWithAttempts,
+	} = require('./collect-log-hard-failures');
+	const failuresByTest = collectHardFailuresWithAttempts(repo, runId);
+	const failedAttempts = failuresByTest.get(testName) || [];
+
+	if (failedAttempts.length > 0) {
+		console.log(
+			`Test "${testName}" failed in attempt(s): ${failedAttempts.join(', ')}`,
+		);
+	} else {
+		console.log(
+			`::warning::Test "${testName}" not found in job logs; will check all attempts' artifacts`,
+		);
+	}
+
 	const resultDirs = [];
 
 	// Group artifacts by name to identify duplicates across attempts
@@ -309,18 +326,31 @@ function findEvidenceInRun(repo, runId, testName, profile) {
 		artifactsByName.get(artifact.name).push(artifact);
 	}
 
-	// For each artifact name, try latest attempt first, then earlier ones
+	// For each artifact name, prioritize attempts where the test failed
 	for (const [name, versions] of artifactsByName) {
-		const sorted = [...versions].sort((a, b) => b.attempt - a.attempt);
-		
+		// Sort: failed attempts first (latest first), then other attempts (latest first)
+		const sorted = [...versions].sort((a, b) => {
+			const aFailed = failedAttempts.includes(a.attempt);
+			const bFailed = failedAttempts.includes(b.attempt);
+
+			if (aFailed && !bFailed) return -1;
+			if (!aFailed && bFailed) return 1;
+
+			// Both failed or both didn't fail: prefer later attempt
+			return b.attempt - a.attempt;
+		});
+
 		for (const artifact of sorted) {
 			const dirs = readArtifactResultDirs(repo, artifact);
 			resultDirs.push(...dirs);
-			
+
 			// If we found evidence for this test in this artifact, we can stop
-			// checking earlier attempts of this same artifact name
+			// checking other attempts of this same artifact name
 			const evidence = findEvidenceInResultDirs(testName, dirs);
 			if (evidence) {
+				console.log(
+					`Found evidence in attempt ${artifact.attempt} artifact "${artifact.name}"`,
+				);
 				break;
 			}
 		}

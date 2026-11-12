@@ -89,6 +89,38 @@ function collectHardFailureTitles(repo, runId) {
 	return [...titles];
 }
 
+/**
+ * Collects hard failures with the attempt numbers they failed in.
+ * Returns a map of test title -> array of attempt numbers where it failed.
+ */
+function collectHardFailuresWithAttempts(repo, runId) {
+	const { listFailedJobsAcrossAttempts } = require('./run-attempts');
+	const failuresByTest = new Map();
+
+	const failedJobs = listFailedJobsAcrossAttempts(repo, runId);
+
+	console.log(
+		`Collecting hard failures with attempts from ${failedJobs.length} failed job(s) across ${Math.max(...failedJobs.map((j) => j.attempt), 1)} attempt(s)`,
+	);
+
+	for (const { attempt, jobId } of failedJobs) {
+		const log = fetchJobLog(repo, jobId);
+		const titles = parseHardFailureTitles(log);
+
+		for (const title of titles) {
+			if (!failuresByTest.has(title)) {
+				failuresByTest.set(title, []);
+			}
+			const attempts = failuresByTest.get(title);
+			if (!attempts.includes(attempt)) {
+				attempts.push(attempt);
+			}
+		}
+	}
+
+	return failuresByTest;
+}
+
 function main() {
 	const repo = process.env.GITHUB_REPOSITORY;
 	const runId = process.env.SOURCE_RUN_ID;
@@ -116,4 +148,8 @@ if (require.main === module) {
 	}
 }
 
-module.exports = { DEFAULT_HARD_FAILURES_PATH };
+module.exports = {
+	DEFAULT_HARD_FAILURES_PATH,
+	collectHardFailuresWithAttempts,
+	parseHardFailureTitles,
+};
