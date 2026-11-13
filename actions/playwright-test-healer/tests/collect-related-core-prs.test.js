@@ -13,9 +13,7 @@ describe('extractHints', () => {
 				'Search Result Visibility',
 				'modules-search-search-layo-feb35-ch-Search-Result-Visibility',
 			),
-		).toEqual(
-			expect.arrayContaining(['search', 'result', 'visibility']),
-		);
+		).toEqual(expect.arrayContaining(['search', 'result', 'visibility']));
 		expect(
 			extractHints(
 				'Search Result Visibility',
@@ -95,35 +93,59 @@ describe('formatRelatedCorePrs', () => {
 });
 
 describe('collectRelatedCorePrs', () => {
+	it('rejects a non-SHA Core ref before calling GitHub', () => {
+		expect(() =>
+			collectRelatedCorePrs({
+				coreSha: 'main; curl evil',
+				api: () => {
+					throw new Error('should not call GitHub');
+				},
+			}),
+		).toThrow(/Invalid Core SHA/);
+	});
+
+	it('rejects a malformed Core repository name', () => {
+		expect(() =>
+			collectRelatedCorePrs({
+				coreRepo: '../etc/passwd',
+				api: () => {
+					throw new Error('should not call GitHub');
+				},
+			}),
+		).toThrow(/Invalid repository/);
+	});
+
 	it('walks commit history, attaches files, and prefers hint matches', () => {
 		const api = (args) => {
 			const path = args[1] || '';
 
 			if (path.includes('/commits?sha=')) {
 				return JSON.stringify([
-					{ sha: 'aaa' },
-					{ sha: 'bbb' },
+					{ sha: 'aaaaaaaaaaaa' },
+					{ sha: 'bbbbbbbbbbbb' },
 				]);
 			}
 
-			if (path.includes('/commits/aaa/pulls')) {
+			if (path.includes('/commits/aaaaaaaaaaaa/pulls')) {
 				return JSON.stringify([
 					{
 						number: 10,
 						title: 'Docs only',
-						html_url: 'https://github.com/elementor/elementor/pull/10',
+						html_url:
+							'https://github.com/elementor/elementor/pull/10',
 						merged_at: '2026-03-01T00:00:00Z',
 						state: 'closed',
 					},
 				]);
 			}
 
-			if (path.includes('/commits/bbb/pulls')) {
+			if (path.includes('/commits/bbbbbbbbbbbb/pulls')) {
 				return JSON.stringify([
 					{
 						number: 11,
 						title: 'Search empty state',
-						html_url: 'https://github.com/elementor/elementor/pull/11',
+						html_url:
+							'https://github.com/elementor/elementor/pull/11',
 						merged_at: '2026-03-02T00:00:00Z',
 						state: 'closed',
 					},

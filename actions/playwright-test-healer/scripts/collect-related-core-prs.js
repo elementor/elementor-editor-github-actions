@@ -19,6 +19,49 @@ const MAX_FILES_PER_PR = 8;
 const MAX_TITLE_LENGTH = 120;
 const MIN_HINT_LENGTH = 4;
 const LOOKBACK_DAYS = 14;
+const COMMIT_SHA = /^[0-9a-f]{7,40}$/i;
+const REPO_NAME = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
+const BRANCH_NAME = /^[A-Za-z0-9._/-]+$/;
+
+/**
+ * Env and workflow inputs reach this script as strings. Reject anything that
+ * is not a commit SHA / owner/repo / branch before it is interpolated into a
+ * `gh api` path.
+ */
+function assertCommitSha(sha, label = 'commit SHA') {
+	const value = String(sha || '');
+	if (!COMMIT_SHA.test(value)) {
+		throw new Error(`Invalid ${label}: expected a git SHA.`);
+	}
+	return value.toLowerCase();
+}
+
+function assertRepoName(repo, label = 'repository') {
+	const value = String(repo || '');
+	if (!REPO_NAME.test(value)) {
+		throw new Error(`Invalid ${label}: expected owner/name.`);
+	}
+	return value;
+}
+
+function assertBranchName(branch, label = 'branch') {
+	const value = String(branch || '');
+	if (!value) {
+		return '';
+	}
+	if (!BRANCH_NAME.test(value) || value.includes('..')) {
+		throw new Error(`Invalid ${label}: expected a git ref name.`);
+	}
+	return value;
+}
+
+function assertPullNumber(number) {
+	const value = Number(number);
+	if (!Number.isInteger(value) || value <= 0) {
+		throw new Error('Invalid pull request number.');
+	}
+	return value;
+}
 
 /**
  * Path segments that are Playwright artifact noise, not product modules.
@@ -40,7 +83,9 @@ const DIR_NOISE = new Set([
 ]);
 
 function oneLine(text) {
-	return String(text || '').replace(/\s+/g, ' ').trim();
+	return String(text || '')
+		.replace(/\s+/g, ' ')
+		.trim();
 }
 
 function truncate(text, max) {
@@ -72,7 +117,8 @@ function scorePr(pr, hints) {
 		return 0;
 	}
 
-	const haystack = `${pr.title || ''} ${(pr.files || []).join(' ')}`.toLowerCase();
+	const haystack =
+		`${pr.title || ''} ${(pr.files || []).join(' ')}`.toLowerCase();
 	return hints.reduce(
 		(score, hint) => score + (haystack.includes(hint) ? 1 : 0),
 		0,
@@ -80,19 +126,23 @@ function scorePr(pr, hints) {
 }
 
 function listCommits(repo, sha, { api = gh } = {}) {
+	const safeRepo = assertRepoName(repo);
+	const safeSha = assertCommitSha(sha);
 	return JSON.parse(
 		api([
 			'api',
-			`repos/${repo}/commits?sha=${encodeURIComponent(sha)}&per_page=${MAX_COMMITS}`,
+			`repos/${safeRepo}/commits?sha=${encodeURIComponent(safeSha)}&per_page=${MAX_COMMITS}`,
 		]),
 	);
 }
 
 function listPullsForCommit(repo, sha, { api = gh } = {}) {
+	const safeRepo = assertRepoName(repo);
+	const safeSha = assertCommitSha(sha);
 	return JSON.parse(
 		api([
 			'api',
-			`repos/${repo}/commits/${encodeURIComponent(sha)}/pulls`,
+			`repos/${safeRepo}/commits/${encodeURIComponent(safeSha)}/pulls`,
 			'-H',
 			'Accept: application/vnd.github+json',
 		]),
@@ -100,10 +150,12 @@ function listPullsForCommit(repo, sha, { api = gh } = {}) {
 }
 
 function listPullFiles(repo, number, { api = gh } = {}) {
+	const safeRepo = assertRepoName(repo);
+	const safeNumber = assertPullNumber(number);
 	const files = JSON.parse(
 		api([
 			'api',
-			`repos/${repo}/pulls/${number}/files?per_page=${MAX_FILES_PER_PR}`,
+			`repos/${safeRepo}/pulls/${safeNumber}/files?per_page=${MAX_FILES_PER_PR}`,
 		]),
 	);
 	return (files || []).map((file) => file.filename).filter(Boolean);
@@ -120,7 +172,8 @@ function lookbackDate(days = LOOKBACK_DAYS) {
  * default branch. Prefer the SHA-based history when available.
  */
 function listRecentMergedPulls(repo, { api = gh, days = LOOKBACK_DAYS } = {}) {
-	const query = `repo:${repo} is:pr is:merged merged:>=${lookbackDate(days)}`;
+	const safeRepo = assertRepoName(repo);
+	const query = `repo:${safeRepo} is:pr is:merged merged:>=${lookbackDate(days)}`;
 	const result = JSON.parse(
 		api([
 			'api',
@@ -253,10 +306,13 @@ function collectRelatedCorePrs({
 	api = gh,
 	includeFiles = true,
 } = {}) {
+	const safeRepo = assertRepoName(coreRepo || DEFAULT_CORE_REPO);
+	const safeBranch = assertBranchName(coreBranch);
+	const safeSha = coreSha ? assertCommitSha(coreSha, 'Core SHA') : '';
 	const hints = extractHints(testName, matchedDirs);
-	let prs = coreSha
-		? uniqueMergedPullsFromHistory(coreRepo, coreSha, { api })
-		: listRecentMergedPulls(coreRepo, { api });
+	let prs = safeSha
+		? uniqueMergedPullsFromHistory(safeRepo, safeSha, { api })
+		: listRecentMergedPulls(safeRepo, { api });
 
 	if (!prs.length) {
 		return '';
@@ -264,12 +320,17 @@ function collectRelatedCorePrs({
 
 	prs = pickRelatedPrs(prs, hints);
 	if (includeFiles) {
-		prs = attachFiles(coreRepo, prs, { api });
+		prs = attachFiles(safeRepo, prs, { api });
 		// Re-pick after files land so path hints can promote a better match.
 		prs = pickRelatedPrs(prs, hints);
 	}
 
-	return formatRelatedCorePrs({ prs, coreSha, coreRepo, coreBranch });
+	return formatRelatedCorePrs({
+		prs,
+		coreSha: safeSha,
+		coreRepo: safeRepo,
+		coreBranch: safeBranch,
+	});
 }
 
 function main() {
