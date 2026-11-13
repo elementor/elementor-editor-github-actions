@@ -38,6 +38,21 @@ After Phase 3, decide which of these it is — before changing anything:
 
 Most candidates are races, and a race is never fixed by accepting a new screenshot, skipping, or weakening an assertion. But do not force every candidate into that box: a wait-based fix for baseline drift verifies green and hides a real rendering difference, which is worse than doing nothing.
 
+## Related Core changes (Pro only)
+
+When the Repository notes say you are healing **Elementor Pro**, the evidence run paired Pro with a specific Core SHA. The proper fix is sometimes not a Pro test change — it is recognising that Core behaviour changed (or broke).
+
+Before classifying the cause:
+
+1. Read any **Related Core merges** / Evidence Core section in the prompt.
+2. Explore recently merged PRs in `elementor/elementor` around that Core SHA that touch the same feature or module the failing test covers (Core may be attached as a read-only second repo; `gh` works too).
+3. If a Core merge intentionally changed the behaviour the test asserts on:
+   - Broken or incomplete Core behaviour (crash, exception overlay, 5xx, clearly wrong settled UI that Core just shipped) → **product-bug escalate**. Do not paper over with a wait.
+   - Deliberate UI / copy / structure change with a stable, fully rendered actual → **baseline-drift hand off**.
+4. Only treat it as a race when the failure still looks like unsettled UI **and** no related Core merge explains the new settled state.
+
+You still may only change `tests/playwright/` in Pro. Knowing Core context decides whether a test "fix" is the wrong answer. Never push to Core.
+
 **Locator timeouts.** Apply Phase 2's rule first: a locator that never resolved usually means the element does not exist in that DOM state, and a wait will not help. If the element does exist there and the request behind it already returned 200 — live search, loop template, iframe preview not yet painted — that is the race: wait for the locator the test already expects. An empty preview after a 200 is a race, not a product bug.
 
 **Screenshot failures** (`toHaveScreenshot` / `toMatchSnapshot`, `*-actual.*` / `*-diff.*`): open the `*-diff.*` and compare every retry's `*-actual.*`.

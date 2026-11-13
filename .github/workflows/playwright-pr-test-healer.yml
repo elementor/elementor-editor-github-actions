@@ -688,12 +688,27 @@ jobs:
               with:
                   node-version: ${{ env.HEALER_NODE_VERSION }}
 
+            # Pro: resolve the Core SHA the PR evidence run paired, so the
+            # agent can explore merged Core PRs. Soft-fail — missing Core
+            # context must not block a flaky fix.
+            - name: Resolve Core paired with the evidence run
+              id: core
+              if: inputs.product == 'pro'
+              continue-on-error: true
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  GITHUB_REPOSITORY: ${{ github.repository }}
+                  SOURCE_RUN_ID: ${{ needs.collect.outputs.source_run_id }}
+                  REQUESTED_BASE_REF: ${{ needs.resolve-input.outputs.target_ref }}
+              run: node "$HEALER_DIR/scripts/resolve-evidence-builds.js"
+
             - name: Dispatch
               id: dispatch
               continue-on-error: true
               env:
                   CURSOR_API_KEY: ${{ secrets.CURSOR_APIKEY }}
                   GITHUB_REPOSITORY: ${{ github.repository }}
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
                   HEAL_TEST_NAME: ${{ matrix.fix.testName }}
                   HEAL_RUN_URL: ${{ needs.collect.outputs.source_run_url }}
                   HEAL_BRANCH_NAME: ${{ matrix.fix.branch }}
@@ -702,6 +717,8 @@ jobs:
                   HEAL_STARTING_REF: ${{ needs.resolve-input.outputs.target_ref }}
                   HEAL_ATTEMPT: '1'
                   HEAL_MAX_ATTEMPTS: '1'
+                  HEAL_CORE_SHA: ${{ steps.core.outputs.core_sha }}
+                  HEAL_CORE_BRANCH: ${{ steps.core.outputs.core_branch || steps.core.outputs.core_clone_ref }}
                   HEAL_CONTEXT: >-
                       This test failed on pull request ${{ needs.resolve-input.outputs.pr_url }}, in the evidence run above, then passed
                       ${{ matrix.fix.passed }} of ${{ matrix.fix.runs }} re-runs on that PR's build with no change, so the PR healer judged

@@ -1,9 +1,15 @@
 const {
 	buildPrompt,
+	buildRepos,
 	dispatchRetryDelayMs,
 	isRetryableDispatchStatus,
 	readHealerSkills,
+	resolveRelatedCorePrs,
 } = require('../scripts/dispatch-cloud-agent');
+const { loadProfile } = require('../scripts/profile');
+
+const pro = loadProfile('pro');
+const core = loadProfile('core');
 
 const input = {
 	testName: 'Search Result Visibility',
@@ -13,6 +19,7 @@ const input = {
 	matchedDirs: 'modules-search-search-layo-feb35-ch-Search-Result-Visibility',
 	startingRef: 'main',
 	skills: [],
+	profile: pro,
 };
 
 describe('buildPrompt with untrusted evidence', () => {
@@ -134,6 +141,113 @@ describe('buildPrompt', () => {
 		);
 		expect(prompt).toContain('Do NOT open a pull request');
 		expect(prompt).toContain('Only commit files under tests/playwright/');
+	});
+
+	it('for Pro, names the evidence Core SHA and injects related merges', () => {
+		const prompt = buildPrompt({
+			...input,
+			coreSha: '0123456789abcdef0123456789abcdef01234567',
+			coreBranch: 'main',
+			relatedCorePrs:
+				'Related Core merges (near evidence Core 0123456789ab on main).\n- #99 "Change search widget empty state"',
+		});
+
+		expect(prompt).toContain('Evidence Core: 0123456789ab on main');
+		expect(prompt).toContain('Related Core merges');
+		expect(prompt).toContain('#99');
+		expect(prompt).toContain('elementor/elementor');
+		expect(prompt).toContain(
+			'do not paper over a Core behaviour change with a wait',
+		);
+		expect(prompt).toContain('Related Core:');
+	});
+
+	it('omits Core context when healing Core itself', () => {
+		const prompt = buildPrompt({
+			...input,
+			profile: core,
+			coreSha: '0123456789abcdef0123456789abcdef01234567',
+			relatedCorePrs: 'Related Core merges should not appear',
+		});
+
+		expect(prompt).not.toContain('Evidence Core:');
+		expect(prompt).not.toContain('Related Core merges should not appear');
+		expect(prompt).not.toContain('Related Core:');
+	});
+});
+
+describe('buildRepos', () => {
+	it('attaches Core as a second read-only repo when healing Pro', () => {
+		expect(
+			buildRepos({
+				repository: 'elementor/elementor-pro',
+				startingRef: 'main',
+				profile: pro,
+				coreBranch: 'release/3.30',
+			}),
+		).toEqual([
+			{
+				url: 'https://github.com/elementor/elementor-pro',
+				startingRef: 'main',
+			},
+			{
+				url: 'https://github.com/elementor/elementor',
+				startingRef: 'release/3.30',
+			},
+		]);
+	});
+
+	it('does not attach a companion repo when healing Core', () => {
+		expect(
+			buildRepos({
+				repository: 'elementor/elementor',
+				startingRef: 'main',
+				profile: core,
+			}),
+		).toEqual([
+			{
+				url: 'https://github.com/elementor/elementor',
+				startingRef: 'main',
+			},
+		]);
+	});
+});
+
+describe('resolveRelatedCorePrs', () => {
+	it('prefers a prefetched section over calling GitHub', () => {
+		expect(
+			resolveRelatedCorePrs({
+				profile: pro,
+				prefetched: 'Related Core merges (prefetched)',
+				collect: () => {
+					throw new Error('should not collect');
+				},
+			}),
+		).toBe('Related Core merges (prefetched)');
+	});
+
+	it('skips collection for Core product', () => {
+		expect(
+			resolveRelatedCorePrs({
+				profile: core,
+				coreSha: 'abc',
+				collect: () => {
+					throw new Error('should not collect');
+				},
+			}),
+		).toBe('');
+	});
+
+	it('soft-fails when collection throws', () => {
+		expect(
+			resolveRelatedCorePrs({
+				profile: pro,
+				coreSha: 'abc',
+				collect: () => {
+					throw new Error('boom');
+				},
+			}),
+		).toBe('');
 	});
 });
 
