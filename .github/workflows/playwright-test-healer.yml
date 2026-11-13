@@ -612,11 +612,15 @@ jobs:
                     process.stdout.write('branch_name=' + buildHealBranchName(process.env.TEST_NAME, process.env.RUN_ID) + '\n');
                   " >> "$GITHUB_OUTPUT"
 
+            # Pro evidence is paired with a Core SHA. Pass it so the agent can
+            # explore merged Core PRs and tell intentional Core behaviour
+            # changes from races before rewriting a Pro test.
             - name: Dispatch
               id: dispatch
               env:
                   CURSOR_API_KEY: ${{ secrets.CURSOR_APIKEY }}
                   GITHUB_REPOSITORY: ${{ github.repository }}
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
                   HEAL_TEST_NAME: ${{ needs.find-candidate.outputs.test_name }}
                   HEAL_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ needs.find-candidate.outputs.source_run_id }}
                   HEAL_BRANCH_NAME: ${{ steps.branch.outputs.branch_name }}
@@ -627,6 +631,8 @@ jobs:
                   HEAL_MAX_ATTEMPTS: ${{ needs.resolve-input.outputs.max_fix_attempts }}
                   HEAL_PREVIOUS_BRANCH: ${{ needs.resolve-input.outputs.previous_branch }}
                   HEAL_PREVIOUS_RUN_ID: ${{ needs.resolve-input.outputs.previous_run_id }}
+                  HEAL_CORE_SHA: ${{ needs.find-candidate.outputs.core_sha }}
+                  HEAL_CORE_BRANCH: ${{ needs.find-candidate.outputs.core_branch || needs.find-candidate.outputs.core_clone_ref }}
               run: node "$HEALER_DIR/scripts/dispatch-cloud-agent.js"
 
     wait-for-agent:

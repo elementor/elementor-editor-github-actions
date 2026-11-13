@@ -1,6 +1,7 @@
 {
 	"product": "pro",
 	"displayName": "Elementor Pro",
+	"relatedCoreRepo": "elementor/elementor",
 	"evidenceWorkflows": ["playwright-custom-core.yml"],
 	"evidenceEvents": ["schedule", "workflow_dispatch", "push"],
 	"prWorkflow": "pr.yml",
@@ -37,6 +38,7 @@
 	"agent": {
 		"evidence": "Failed Playwright jobs upload `test-results/` as `playwright-test-results-{shardIndex}` — job `Playwright - {shardIndex}` (custom-core) or `Nightly Full - Shard {shardIndex}` / `RC Full ... - Shard {shardIndex}`. Nightly/RC prefixes: `playwright-test-results-nightly-27`, `playwright-test-results-rc-27`. Named shards keep their suffix (`playwright-test-results-taxonomy_filter_1`).",
 		"localRun": "Follow `AGENTS.md`: Core must be built at `../elementor`, then start `npm run wp-playground` in the background. The playground stack (PHP 8.3, SQLite, latest WordPress, no Pro licence) is not the CI stack.",
-		"baselineDrift": "Drift here usually means the run paired a different Core version with Pro. `tests/playwright/assets/test-helper.ts` exports a family of helpers for baselines that legitimately differ by Core version — `expectScreenshotWithFallback`, `expectScreenshotWithFallbackByVersion`, `expectMatchSnapshotWithFallbackByVersion`, and `expectScreenshotByVersionThresholds`. Grep the area for the whole family, not one name. Do not grep for `getCoreVersion()`: many files use it to gate test logic, which is a different thing."
+		"baselineDrift": "Drift here usually means the run paired a different Core version with Pro. `tests/playwright/assets/test-helper.ts` exports a family of helpers for baselines that legitimately differ by Core version — `expectScreenshotWithFallback`, `expectScreenshotWithFallbackByVersion`, `expectMatchSnapshotWithFallbackByVersion`, and `expectScreenshotByVersionThresholds`. Grep the area for the whole family, not one name. Do not grep for `getCoreVersion()`: many files use it to gate test logic, which is a different thing.",
+		"relatedCore": "Pro evidence is paired with a Core SHA. Before classifying, read Related Core merges in the prompt and explore recently merged PRs in `elementor/elementor` that touch the failing feature. An intentional Core behaviour change is not a race: escalate as a product bug when Core looks broken, or hand off as baseline drift when the UI settled into a new deliberate state. Never push to Core; you may only change `tests/playwright/` in Pro."
 	}
 }
