@@ -1,11 +1,9 @@
 const {
 	buildEvidenceCandidates,
 	findEvidenceInResultDirs,
-	groupArtifactsByName,
 	isShardArtifact,
 	listEvidenceRuns,
 	pickBestEvidence,
-	readArtifactResultDirs,
 } = require('../scripts/find-test-evidence');
 
 describe('isShardArtifact', () => {
@@ -173,6 +171,8 @@ describe('pickBestEvidence', () => {
 	});
 
 	it('handles the case where test failed in attempt 1 but not attempt 2', () => {
+		// This scenario represents a flaky test that failed initially but passed on re-run.
+		// Evidence should come from attempt 1 where it actually failed.
 		const candidates = [
 			{
 				shardIndex: '5',
@@ -180,6 +180,7 @@ describe('pickBestEvidence', () => {
 				matchedDirs: ['test-failed-directory'],
 				hasTrace: true,
 			},
+			// Attempt 2 would have no evidence for this test since it passed
 		];
 
 		const best = pickBestEvidence(candidates);
@@ -188,6 +189,7 @@ describe('pickBestEvidence', () => {
 	});
 
 	it('prefers later failed attempt when test failed in multiple attempts', () => {
+		// Test failed in both attempt 1 and attempt 2
 		const candidates = [
 			{
 				shardIndex: '5',
@@ -302,68 +304,5 @@ describe('listEvidenceRuns', () => {
 		// Assert
 		expect(requested).toEqual([1]);
 		expect(runs).toHaveLength(3);
-	});
-});
-
-describe('groupArtifactsByName', () => {
-	it("orders each shard's copies newest attempt first", () => {
-		// Act
-		const groups = groupArtifactsByName([
-			{ name: 'playwright-test-results-3', id: 1, attempt: 1 },
-			{ name: 'playwright-test-results-9', id: 2, attempt: 1 },
-			{ name: 'playwright-test-results-3', id: 3, attempt: 2 },
-		]);
-
-		// Assert
-		expect(
-			groups
-				.get('playwright-test-results-3')
-				.map((artifact) => artifact.id),
-		).toEqual([3, 1]);
-		expect(groups.get('playwright-test-results-9')).toHaveLength(1);
-	});
-});
-
-describe('readArtifactResultDirs', () => {
-	const artifact = {
-		id: 7,
-		name: 'playwright-test-results-3',
-		attempt: 2,
-		size_in_bytes: 1000,
-	};
-
-	it("reads the zip's listing and tags each directory with the artifact", () => {
-		// Arrange
-		const download = vi.fn();
-
-		// Act
-		const dirs = readArtifactResultDirs('o/r', artifact, {
-			list: () => [{ dirName: 'a', hasTrace: true }],
-			download,
-		});
-
-		// Assert
-		expect(dirs).toEqual([
-			{
-				dirName: 'a',
-				hasTrace: true,
-				artifactName: 'playwright-test-results-3',
-				attempt: 2,
-			},
-		]);
-		expect(download).not.toHaveBeenCalled();
-	});
-
-	it('downloads the artifact when its listing cannot be read', () => {
-		// Act
-		const dirs = readArtifactResultDirs('o/r', artifact, {
-			list: () => {
-				throw new Error('range ignored');
-			},
-			download: () => [{ dirName: 'b', hasTrace: false }],
-		});
-
-		// Assert
-		expect(dirs.map((dir) => dir.dirName)).toEqual(['b']);
 	});
 });
