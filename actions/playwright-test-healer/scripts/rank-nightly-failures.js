@@ -24,6 +24,7 @@ const PROJECT_SUFFIX = /-(?:chromium|firefox|webkit)$/;
 const TRUNCATION_HASH = /-[0-9a-f]{5}-/g;
 const KIND_HARD = 'hard';
 const KIND_FLAKY = 'flaky';
+const MAX_CANDIDATES_LIMIT = 9;
 
 /**
  * Lowercases and hyphenates a string the same way Playwright slugs test
@@ -246,9 +247,17 @@ function scoreCandidate(matchedDirs) {
 }
 
 /**
- * Picks the first test in `tests` that has evidence and is not skipped.
+ * Picks up to `limit` tests from `tests` that have evidence and are not
+ * skipped, best first.
  */
-function pickFromTests({ tests, kind, resultDirs, skipSources, profile }) {
+function pickFromTests({
+	tests,
+	kind,
+	limit,
+	resultDirs,
+	skipSources,
+	profile,
+}) {
 	const eligible = tests
 		.map((test) => {
 			const matchedDirs = matchResultDirectories(test.name, resultDirs);
@@ -271,7 +280,7 @@ function pickFromTests({ tests, kind, resultDirs, skipSources, profile }) {
 
 	if (eligible.length === 0) {
 		return {
-			candidate: null,
+			candidates: [],
 			reason: 'no-artifact-evidence',
 			skippedCandidates: [],
 		};
@@ -286,24 +295,28 @@ function pickFromTests({ tests, kind, resultDirs, skipSources, profile }) {
 			a.testName.localeCompare(b.testName),
 	);
 
+	const candidates = [];
 	const skippedCandidates = [];
-	const candidate = eligible.find((test) => {
+
+	for (const test of eligible) {
+		if (candidates.length >= limit) {
+			break;
+		}
+
 		const skip = findCandidateSkip(test, skipSources, profile);
 
 		if (skip) {
 			skippedCandidates.push({ testName: test.testName, ...skip });
+		} else {
+			candidates.push(test);
 		}
+	}
 
-		return !skip;
-	});
-
-	return candidate
-		? { candidate, reason: null, skippedCandidates }
-		: {
-				candidate: null,
-				reason: 'all-candidates-skipped',
-				skippedCandidates,
-			};
+	return {
+		candidates,
+		reason: candidates.length ? null : 'all-candidates-skipped',
+		skippedCandidates,
+	};
 }
 
 function readFlakyTests({ allureSuitesJson, flakyTests }) {
@@ -323,9 +336,10 @@ function readFlakyTests({ allureSuitesJson, flakyTests }) {
 }
 
 /**
- * Picks exactly one nightly test to hand to the healer agent: a hard failure
- * when there is one to heal, and otherwise, when `healFlaky` is on, a flaky
- * test that passed only on a retry.
+ * Picks up to `maxCandidates` nightly tests to hand to the healer agent: hard
+ * failures when any can be healed, and otherwise, when `healFlaky` is on,
+ * flaky tests that passed only on a retry. The two are not mixed, so a night
+ * with hard failures never spends a slot on a flake.
  *
  * Eligibility floor: a test with zero matching result directories is never
  * selected — there is no log/trace evidence to investigate from, so
@@ -337,15 +351,20 @@ function readFlakyTests({ allureSuitesJson, flakyTests }) {
  * When neither list yields a candidate, the reason reported is the hard
  * failures', which is what the summary and Slack messages explain.
  */
-function selectHealCandidate({
+function selectHealCandidates({
 	allureSuitesJson,
 	hardFailureNames,
 	flakyTests,
 	healFlaky = true,
+	maxCandidates = 1,
 	resultDirs,
 	skipSources,
 	profile = loadProfile(),
 }) {
+	const limit = Math.min(
+		MAX_CANDIDATES_LIMIT,
+		Math.max(1, Number(maxCandidates) || 1),
+	);
 	const hardFailures = hardFailureNames
 		? hardFailureNames.map((name) => ({ name }))
 		: flattenAllureFailures(allureSuitesJson);
@@ -356,17 +375,18 @@ function selectHealCandidate({
 			? pickFromTests({
 					tests: hardFailures,
 					kind: KIND_HARD,
+					limit,
 					resultDirs,
 					skipSources,
 					profile,
 				})
 			: {
-					candidate: null,
+					candidates: [],
 					reason: 'no-hard-failures',
 					skippedCandidates: [],
 				};
 
-	if (hard.candidate || !healFlaky) {
+	if (hard.candidates.length > 0 || !healFlaky) {
 		return { ...hard, rankedFailures };
 	}
 
@@ -380,6 +400,7 @@ function selectHealCandidate({
 	const flakyPick = pickFromTests({
 		tests: flaky,
 		kind: KIND_FLAKY,
+		limit,
 		resultDirs,
 		skipSources,
 		profile,
@@ -389,17 +410,26 @@ function selectHealCandidate({
 		...flakyPick.skippedCandidates,
 	];
 
-	if (!flakyPick.candidate) {
-		return { ...hard, rankedFailures, rankedFlaky, skippedCandidates };
-	}
+	return flakyPick.candidates.length > 0
+		? {
+				candidates: flakyPick.candidates,
+				reason: null,
+				rankedFailures,
+				rankedFlaky,
+				skippedCandidates,
+			}
+		: { ...hard, rankedFailures, rankedFlaky, skippedCandidates };
+}
 
-	return {
-		candidate: flakyPick.candidate,
-		reason: null,
-		rankedFailures,
-		rankedFlaky,
-		skippedCandidates,
-	};
+/**
+ * The single best candidate, as `selectHealCandidates` with a limit of one.
+ */
+function selectHealCandidate(options) {
+	const { candidates, ...rest } = selectHealCandidates({
+		...options,
+		maxCandidates: 1,
+	});
+	return { candidate: candidates[0] || null, ...rest };
 }
 
 const DEFAULT_ALLURE_SUITES_PATH = 'allure-report/data/suites.json';
@@ -492,13 +522,20 @@ function main(args) {
 		),
 		baseRef: process.env.HEALER_BASE_REF || '',
 	};
-	const result = selectHealCandidate({ ...source, resultDirs, skipSources });
+	const { candidates, ...result } = selectHealCandidates({
+		...source,
+		resultDirs,
+		skipSources,
+		maxCandidates: process.env.MAX_TESTS_PER_NIGHT || 1,
+	});
 
-	console.log(JSON.stringify(result, null, 2));
+	console.log(JSON.stringify({ candidates, ...result }, null, 2));
 
 	setOutput('skipped_candidates', JSON.stringify(result.skippedCandidates));
 
-	if (!result.candidate) {
+	const [candidate, ...extraCandidates] = candidates;
+
+	if (!candidate) {
 		setOutput('has_candidate', 'false');
 		setOutput('reason', result.reason);
 		setOutput('ranked_failures', JSON.stringify(result.rankedFailures));
@@ -506,12 +543,17 @@ function main(args) {
 	}
 
 	setOutput('has_candidate', 'true');
-	setOutput('candidate_kind', result.candidate.kind);
-	setOutput('candidate_retries', String(result.candidate.retries || ''));
-	setOutput('test_name', result.candidate.testName);
-	setOutput('shard_index', result.candidate.shardIndex);
-	setOutput('matched_dirs', result.candidate.matchedDirs.join(','));
-	setOutput('has_trace', String(result.candidate.hasTrace));
+	setOutput('candidate_kind', candidate.kind);
+	setOutput('candidate_retries', String(candidate.retries || ''));
+	setOutput('test_name', candidate.testName);
+	setOutput('shard_index', candidate.shardIndex);
+	setOutput('matched_dirs', candidate.matchedDirs.join(','));
+	setOutput('has_trace', String(candidate.hasTrace));
+	// Healed by runs of their own; this run heals the first.
+	setOutput(
+		'extra_candidates',
+		JSON.stringify(extraCandidates.map((test) => test.testName)),
+	);
 }
 
 if (require.main === module) {
@@ -536,5 +578,6 @@ module.exports = {
 	readResultDirs,
 	readResultDirsSource,
 	selectHealCandidate,
+	selectHealCandidates,
 	shardIndexForMatchedDirs,
 };

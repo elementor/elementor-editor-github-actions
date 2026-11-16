@@ -4,8 +4,9 @@ name: Playwright Test Healer
 # their own, which owns the triggers and passes `product`. Two ways in:
 #
 #  1. Daily, unattended. The caller passes the id of its nightly Playwright
-#     run and no test name, so this ranks that run's hard failures and picks
-#     one.
+#     run and no test name, so this ranks that run's hard failures (or, on a
+#     night with none, its flaky tests) and heals up to max_tests_per_night:
+#     the first here, each other one in a run of its own.
 #
 #  2. On demand, with a test name. Give it any flaky test title and it finds
 #     a recent CI failure artifact for that test by itself, fixes it, verifies
@@ -71,6 +72,11 @@ on:
                 required: false
                 type: string
                 default: '2'
+            max_tests_per_night:
+                description: 'Auto mode only: how many tests one night heals, 1-9. The best candidate is healed by this run; each other one by a run of its own, dispatched like a retry.'
+                required: false
+                type: string
+                default: '3'
             heal_flaky:
                 description: "Auto mode only: on a night with no hard failure to heal, heal a flaky test instead — one that passed only on a retry, the one that needed the most retries first. 'false' turns this off."
                 required: false
@@ -339,7 +345,8 @@ jobs:
 
     # There is no cap on open healer PRs: a test is skipped only when it has an
     # open PR of its own, so one unmerged fix does not stop every other failure
-    # from being healed. At most one PR opens per night either way.
+    # from being healed. Each run opens at most one PR; a night opens at most
+    # max_tests_per_night.
     find-candidate:
         name: Find a test to heal
         needs: [resolve-input]
@@ -356,6 +363,7 @@ jobs:
             test_name: ${{ steps.candidate.outputs.test_name }}
             candidate_kind: ${{ steps.candidate.outputs.candidate_kind }}
             candidate_retries: ${{ steps.candidate.outputs.candidate_retries }}
+            extra_candidates: ${{ steps.candidate.outputs.extra_candidates }}
             shard_index: ${{ steps.candidate.outputs.shard_index }}
             matched_dirs: ${{ steps.candidate.outputs.matched_dirs }}
             source_run_id: ${{ steps.candidate.outputs.source_run_id }}
@@ -496,6 +504,7 @@ jobs:
               env:
                   HEALER_BASE_REF: ${{ steps.evidence-builds.outputs.base_ref }}
                   HEAL_FLAKY: ${{ inputs.heal_flaky }}
+                  MAX_TESTS_PER_NIGHT: ${{ inputs.max_tests_per_night }}
               run: node "$HEALER_DIR/scripts/rank-nightly-failures.js"
 
             # A person chose this test, so a recent verdict does not stop it. An
@@ -530,6 +539,7 @@ jobs:
                   AUTO_TEST_NAME: ${{ steps.rank.outputs.test_name }}
                   AUTO_CANDIDATE_KIND: ${{ steps.rank.outputs.candidate_kind }}
                   AUTO_CANDIDATE_RETRIES: ${{ steps.rank.outputs.candidate_retries }}
+                  AUTO_EXTRA_CANDIDATES: ${{ steps.rank.outputs.extra_candidates }}
                   AUTO_SHARD_INDEX: ${{ steps.rank.outputs.shard_index }}
                   AUTO_MATCHED_DIRS: ${{ steps.rank.outputs.matched_dirs }}
                   AUTO_REASON: ${{ steps.rank.outputs.reason }}
@@ -574,11 +584,74 @@ jobs:
                     set_output test_name "${AUTO_TEST_NAME}"
                     set_output candidate_kind "${AUTO_CANDIDATE_KIND:-hard}"
                     set_output candidate_retries "${AUTO_CANDIDATE_RETRIES}"
+                    set_output extra_candidates "${AUTO_EXTRA_CANDIDATES:-[]}"
                   else
                     set_output has_candidate false
                     set_output reason "${AUTO_REASON}"
                     set_output ranked_failures "${AUTO_RANKED_FAILURES}"
                   fi
+
+    # Every candidate past the first gets a run of its own, dispatched the way
+    # a retry is: test_name pinned, the same evidence run, trigger_mode auto so
+    # it keeps the nightly label, duplicate rule and draft limit. Each finds its
+    # own evidence, fixes, verifies and opens its own PR in parallel.
+    heal-extra-candidates:
+        name: Heal the other candidates
+        needs: [resolve-input, find-candidate]
+        if: >-
+            needs.resolve-input.outputs.mode == 'auto' &&
+            needs.find-candidate.outputs.has_candidate == 'true' &&
+            needs.find-candidate.outputs.extra_candidates != '' &&
+            needs.find-candidate.outputs.extra_candidates != '[]'
+        runs-on: ubuntu-22.04
+        permissions:
+            contents: read
+            actions: write
+        steps:
+            - name: Dispatch a run per candidate
+              uses: actions/github-script@v8
+              env:
+                  EXTRA_CANDIDATES: ${{ needs.find-candidate.outputs.extra_candidates }}
+                  SOURCE_RUN_ID: ${{ needs.find-candidate.outputs.source_run_id }}
+                  BASE_REF: ${{ needs.find-candidate.outputs.base_ref }}
+                  VERIFY_REPEAT: ${{ needs.resolve-input.outputs.verify_repeat }}
+                  MAX_FIX_ATTEMPTS: ${{ needs.resolve-input.outputs.max_fix_attempts }}
+                  CALLER_WORKFLOW_REF: ${{ github.workflow_ref }}
+              with:
+                  github-token: ${{ secrets.GITHUB_TOKEN }}
+                  script: |
+                      const callerWorkflow = /\/\.github\/workflows\/([^@]+)@/.exec(process.env.CALLER_WORKFLOW_REF)?.[1];
+                      if (!callerWorkflow) {
+                        core.setFailed(`Could not tell which workflow to dispatch from "${process.env.CALLER_WORKFLOW_REF}".`);
+                        return;
+                      }
+
+                      const testNames = JSON.parse(process.env.EXTRA_CANDIDATES);
+                      for (const testName of testNames) {
+                        await github.rest.actions.createWorkflowDispatch({
+                          owner: context.repo.owner,
+                          repo: context.repo.repo,
+                          workflow_id: callerWorkflow,
+                          ref: context.ref.replace('refs/heads/', ''),
+                          inputs: {
+                            test_name: testName,
+                            source_run_id: process.env.SOURCE_RUN_ID,
+                            base_ref: process.env.BASE_REF,
+                            verify_repeat: process.env.VERIFY_REPEAT,
+                            max_fix_attempts: process.env.MAX_FIX_ATTEMPTS,
+                            attempt: '1',
+                            allow_duplicate_pr: 'false',
+                            trigger_mode: 'auto',
+                          },
+                        });
+                        core.notice(`Dispatched a healer run for "${testName}".`);
+                      }
+
+                      await core.summary
+                        .addHeading('Other candidates', 3)
+                        .addList(testNames)
+                        .addRaw('Each is healed by a run of its own.')
+                        .write();
 
     dispatch-agent:
         name: Dispatch Cloud agent

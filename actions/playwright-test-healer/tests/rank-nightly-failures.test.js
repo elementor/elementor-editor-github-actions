@@ -4,6 +4,7 @@ const {
 	matchResultDirectories,
 	readResultDirsSource,
 	selectHealCandidate,
+	selectHealCandidates,
 	shardIndexForMatchedDirs,
 } = require('../scripts/rank-nightly-failures');
 
@@ -739,5 +740,144 @@ describe('readResultDirsSource', () => {
 		expect(
 			readResultDirsSource('/no/such/index.json', '/no/such/dir'),
 		).toEqual([]);
+	});
+});
+
+describe('selectHealCandidates', () => {
+	const suites = (tests) => ({ children: [{ children: tests }] });
+	const failed = (name) => ({ name, status: 'failed', retriesCount: 3 });
+	const flaky = (name, retriesCount) => ({
+		name,
+		status: 'passed',
+		retriesCount,
+	});
+	const resultDirs = [
+		'suite-alpha',
+		'suite-beta',
+		'suite-gamma',
+		'suite-delta',
+		'suite-flake-one',
+		'suite-flake-two',
+	].map((dirName) => ({ dirName, hasTrace: true }));
+
+	it('picks up to the limit, best first', () => {
+		// Arrange
+		const allureSuitesJson = suites([
+			failed('delta'),
+			failed('alpha'),
+			failed('gamma'),
+			failed('beta'),
+		]);
+
+		// Act
+		const { candidates } = selectHealCandidates({
+			allureSuitesJson,
+			resultDirs,
+			maxCandidates: 3,
+		});
+
+		// Assert
+		expect(candidates.map((test) => test.testName)).toEqual([
+			'alpha',
+			'beta',
+			'delta',
+		]);
+	});
+
+	it('does not fill free slots with flaky tests on a night with hard failures', () => {
+		// Arrange
+		const allureSuitesJson = suites([
+			failed('alpha'),
+			flaky('flake one', 2),
+		]);
+
+		// Act
+		const { candidates } = selectHealCandidates({
+			allureSuitesJson,
+			resultDirs,
+			maxCandidates: 3,
+		});
+
+		// Assert
+		expect(candidates.map((test) => test.kind)).toEqual(['hard']);
+	});
+
+	it('picks several flaky tests on a night with no hard failure', () => {
+		// Arrange
+		const allureSuitesJson = suites([
+			flaky('flake one', 1),
+			flaky('flake two', 3),
+		]);
+
+		// Act
+		const { candidates } = selectHealCandidates({
+			allureSuitesJson,
+			resultDirs,
+			maxCandidates: 3,
+		});
+
+		// Assert
+		expect(candidates.map((test) => test.testName)).toEqual([
+			'flake two',
+			'flake one',
+		]);
+	});
+
+	it('skips a test with an open PR and takes the next one', () => {
+		// Arrange
+		const allureSuitesJson = suites([
+			failed('alpha'),
+			failed('beta'),
+			failed('gamma'),
+		]);
+		const skipSources = {
+			openPrs: [
+				{
+					url: 'https://github.com/o/r/pull/1',
+					title: 'Fix it',
+					headRefName: 'heal/alpha-36539692114',
+				},
+			],
+			attempts: [],
+		};
+
+		// Act
+		const result = selectHealCandidates({
+			allureSuitesJson,
+			resultDirs,
+			skipSources,
+			maxCandidates: 2,
+		});
+
+		// Assert
+		expect(result.candidates.map((test) => test.testName)).toEqual([
+			'beta',
+			'gamma',
+		]);
+		expect(result.skippedCandidates[0].testName).toBe('alpha');
+	});
+
+	it('defaults to one candidate and never goes past nine', () => {
+		// Arrange
+		const allureSuitesJson = suites(
+			Array.from({ length: 12 }, (_, i) => failed(`alpha ${i}`)),
+		);
+		const many = Array.from({ length: 12 }, (_, i) => ({
+			dirName: `suite-alpha-${i}`,
+			hasTrace: true,
+		}));
+
+		// Act & Assert
+		expect(
+			selectHealCandidates({ allureSuitesJson, resultDirs: many })
+				.candidates,
+		).toHaveLength(1);
+		expect(
+			selectHealCandidates({
+				allureSuitesJson,
+				resultDirs: many,
+				maxCandidates: 50,
+			}).candidates,
+		).toHaveLength(9);
 	});
 });
