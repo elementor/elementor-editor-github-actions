@@ -75,7 +75,7 @@ function listRunArtifacts(repo, runId) {
 	const { listArtifactsAcrossAttempts } = require('./run-attempts');
 	// Get artifacts from all attempts, but prefer the latest when there are duplicates
 	const allArtifacts = listArtifactsAcrossAttempts(repo, runId);
-	
+
 	// For builds, we typically want the latest attempt's artifacts
 	// Group by name and take the one with the highest attempt number
 	const latestByName = new Map();
@@ -85,22 +85,22 @@ function listRunArtifacts(repo, runId) {
 			latestByName.set(artifact.name, artifact);
 		}
 	}
-	
+
 	return Array.from(latestByName.values());
 }
 
 function downloadArtifact(repo, runId, artifactName, destinationDir) {
 	fs.mkdirSync(destinationDir, { recursive: true });
-	
+
 	// When downloading by name after a re-run, gh may get confused by duplicate names.
 	// Use our helper that downloads by artifact ID instead.
 	const artifacts = listRunArtifacts(repo, runId);
 	const artifact = artifacts.find((a) => a.name === artifactName);
-	
+
 	if (!artifact) {
 		throw new Error(`Artifact ${artifactName} not found in run ${runId}`);
 	}
-	
+
 	const { downloadArtifactById } = require('./run-attempts');
 	downloadArtifactById(repo, artifact.id, destinationDir);
 }

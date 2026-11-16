@@ -12,7 +12,6 @@
 
 const fs = require('fs');
 const { fetchJobLog } = require('./fetch-job-log');
-const { gh } = require('./gh');
 
 const DEFAULT_HARD_FAILURES_PATH = 'log-hard-failures.json';
 const TIMESTAMP_PREFIX = /^\d{4}-\d{2}-\d{2}T[\d:.]+Z ?/;
@@ -54,19 +53,6 @@ function parseHardFailureTitles(log) {
 	return [...new Set(titles)];
 }
 
-function listFailedJobIds(repo, runId) {
-	return gh([
-		'api',
-		`repos/${repo}/actions/runs/${runId}/jobs`,
-		'--paginate',
-		'--jq',
-		'.jobs[] | select(.conclusion == "failure") | .id',
-	])
-		.split('\n')
-		.map((id) => id.trim())
-		.filter(Boolean);
-}
-
 function collectHardFailureTitles(repo, runId) {
 	const { listFailedJobsAcrossAttempts } = require('./run-attempts');
 	const titles = new Set();
@@ -78,7 +64,7 @@ function collectHardFailureTitles(repo, runId) {
 		`Collecting hard failures from ${failedJobs.length} failed job(s) across ${Math.max(...failedJobs.map((j) => j.attempt), 1)} attempt(s)`,
 	);
 
-	for (const { attempt, jobId } of failedJobs) {
+	for (const { jobId } of failedJobs) {
 		const log = fetchJobLog(repo, jobId);
 
 		for (const title of parseHardFailureTitles(log)) {

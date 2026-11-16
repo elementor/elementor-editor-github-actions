@@ -11,7 +11,6 @@
  * works without hunting for a run id by hand.
  */
 
-const { execFileSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -48,7 +47,7 @@ function isShardArtifact(artifact) {
 /**
  * Trace-backed evidence beats log-only evidence, because the healer skill
  * can replay a trace but can only read an `error-context.md`.
- * 
+ *
  * When choosing between evidence from different attempts, prefer:
  * 1. Evidence with traces over log-only evidence
  * 2. Evidence from later attempts (more recent failures)
@@ -85,7 +84,7 @@ function pickBestEvidence(candidates) {
  * Groups already-discovered result directories by the shard artifact they
  * came from, so the shard index travels with the evidence. Verification
  * needs it to re-run the test the way that shard ran it.
- * 
+ *
  * When a run has been re-run, directories from different attempts of the
  * same artifact name are kept separate, annotated with their attempt number.
  */
@@ -97,7 +96,7 @@ function buildEvidenceCandidates(testName, resultDirs) {
 		const artifactName = dir.artifactName || '';
 		const attempt = dir.attempt || 1;
 		const key = `${artifactName}::attempt-${attempt}`;
-		
+
 		if (!byArtifactAndAttempt.has(key)) {
 			byArtifactAndAttempt.set(key, {
 				artifactName,
@@ -110,7 +109,11 @@ function buildEvidenceCandidates(testName, resultDirs) {
 
 	const candidates = [];
 
-	for (const { artifactName, attempt, dirs } of byArtifactAndAttempt.values()) {
+	for (const {
+		artifactName,
+		attempt,
+		dirs,
+	} of byArtifactAndAttempt.values()) {
 		const matched = matchResultDirectories(testName, dirs);
 
 		if (matched.length === 0) {
@@ -253,7 +256,7 @@ function listRecentRunIds(repo, profile) {
 /**
  * Reads one shard artifact's directory names without keeping the download:
  * only the layout matters here, and trace zips are large.
- * 
+ *
  * @param {string} repo - Repository in "owner/repo" format
  * @param {object} artifact - Artifact metadata with {id, name, attempt}
  * @returns {Array<{dirName: string, artifactName: string, attempt: number, hasTrace: boolean}>}
@@ -327,7 +330,7 @@ function findEvidenceInRun(repo, runId, testName, profile) {
 	}
 
 	// For each artifact name, prioritize attempts where the test failed
-	for (const [name, versions] of artifactsByName) {
+	for (const [, versions] of artifactsByName) {
 		// Sort: failed attempts first (latest first), then other attempts (latest first)
 		const sorted = [...versions].sort((a, b) => {
 			const aFailed = failedAttempts.includes(a.attempt);

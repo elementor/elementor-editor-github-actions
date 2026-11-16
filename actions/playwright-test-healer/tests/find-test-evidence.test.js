@@ -134,7 +134,12 @@ describe('buildEvidenceCandidates', () => {
 describe('pickBestEvidence', () => {
 	it('prefers trace-backed evidence over log-only evidence', () => {
 		const best = pickBestEvidence([
-			{ shardIndex: '3', attempt: 1, matchedDirs: ['a'], hasTrace: false },
+			{
+				shardIndex: '3',
+				attempt: 1,
+				matchedDirs: ['a'],
+				hasTrace: false,
+			},
 			{ shardIndex: '9', attempt: 1, matchedDirs: ['b'], hasTrace: true },
 		]);
 
@@ -153,7 +158,12 @@ describe('pickBestEvidence', () => {
 	it('prefers trace evidence even from an earlier attempt', () => {
 		const best = pickBestEvidence([
 			{ shardIndex: '3', attempt: 1, matchedDirs: ['a'], hasTrace: true },
-			{ shardIndex: '3', attempt: 2, matchedDirs: ['a'], hasTrace: false },
+			{
+				shardIndex: '3',
+				attempt: 2,
+				matchedDirs: ['a'],
+				hasTrace: false,
+			},
 		]);
 
 		expect(best.attempt).toBe(1);
@@ -203,7 +213,12 @@ describe('pickBestEvidence', () => {
 		expect(pickBestEvidence([])).toBeNull();
 		expect(
 			pickBestEvidence([
-				{ shardIndex: '1', attempt: 1, matchedDirs: [], hasTrace: true },
+				{
+					shardIndex: '1',
+					attempt: 1,
+					matchedDirs: [],
+					hasTrace: true,
+				},
 			]),
 		).toBeNull();
 	});

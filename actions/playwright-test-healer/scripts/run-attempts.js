@@ -101,7 +101,7 @@ function listArtifactsAcrossAttempts(repo, runId) {
  * Downloads an artifact by its unique artifact ID (not by name, since
  * names can duplicate across attempts). Downloads to the specified directory.
  *
- * @param {string} repo - Repository in "owner/repo" format  
+ * @param {string} repo - Repository in "owner/repo" format
  * @param {number} artifactId - Unique artifact ID
  * @param {string} destinationDir - Where to extract the artifact
  */

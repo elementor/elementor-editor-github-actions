@@ -17,9 +17,11 @@ describe('run-attempts', () => {
 
 	it('exports the expected functions', () => {
 		const runAttempts = require('../scripts/run-attempts');
-		
+
 		expect(typeof runAttempts.getRunAttemptInfo).toBe('function');
-		expect(typeof runAttempts.listFailedJobsAcrossAttempts).toBe('function');
+		expect(typeof runAttempts.listFailedJobsAcrossAttempts).toBe(
+			'function',
+		);
 		expect(typeof runAttempts.listArtifactsAcrossAttempts).toBe('function');
 		expect(typeof runAttempts.downloadArtifactById).toBe('function');
 	});
