@@ -3,7 +3,10 @@
 const fs = require('fs');
 const path = require('path');
 
-const { DEFAULT_HARD_FAILURES_PATH } = require('./collect-log-hard-failures');
+const {
+	DEFAULT_FLAKY_TESTS_PATH,
+	DEFAULT_HARD_FAILURES_PATH,
+} = require('./collect-log-hard-failures');
 const { setOutput } = require('./github-output');
 const { findSkipReason, readSkipSources } = require('./healer-skips');
 const { loadProfile } = require('./profile');
@@ -19,6 +22,8 @@ const MIN_TRUNCATED_TAIL_LENGTH = 10;
 const RETRY_SUFFIX = /-retry\d+$/;
 const PROJECT_SUFFIX = /-(?:chromium|firefox|webkit)$/;
 const TRUNCATION_HASH = /-[0-9a-f]{5}-/g;
+const KIND_HARD = 'hard';
+const KIND_FLAKY = 'flaky';
 
 /**
  * Lowercases and hyphenates a string the same way Playwright slugs test
@@ -74,6 +79,34 @@ function flattenAllureFailures(allureSuitesJson) {
 	const failures = [];
 	collectAllureFailures(allureSuitesJson, failures);
 	return failures;
+}
+
+function collectAllureFlakies(node, flakies) {
+	if (!node) {
+		return;
+	}
+
+	if (isAllureTestNode(node)) {
+		if ('passed' === node.status && Number(node.retriesCount) > 0) {
+			flakies.push(node);
+		}
+		return;
+	}
+
+	for (const child of Array.isArray(node.children) ? node.children : []) {
+		collectAllureFlakies(child, flakies);
+	}
+}
+
+/**
+ * Tests that passed only on a retry: final status `passed`, retriesCount > 0.
+ * Allure's own `flaky` flag is not used, because it reflects the report's
+ * history rather than this run.
+ */
+function flattenAllureFlakies(allureSuitesJson) {
+	const flakies = [];
+	collectAllureFlakies(allureSuitesJson, flakies);
+	return flakies;
 }
 
 function endsWithWord(text, suffix) {
@@ -213,42 +246,16 @@ function scoreCandidate(matchedDirs) {
 }
 
 /**
- * Picks exactly one nightly hard-failure to hand to the healer agent.
- *
- * Eligibility floor: a hard failure with zero matching result directories
- * is never selected — there is no log/trace evidence to investigate from,
- * so fabricating a fix would be a guess, not a fix.
- *
- * A test with an open PR or a recent verdict is passed over for the next one,
- * so one unhealable test cannot hold the top of the list every night.
+ * Picks the first test in `tests` that has evidence and is not skipped.
  */
-function selectHealCandidate({
-	allureSuitesJson,
-	hardFailureNames,
-	resultDirs,
-	skipSources,
-	profile = loadProfile(),
-}) {
-	const hardFailures = hardFailureNames
-		? hardFailureNames.map((name) => ({ name }))
-		: flattenAllureFailures(allureSuitesJson);
-
-	if (hardFailures.length === 0) {
-		return {
-			candidate: null,
-			reason: 'no-hard-failures',
-			rankedFailures: [],
-			skippedCandidates: [],
-		};
-	}
-
-	const rankedFailures = hardFailures.map((test) => test.name);
-
-	const eligible = hardFailures
+function pickFromTests({ tests, kind, resultDirs, skipSources, profile }) {
+	const eligible = tests
 		.map((test) => {
 			const matchedDirs = matchResultDirectories(test.name, resultDirs);
 			return {
 				testName: test.name,
+				kind,
+				...(KIND_FLAKY === kind ? { retries: test.retries } : {}),
 				matchedDirs: matchedDirs.map((dir) => dir.dirName),
 				shardIndex: shardIndexForMatchedDirs(matchedDirs, profile),
 				hasTrace: matchedDirs.some((dir) => dir.hasTrace),
@@ -266,13 +273,17 @@ function selectHealCandidate({
 		return {
 			candidate: null,
 			reason: 'no-artifact-evidence',
-			rankedFailures,
 			skippedCandidates: [],
 		};
 	}
 
+	// The flakiest test first: one that needed three retries to pass is
+	// closer to failing outright than one that needed one.
 	eligible.sort(
-		(a, b) => b.score - a.score || a.testName.localeCompare(b.testName),
+		(a, b) =>
+			(b.retries || 0) - (a.retries || 0) ||
+			b.score - a.score ||
+			a.testName.localeCompare(b.testName),
 	);
 
 	const skippedCandidates = [];
@@ -286,16 +297,109 @@ function selectHealCandidate({
 		return !skip;
 	});
 
-	if (!candidate) {
-		return {
-			candidate: null,
-			reason: 'all-candidates-skipped',
-			rankedFailures,
-			skippedCandidates,
-		};
+	return candidate
+		? { candidate, reason: null, skippedCandidates }
+		: {
+				candidate: null,
+				reason: 'all-candidates-skipped',
+				skippedCandidates,
+			};
+}
+
+function readFlakyTests({ allureSuitesJson, flakyTests }) {
+	if (allureSuitesJson) {
+		return flattenAllureFlakies(allureSuitesJson).map((test) => ({
+			name: test.name,
+			retries: Number(test.retriesCount) || 0,
+		}));
 	}
 
-	return { candidate, reason: null, rankedFailures, skippedCandidates };
+	// Logs say only that a test was flaky, not on which retry it passed, so
+	// how many shards and attempts it flaked in stands in for that.
+	return (flakyTests || []).map((test) => ({
+		name: test.name,
+		retries: Number(test.flakyCount) || 1,
+	}));
+}
+
+/**
+ * Picks exactly one nightly test to hand to the healer agent: a hard failure
+ * when there is one to heal, and otherwise, when `healFlaky` is on, a flaky
+ * test that passed only on a retry.
+ *
+ * Eligibility floor: a test with zero matching result directories is never
+ * selected — there is no log/trace evidence to investigate from, so
+ * fabricating a fix would be a guess, not a fix.
+ *
+ * A test with an open PR or a recent verdict is passed over for the next one,
+ * so one unhealable test cannot hold the top of the list every night.
+ *
+ * When neither list yields a candidate, the reason reported is the hard
+ * failures', which is what the summary and Slack messages explain.
+ */
+function selectHealCandidate({
+	allureSuitesJson,
+	hardFailureNames,
+	flakyTests,
+	healFlaky = true,
+	resultDirs,
+	skipSources,
+	profile = loadProfile(),
+}) {
+	const hardFailures = hardFailureNames
+		? hardFailureNames.map((name) => ({ name }))
+		: flattenAllureFailures(allureSuitesJson);
+	const rankedFailures = hardFailures.map((test) => test.name);
+
+	const hard =
+		hardFailures.length > 0
+			? pickFromTests({
+					tests: hardFailures,
+					kind: KIND_HARD,
+					resultDirs,
+					skipSources,
+					profile,
+				})
+			: {
+					candidate: null,
+					reason: 'no-hard-failures',
+					skippedCandidates: [],
+				};
+
+	if (hard.candidate || !healFlaky) {
+		return { ...hard, rankedFailures };
+	}
+
+	const flaky = readFlakyTests({ allureSuitesJson, flakyTests });
+	const rankedFlaky = flaky.map((test) => test.name);
+
+	if (flaky.length === 0) {
+		return { ...hard, rankedFailures, rankedFlaky };
+	}
+
+	const flakyPick = pickFromTests({
+		tests: flaky,
+		kind: KIND_FLAKY,
+		resultDirs,
+		skipSources,
+		profile,
+	});
+	const skippedCandidates = [
+		...hard.skippedCandidates,
+		...flakyPick.skippedCandidates,
+	];
+
+	if (!flakyPick.candidate) {
+		return { ...hard, rankedFailures, rankedFlaky, skippedCandidates };
+	}
+
+	return {
+		candidate: flakyPick.candidate,
+		reason: null,
+		rankedFailures,
+		rankedFlaky,
+		skippedCandidates,
+	};
 }
 
 const DEFAULT_ALLURE_SUITES_PATH = 'allure-report/data/suites.json';
@@ -305,7 +409,11 @@ const DEFAULT_TEST_RESULTS_ROOT = 'test-results';
  * The Allure report is preferred while it exists. Past its 1-day retention the
  * job-log list stands in, which is what makes an older run rankable.
  */
-function readHardFailureSource(suitesPath, hardFailuresPath) {
+function readHardFailureSource(
+	suitesPath,
+	hardFailuresPath,
+	flakyTestsPath = DEFAULT_FLAKY_TESTS_PATH,
+) {
 	if (fs.existsSync(suitesPath)) {
 		console.log(`Ranking from the Allure report at ${suitesPath}`);
 		return {
@@ -317,10 +425,15 @@ function readHardFailureSource(suitesPath, hardFailuresPath) {
 		console.log(
 			`No Allure report; ranking from job logs at ${hardFailuresPath}`,
 		);
+		// Written only on a night with no hard failures in the logs.
+		const flakyTests = fs.existsSync(flakyTestsPath)
+			? JSON.parse(fs.readFileSync(flakyTestsPath, 'utf8'))
+			: [];
 		return {
 			hardFailureNames: JSON.parse(
 				fs.readFileSync(hardFailuresPath, 'utf8'),
 			),
+			flakyTests,
 		};
 	}
 
@@ -341,8 +454,14 @@ function main(args) {
 		process.env.HARD_FAILURES_PATH || DEFAULT_HARD_FAILURES_PATH;
 	const resultsRoot =
 		process.env.TEST_RESULTS_ROOT || DEFAULT_TEST_RESULTS_ROOT;
+	const flakyTestsPath =
+		process.env.FLAKY_TESTS_PATH || DEFAULT_FLAKY_TESTS_PATH;
+	const healFlaky = 'false' !== process.env.HEAL_FLAKY;
 
-	const source = readHardFailureSource(suitesPath, hardFailuresPath);
+	const source = {
+		...readHardFailureSource(suitesPath, hardFailuresPath, flakyTestsPath),
+		healFlaky,
+	};
 	const resultDirs = readResultDirs(resultsRoot);
 
 	if (args.includes('--has-eligible')) {
@@ -372,6 +491,8 @@ function main(args) {
 	}
 
 	setOutput('has_candidate', 'true');
+	setOutput('candidate_kind', result.candidate.kind);
+	setOutput('candidate_retries', String(result.candidate.retries || ''));
 	setOutput('test_name', result.candidate.testName);
 	setOutput('shard_index', result.candidate.shardIndex);
 	setOutput('matched_dirs', result.candidate.matchedDirs.join(','));
@@ -389,7 +510,10 @@ if (require.main === module) {
 
 // collect-pr-failures.js also uses these, so a change here affects the PR healer.
 module.exports = {
+	KIND_FLAKY,
+	KIND_HARD,
 	flattenAllureFailures,
+	flattenAllureFlakies,
 	hasTraceInDirectory,
 	matchResultDirectories,
 	readHardFailureSource,

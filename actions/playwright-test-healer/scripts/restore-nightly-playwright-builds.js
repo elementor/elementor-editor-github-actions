@@ -7,6 +7,11 @@ const path = require('path');
 
 const { setOutput } = require('./github-output');
 const { loadProfile } = require('./profile');
+const {
+	downloadArtifactById,
+	latestArtifactPerName,
+	listArtifactsAcrossAttempts,
+} = require('./run-attempts');
 
 const CORE_BUILD_ARTIFACT_NAME = 'elementor-core-build';
 const CORE_PLUGIN_ARTIFACT_NAME = /^elementor-\d+\.\d+\.\d+/;
@@ -71,37 +76,37 @@ function planBuildRestore(artifacts) {
 	};
 }
 
-function listRunArtifacts(repo, runId) {
-	const { listArtifactsAcrossAttempts } = require('./run-attempts');
-	// Get artifacts from all attempts, but prefer the latest when there are duplicates
-	const allArtifacts = listArtifactsAcrossAttempts(repo, runId);
+const runArtifactsCache = new Map();
 
-	// For builds, we typically want the latest attempt's artifacts
-	// Group by name and take the one with the highest attempt number
-	const latestByName = new Map();
-	for (const artifact of allArtifacts) {
-		const existing = latestByName.get(artifact.name);
-		if (!existing || artifact.attempt > existing.attempt) {
-			latestByName.set(artifact.name, artifact);
-		}
+/**
+ * A re-run evidence run has one copy of each build artifact per attempt that
+ * built it; the latest attempt's copy is the build the run last tested. Listed
+ * once per run, since every download below needs the same list.
+ */
+function listRunArtifacts(repo, runId) {
+	const key = `${repo}#${runId}`;
+
+	if (!runArtifactsCache.has(key)) {
+		runArtifactsCache.set(
+			key,
+			latestArtifactPerName(listArtifactsAcrossAttempts(repo, runId)),
+		);
 	}
 
-	return Array.from(latestByName.values());
+	return runArtifactsCache.get(key);
 }
 
+// By id, not name: `gh run download -n` cannot pick between attempts' copies.
 function downloadArtifact(repo, runId, artifactName, destinationDir) {
-	fs.mkdirSync(destinationDir, { recursive: true });
-
-	// When downloading by name after a re-run, gh may get confused by duplicate names.
-	// Use our helper that downloads by artifact ID instead.
-	const artifacts = listRunArtifacts(repo, runId);
-	const artifact = artifacts.find((a) => a.name === artifactName);
+	const artifact = listRunArtifacts(repo, runId).find(
+		(candidate) => candidate.name === artifactName,
+	);
 
 	if (!artifact) {
 		throw new Error(`Artifact ${artifactName} not found in run ${runId}`);
 	}
 
-	const { downloadArtifactById } = require('./run-attempts');
+	fs.mkdirSync(destinationDir, { recursive: true });
 	downloadArtifactById(repo, artifact.id, destinationDir);
 }
 

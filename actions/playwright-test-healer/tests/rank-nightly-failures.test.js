@@ -1,5 +1,6 @@
 const {
 	flattenAllureFailures,
+	flattenAllureFlakies,
 	matchResultDirectories,
 	selectHealCandidate,
 	shardIndexForMatchedDirs,
@@ -562,5 +563,153 @@ describe('shardIndexForMatchedDirs', () => {
 
 	it('returns an empty string when there is no evidence', () => {
 		expect(shardIndexForMatchedDirs([])).toBe('');
+	});
+});
+
+describe('flattenAllureFlakies', () => {
+	it('returns only tests that passed after at least one retry', () => {
+		// Arrange
+		const allureSuitesJson = {
+			children: [
+				{
+					children: [
+						{
+							name: 'clean pass',
+							status: 'passed',
+							retriesCount: 0,
+						},
+						{
+							name: 'hard fails',
+							status: 'failed',
+							retriesCount: 3,
+						},
+						{
+							name: 'passed on retry',
+							status: 'passed',
+							retriesCount: 2,
+						},
+					],
+				},
+			],
+		};
+
+		// Act & Assert
+		expect(
+			flattenAllureFlakies(allureSuitesJson).map((test) => test.name),
+		).toEqual(['passed on retry']);
+	});
+});
+
+describe('selectHealCandidate flaky fallback', () => {
+	const flakySuites = (tests) => ({ children: [{ children: tests }] });
+	const resultDirs = [
+		{ dirName: 'suite-one-retry', hasTrace: true },
+		{ dirName: 'suite-one-retry-retry1', hasTrace: true },
+		{ dirName: 'suite-three-retries', hasTrace: true },
+		{ dirName: 'suite-hard-failure', hasTrace: true },
+	];
+
+	it('picks the flaky test that needed the most retries when nothing failed', () => {
+		// Arrange
+		const allureSuitesJson = flakySuites([
+			{ name: 'one retry', status: 'passed', retriesCount: 1 },
+			{ name: 'three retries', status: 'passed', retriesCount: 3 },
+		]);
+
+		// Act
+		const result = selectHealCandidate({ allureSuitesJson, resultDirs });
+
+		// Assert
+		expect(result.reason).toBeNull();
+		expect(result.candidate).toMatchObject({
+			testName: 'three retries',
+			kind: 'flaky',
+			retries: 3,
+		});
+		expect(result.rankedFlaky).toEqual(['one retry', 'three retries']);
+	});
+
+	it('prefers a hard failure over any flaky test', () => {
+		// Arrange
+		const allureSuitesJson = flakySuites([
+			{ name: 'three retries', status: 'passed', retriesCount: 3 },
+			{ name: 'hard failure', status: 'failed', retriesCount: 3 },
+		]);
+
+		// Act
+		const result = selectHealCandidate({ allureSuitesJson, resultDirs });
+
+		// Assert
+		expect(result.candidate).toMatchObject({
+			testName: 'hard failure',
+			kind: 'hard',
+		});
+	});
+
+	it('falls back to a flaky test when no hard failure has evidence', () => {
+		// Arrange
+		const allureSuitesJson = flakySuites([
+			{ name: 'no evidence here', status: 'failed', retriesCount: 3 },
+			{ name: 'one retry', status: 'passed', retriesCount: 1 },
+		]);
+
+		// Act
+		const result = selectHealCandidate({ allureSuitesJson, resultDirs });
+
+		// Assert
+		expect(result.candidate.testName).toBe('one retry');
+		expect(result.rankedFailures).toEqual(['no evidence here']);
+	});
+
+	it('heals nothing on a flaky-only night when flaky healing is off', () => {
+		// Arrange
+		const allureSuitesJson = flakySuites([
+			{ name: 'three retries', status: 'passed', retriesCount: 3 },
+		]);
+
+		// Act
+		const result = selectHealCandidate({
+			allureSuitesJson,
+			resultDirs,
+			healFlaky: false,
+		});
+
+		// Assert
+		expect(result.candidate).toBeNull();
+		expect(result.reason).toBe('no-hard-failures');
+	});
+
+	it('keeps the hard-failure reason when no flaky test has evidence either', () => {
+		// Arrange
+		const allureSuitesJson = flakySuites([
+			{ name: 'unseen flake', status: 'passed', retriesCount: 2 },
+		]);
+
+		// Act
+		const result = selectHealCandidate({ allureSuitesJson, resultDirs });
+
+		// Assert
+		expect(result.candidate).toBeNull();
+		expect(result.reason).toBe('no-hard-failures');
+		expect(result.rankedFlaky).toEqual(['unseen flake']);
+	});
+
+	it('ranks log-based flaky tests by how many jobs they flaked in', () => {
+		// Act
+		const result = selectHealCandidate({
+			hardFailureNames: [],
+			flakyTests: [
+				{ name: 'one retry', flakyCount: 1 },
+				{ name: 'three retries', flakyCount: 2 },
+			],
+			resultDirs,
+		});
+
+		// Assert
+		expect(result.candidate).toMatchObject({
+			testName: 'three retries',
+			kind: 'flaky',
+			retries: 2,
+		});
 	});
 });

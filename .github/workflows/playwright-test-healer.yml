@@ -71,6 +71,11 @@ on:
                 required: false
                 type: string
                 default: '2'
+            heal_flaky:
+                description: "Auto mode only: on a night with no hard failure to heal, heal a flaky test instead — one that passed only on a retry, the one that needed the most retries first. 'false' turns this off."
+                required: false
+                type: string
+                default: 'true'
             max_unreproduced_prs:
                 description: 'Auto mode only: the most open test-healer-unreproduced draft PRs. At the limit, an unreproduced fix gets no PR or Jira task and its branch is left for manual pickup.'
                 required: false
@@ -349,6 +354,8 @@ jobs:
             skipped_candidates: ${{ steps.candidate.outputs.skipped_candidates }}
             existing_pr_url: ${{ steps.candidate.outputs.existing_pr_url }}
             test_name: ${{ steps.candidate.outputs.test_name }}
+            candidate_kind: ${{ steps.candidate.outputs.candidate_kind }}
+            candidate_retries: ${{ steps.candidate.outputs.candidate_retries }}
             shard_index: ${{ steps.candidate.outputs.shard_index }}
             matched_dirs: ${{ steps.candidate.outputs.matched_dirs }}
             source_run_id: ${{ steps.candidate.outputs.source_run_id }}
@@ -428,28 +435,18 @@ jobs:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
                   GITHUB_REPOSITORY: ${{ github.repository }}
                   SOURCE_RUN_ID: ${{ needs.resolve-input.outputs.source_run_id }}
+                  HEAL_FLAKY: ${{ inputs.heal_flaky }}
               run: node "$HEALER_DIR/scripts/collect-log-hard-failures.js"
 
+            # Every attempt's copy, by artifact id: a test that failed in attempt 1
+            # and passed on a re-run has its only evidence in attempt 1's copy.
             - name: Download per-shard failure artifacts
               if: needs.resolve-input.outputs.mode == 'auto'
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  GITHUB_REPOSITORY: ${{ github.repository }}
                   SOURCE_RUN_ID: ${{ needs.resolve-input.outputs.source_run_id }}
-              run: |
-                  set -euo pipefail
-                  mkdir -p test-results
-
-                  NAMES=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}/artifacts" --paginate \
-                    --jq '.artifacts[] | select(.expired == false) | select(.name | startswith("playwright-test-results-")) | .name' |
-                    node -e "
-                      const { filterHealableArtifactNames } = require('./' + process.env.HEALER_DIR + '/scripts/resolve-shard-command');
-                      const names = require('fs').readFileSync(0, 'utf8').split('\n').filter(Boolean);
-                      process.stdout.write(filterHealableArtifactNames(names).join('\n'));
-                    ")
-
-                  for NAME in $NAMES; do
-                    gh run download "${SOURCE_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n "$NAME" -D "test-results/$NAME" || true
-                  done
+              run: node "$HEALER_DIR/scripts/download-shard-artifacts.js"
 
             # Manual mode: the human named the test, so all that is missing is a
             # real failure artifact to investigate from. With no source_run_id this
@@ -467,6 +464,8 @@ jobs:
             - name: Check for a failure worth healing
               id: eligible
               if: needs.resolve-input.outputs.mode == 'auto'
+              env:
+                  HEAL_FLAKY: ${{ inputs.heal_flaky }}
               run: node "$HEALER_DIR/scripts/rank-nightly-failures.js" --has-eligible
 
             # Before any agent time is spent: a fix is only worth writing on the
@@ -490,11 +489,12 @@ jobs:
                   GITHUB_REPOSITORY: ${{ github.repository }}
               run: node "$HEALER_DIR/scripts/healer-skips.js"
 
-            - name: Rank hard failures and pick a candidate
+            - name: Rank failures and pick a candidate
               id: rank
               if: needs.resolve-input.outputs.mode == 'auto'
               env:
                   HEALER_BASE_REF: ${{ steps.evidence-builds.outputs.base_ref }}
+                  HEAL_FLAKY: ${{ inputs.heal_flaky }}
               run: node "$HEALER_DIR/scripts/rank-nightly-failures.js"
 
             # A person chose this test, so a recent verdict does not stop it. An
@@ -527,6 +527,8 @@ jobs:
                   REQUESTED_RUN_ID: ${{ needs.resolve-input.outputs.source_run_id }}
                   AUTO_HAS_CANDIDATE: ${{ steps.rank.outputs.has_candidate }}
                   AUTO_TEST_NAME: ${{ steps.rank.outputs.test_name }}
+                  AUTO_CANDIDATE_KIND: ${{ steps.rank.outputs.candidate_kind }}
+                  AUTO_CANDIDATE_RETRIES: ${{ steps.rank.outputs.candidate_retries }}
                   AUTO_SHARD_INDEX: ${{ steps.rank.outputs.shard_index }}
                   AUTO_MATCHED_DIRS: ${{ steps.rank.outputs.matched_dirs }}
                   AUTO_REASON: ${{ steps.rank.outputs.reason }}
@@ -569,6 +571,8 @@ jobs:
                     set_output shard_index "${AUTO_SHARD_INDEX}"
                     set_output matched_dirs "${AUTO_MATCHED_DIRS}"
                     set_output test_name "${AUTO_TEST_NAME}"
+                    set_output candidate_kind "${AUTO_CANDIDATE_KIND:-hard}"
+                    set_output candidate_retries "${AUTO_CANDIDATE_RETRIES}"
                   else
                     set_output has_candidate false
                     set_output reason "${AUTO_REASON}"
@@ -627,6 +631,8 @@ jobs:
                   HEAL_MAX_ATTEMPTS: ${{ needs.resolve-input.outputs.max_fix_attempts }}
                   HEAL_PREVIOUS_BRANCH: ${{ needs.resolve-input.outputs.previous_branch }}
                   HEAL_PREVIOUS_RUN_ID: ${{ needs.resolve-input.outputs.previous_run_id }}
+                  HEAL_CANDIDATE_KIND: ${{ needs.find-candidate.outputs.candidate_kind }}
+                  HEAL_CANDIDATE_RETRIES: ${{ needs.find-candidate.outputs.candidate_retries }}
               run: node "$HEALER_DIR/scripts/dispatch-cloud-agent.js"
 
     wait-for-agent:

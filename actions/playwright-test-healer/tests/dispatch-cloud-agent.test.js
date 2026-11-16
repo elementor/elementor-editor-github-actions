@@ -273,3 +273,28 @@ describe('buildPrompt retries', () => {
 		).not.toContain('FAILED verification');
 	});
 });
+
+describe('buildPrompt for a flaky candidate', () => {
+	it('says the test is flaky and asks for repeated runs before pushing', () => {
+		// Act
+		const prompt = buildPrompt({
+			...input,
+			candidateKind: 'flaky',
+			candidateRetries: '3',
+		});
+
+		// Assert
+		expect(prompt).toContain('Flaky test: "Search Result Visibility"');
+		expect(prompt).toContain('it passed only after 3 retries');
+		expect(prompt).toContain('--repeat-each=10 --retries=0');
+	});
+
+	it('leaves a hard failure prompt unchanged', () => {
+		// Act
+		const prompt = buildPrompt({ ...input, candidateKind: 'hard' });
+
+		// Assert
+		expect(prompt).toContain('Failing test: "Search Result Visibility"');
+		expect(prompt).not.toContain('FLAKY');
+	});
+});

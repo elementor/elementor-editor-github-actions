@@ -1,6 +1,7 @@
 const {
 	buildEvidenceCandidates,
 	findEvidenceInResultDirs,
+	groupArtifactsByName,
 	isShardArtifact,
 	listEvidenceRuns,
 	pickBestEvidence,
@@ -304,5 +305,24 @@ describe('listEvidenceRuns', () => {
 		// Assert
 		expect(requested).toEqual([1]);
 		expect(runs).toHaveLength(3);
+	});
+});
+
+describe('groupArtifactsByName', () => {
+	it("orders each shard's copies newest attempt first", () => {
+		// Act
+		const groups = groupArtifactsByName([
+			{ name: 'playwright-test-results-3', id: 1, attempt: 1 },
+			{ name: 'playwright-test-results-9', id: 2, attempt: 1 },
+			{ name: 'playwright-test-results-3', id: 3, attempt: 2 },
+		]);
+
+		// Assert
+		expect(
+			groups
+				.get('playwright-test-results-3')
+				.map((artifact) => artifact.id),
+		).toEqual([3, 1]);
+		expect(groups.get('playwright-test-results-9')).toHaveLength(1);
 	});
 });

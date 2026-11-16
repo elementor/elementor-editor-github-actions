@@ -3,143 +3,199 @@
 /**
  * Handles GitHub Actions workflow run attempts. When a run is re-run,
  * GitHub increments the attempt number but keeps the same run ID.
- * Artifacts and jobs belong to specific attempts, and failures from
+ * Jobs and artifacts belong to specific attempts, and failures from
  * earlier attempts must be considered when selecting healing candidates.
  */
+
+const { execFileSync } = require('child_process');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 
 const { gh } = require('./gh');
 
 /**
- * Returns metadata about a workflow run's attempts: the total count
- * and details for each attempt.
+ * Returns each attempt of a run with the time it started. The run's
+ * `run_attempt` is the latest attempt number; earlier attempts are read from
+ * `/attempts/{n}`, the only place their start time is recorded.
  *
  * @param {string} repo - Repository in "owner/repo" format
  * @param {string|number} runId - Workflow run ID
- * @returns {{runAttempt: number, attempts: Array<{attempt: number, jobs: Array}>}}
+ * @returns {{runAttempt: number, attempts: Array<{attempt: number, startedAt: string}>}}
  */
-function getRunAttemptInfo(repo, runId) {
-	const run = JSON.parse(
-		gh([
+function getRunAttemptInfo(repo, runId, runGh = gh) {
+	const runAttempt =
+		Number(
+			runGh([
+				'api',
+				`repos/${repo}/actions/runs/${runId}`,
+				'--jq',
+				'.run_attempt',
+			]).trim(),
+		) || 1;
+
+	const attempts = [];
+
+	for (let attempt = 1; attempt <= runAttempt; attempt++) {
+		const startedAt = runGh([
 			'api',
-			`repos/${repo}/actions/runs/${runId}`,
+			`repos/${repo}/actions/runs/${runId}/attempts/${attempt}`,
 			'--jq',
-			'{runAttempt: .run_attempt}',
-		]),
-	);
+			'.run_started_at',
+		]).trim();
 
-	// The run's run_attempt field holds the highest (latest) attempt number
-	const attemptCount = run.runAttempt || 1;
+		attempts.push({ attempt, startedAt });
+	}
 
-	return {
-		runAttempt: attemptCount,
-		attempts: Array.from({ length: attemptCount }, (_, i) => ({
-			attempt: i + 1,
-		})),
-	};
+	return { runAttempt, attempts };
 }
 
 /**
- * Lists all failed jobs across all attempts of a run.
- * Returns an array with {attempt, jobId} for each failed job.
+ * Lists the jobs of every attempt of a run whose conclusion is one of
+ * `conclusions`, each tagged with the attempt it ran in.
  *
- * @param {string} repo - Repository in "owner/repo" format
- * @param {string|number} runId - Workflow run ID
  * @returns {Array<{attempt: number, jobId: string}>}
  */
-function listFailedJobsAcrossAttempts(repo, runId) {
-	const { runAttempt } = getRunAttemptInfo(repo, runId);
-	const failedJobs = [];
+function listJobsAcrossAttempts(
+	repo,
+	runId,
+	conclusions = ['failure'],
+	runGh = gh,
+) {
+	const runAttempt =
+		Number(
+			runGh([
+				'api',
+				`repos/${repo}/actions/runs/${runId}`,
+				'--jq',
+				'.run_attempt',
+			]).trim(),
+		) || 1;
+	const filter = conclusions
+		.map((conclusion) => `.conclusion == ${JSON.stringify(conclusion)}`)
+		.join(' or ');
+	const jobs = [];
 
 	for (let attempt = 1; attempt <= runAttempt; attempt++) {
-		const jobIds = gh([
+		const jobIds = runGh([
 			'api',
-			`repos/${repo}/actions/runs/${runId}/attempts/${attempt}/jobs`,
+			`repos/${repo}/actions/runs/${runId}/attempts/${attempt}/jobs?per_page=100`,
 			'--paginate',
 			'--jq',
-			'.jobs[] | select(.conclusion == "failure") | .id',
+			`.jobs[] | select(${filter}) | .id`,
 		])
 			.split('\n')
 			.map((id) => id.trim())
 			.filter(Boolean);
 
-		failedJobs.push(
-			...jobIds.map((jobId) => ({
-				attempt,
-				jobId,
-			})),
-		);
+		jobs.push(...jobIds.map((jobId) => ({ attempt, jobId })));
 	}
 
-	return failedJobs;
+	return jobs;
+}
+
+function listFailedJobsAcrossAttempts(repo, runId, runGh = gh) {
+	return listJobsAcrossAttempts(repo, runId, ['failure'], runGh);
 }
 
 /**
- * Lists all artifacts from a run, annotated with which attempt created them.
- * The artifacts API returns artifacts from all attempts, each with a
- * workflow_run.run_attempt field.
- *
- * @param {string} repo - Repository in "owner/repo" format
- * @param {string|number} runId - Workflow run ID
- * @returns {Array<{name: string, id: number, attempt: number, expired: boolean, size_in_bytes: number}>}
+ * The artifact API does not say which attempt uploaded an artifact
+ * (`workflow_run` carries only id, repository ids, branch and sha), so an
+ * artifact belongs to the latest attempt that had started by the time it was
+ * created. Attempts of one run never overlap, which makes this exact.
  */
-function listArtifactsAcrossAttempts(repo, runId) {
-	const raw = gh([
+function assignArtifactAttempts(artifacts, attempts) {
+	const starts = attempts
+		.filter((attempt) => attempt.startedAt)
+		.map((attempt) => ({
+			attempt: attempt.attempt,
+			startedAt: Date.parse(attempt.startedAt),
+		}))
+		.sort((a, b) => a.startedAt - b.startedAt);
+
+	return artifacts.map((artifact) => {
+		const createdAt = Date.parse(artifact.created_at);
+		let attempt = 1;
+
+		for (const start of starts) {
+			if (start.startedAt <= createdAt) {
+				attempt = start.attempt;
+			}
+		}
+
+		return { ...artifact, attempt };
+	});
+}
+
+/**
+ * Lists all artifacts of a run, from every attempt, each annotated with the
+ * attempt that uploaded it.
+ *
+ * @returns {Array<{name: string, id: number, attempt: number, expired: boolean, created_at: string}>}
+ */
+function listArtifactsAcrossAttempts(repo, runId, runGh = gh) {
+	const artifacts = runGh([
 		'api',
-		`repos/${repo}/actions/runs/${runId}/artifacts`,
+		`repos/${repo}/actions/runs/${runId}/artifacts?per_page=100`,
 		'--paginate',
 		'--jq',
-		'.artifacts[] | {name, id, expired, size_in_bytes, attempt: .workflow_run.run_attempt} | tojson',
-	]);
-
-	return raw
+		'.artifacts[] | {name, id, expired, size_in_bytes, created_at} | tojson',
+	])
 		.split('\n')
 		.filter(Boolean)
 		.map((line) => JSON.parse(line));
+
+	if (artifacts.length === 0) {
+		return [];
+	}
+
+	const { attempts } = getRunAttemptInfo(repo, runId, runGh);
+	return assignArtifactAttempts(artifacts, attempts);
 }
 
 /**
- * Downloads an artifact by its unique artifact ID (not by name, since
- * names can duplicate across attempts). Downloads to the specified directory.
- *
- * @param {string} repo - Repository in "owner/repo" format
- * @param {number} artifactId - Unique artifact ID
- * @param {string} destinationDir - Where to extract the artifact
+ * Keeps one artifact per name: the one from the latest attempt.
+ */
+function latestArtifactPerName(artifacts) {
+	const latestByName = new Map();
+
+	for (const artifact of artifacts) {
+		const existing = latestByName.get(artifact.name);
+		if (!existing || artifact.attempt > existing.attempt) {
+			latestByName.set(artifact.name, artifact);
+		}
+	}
+
+	return [...latestByName.values()];
+}
+
+/**
+ * Downloads an artifact by its unique ID (names repeat across attempts, so
+ * `gh run download -n` cannot tell them apart) and extracts it.
  */
 function downloadArtifactById(repo, artifactId, destinationDir) {
-	const { execFileSync } = require('child_process');
-	const fs = require('fs');
-	const os = require('os');
-	const path = require('path');
-
-	// Download to a temp file first, then extract
 	const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'artifact-'));
 	const zipPath = path.join(tmpDir, 'artifact.zip');
 
 	try {
-		// The /zip endpoint returns the artifact content as a redirect to a download URL.
-		// We pipe the binary output directly to a file.
+		// `gh api` follows the endpoint's redirect to the blob and prints the
+		// zip body, which goes straight into the file. (`--silent` would
+		// suppress that body and leave the file empty.)
 		const fdOut = fs.openSync(zipPath, 'w');
 		try {
 			execFileSync(
 				'gh',
-				[
-					'api',
-					`repos/${repo}/actions/artifacts/${artifactId}/zip`,
-					'--silent',
-				],
-				{ stdio: ['inherit', fdOut, 'inherit'] },
+				['api', `repos/${repo}/actions/artifacts/${artifactId}/zip`],
+				{ stdio: ['ignore', fdOut, 'inherit'] },
 			);
 		} finally {
 			fs.closeSync(fdOut);
 		}
 
-		// Verify we got a zip file
-		const stat = fs.statSync(zipPath);
-		if (stat.size === 0) {
+		if (fs.statSync(zipPath).size === 0) {
 			throw new Error(`Downloaded artifact ${artifactId} is empty`);
 		}
 
-		// Extract to destination
 		fs.mkdirSync(destinationDir, { recursive: true });
 		execFileSync('unzip', ['-qo', zipPath, '-d', destinationDir], {
 			stdio: 'inherit',
@@ -150,8 +206,11 @@ function downloadArtifactById(repo, artifactId, destinationDir) {
 }
 
 module.exports = {
-	getRunAttemptInfo,
-	listFailedJobsAcrossAttempts,
-	listArtifactsAcrossAttempts,
+	assignArtifactAttempts,
 	downloadArtifactById,
+	getRunAttemptInfo,
+	latestArtifactPerName,
+	listArtifactsAcrossAttempts,
+	listFailedJobsAcrossAttempts,
+	listJobsAcrossAttempts,
 };

@@ -27,6 +27,10 @@ const {
 	isHealableShard,
 	shardIndexFromArtifactName,
 } = require('./resolve-shard-command');
+const {
+	downloadArtifactById,
+	listArtifactsAcrossAttempts,
+} = require('./run-attempts');
 
 const SHARD_ARTIFACT_PREFIX = 'playwright-test-results-';
 const MAX_RUNS_TO_SCAN = 15;
@@ -155,9 +159,10 @@ function pickShardArtifacts(artifacts, profile = loadProfile()) {
 }
 
 function listShardArtifacts(repo, runId, profile) {
-	const { listArtifactsAcrossAttempts } = require('./run-attempts');
-	const artifacts = listArtifactsAcrossAttempts(repo, runId);
-	return pickShardArtifacts(artifacts, profile);
+	return pickShardArtifacts(
+		listArtifactsAcrossAttempts(repo, runId),
+		profile,
+	);
 }
 
 /**
@@ -262,7 +267,6 @@ function listRecentRunIds(repo, profile) {
  * @returns {Array<{dirName: string, artifactName: string, attempt: number, hasTrace: boolean}>}
  */
 function readArtifactResultDirs(repo, artifact) {
-	const { downloadArtifactById } = require('./run-attempts');
 	const downloadDir = fs.mkdtempSync(
 		path.join(os.tmpdir(), 'heal-evidence-'),
 	);
@@ -294,6 +298,26 @@ function readArtifactResultDirs(repo, artifact) {
 	}
 }
 
+/**
+ * Groups a run's artifacts by name, each group newest attempt first.
+ */
+function groupArtifactsByName(artifacts) {
+	const byName = new Map();
+
+	for (const artifact of artifacts) {
+		if (!byName.has(artifact.name)) {
+			byName.set(artifact.name, []);
+		}
+		byName.get(artifact.name).push(artifact);
+	}
+
+	for (const versions of byName.values()) {
+		versions.sort((a, b) => (b.attempt || 1) - (a.attempt || 1));
+	}
+
+	return byName;
+}
+
 function findEvidenceInRun(repo, runId, testName, profile) {
 	const artifacts = listShardArtifacts(repo, runId, profile);
 
@@ -301,56 +325,19 @@ function findEvidenceInRun(repo, runId, testName, profile) {
 		return null;
 	}
 
-	// Determine which attempts this test actually failed in by checking job logs
-	const {
-		collectHardFailuresWithAttempts,
-	} = require('./collect-log-hard-failures');
-	const failuresByTest = collectHardFailuresWithAttempts(repo, runId);
-	const failedAttempts = failuresByTest.get(testName) || [];
-
-	if (failedAttempts.length > 0) {
-		console.log(
-			`Test "${testName}" failed in attempt(s): ${failedAttempts.join(', ')}`,
-		);
-	} else {
-		console.log(
-			`::warning::Test "${testName}" not found in job logs; will check all attempts' artifacts`,
-		);
-	}
-
 	const resultDirs = [];
 
-	// Group artifacts by name to identify duplicates across attempts
-	const artifactsByName = new Map();
-	for (const artifact of artifacts) {
-		if (!artifactsByName.has(artifact.name)) {
-			artifactsByName.set(artifact.name, []);
-		}
-		artifactsByName.get(artifact.name).push(artifact);
-	}
-
-	// For each artifact name, prioritize attempts where the test failed
-	for (const [, versions] of artifactsByName) {
-		// Sort: failed attempts first (latest first), then other attempts (latest first)
-		const sorted = [...versions].sort((a, b) => {
-			const aFailed = failedAttempts.includes(a.attempt);
-			const bFailed = failedAttempts.includes(b.attempt);
-
-			if (aFailed && !bFailed) return -1;
-			if (!aFailed && bFailed) return 1;
-
-			// Both failed or both didn't fail: prefer later attempt
-			return b.attempt - a.attempt;
-		});
-
-		for (const artifact of sorted) {
+	// A results artifact only holds directories for tests that failed at least
+	// once in its attempt, so a match there is a failure in that attempt and
+	// no job log needs reading to know it. Each shard's copies are tried newest
+	// attempt first, stopping at the first that has the test: a test that failed
+	// in attempt 1 and passed on the re-run is still found in attempt 1.
+	for (const versions of groupArtifactsByName(artifacts).values()) {
+		for (const artifact of versions) {
 			const dirs = readArtifactResultDirs(repo, artifact);
 			resultDirs.push(...dirs);
 
-			// If we found evidence for this test in this artifact, we can stop
-			// checking other attempts of this same artifact name
-			const evidence = findEvidenceInResultDirs(testName, dirs);
-			if (evidence) {
+			if (findEvidenceInResultDirs(testName, dirs)) {
 				console.log(
 					`Found evidence in attempt ${artifact.attempt} artifact "${artifact.name}"`,
 				);
@@ -423,6 +410,7 @@ if (require.main === module) {
 module.exports = {
 	buildEvidenceCandidates,
 	findEvidenceInResultDirs,
+	groupArtifactsByName,
 	isShardArtifact,
 	newestMainFirst,
 	pickBestEvidence,
