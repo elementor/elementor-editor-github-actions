@@ -101,17 +101,24 @@ function buildEvidenceCandidates(testName, resultDirs) {
 		if (!byArtifactAndAttempt.has(key)) {
 			byArtifactAndAttempt.set(key, {
 				artifactName,
+				artifactId: dir.artifactId || null,
 				attempt,
 				dirs: [],
 			});
 		}
-		byArtifactAndAttempt.get(key).dirs.push(dir);
+
+		const group = byArtifactAndAttempt.get(key);
+		if (!group.artifactId && dir.artifactId) {
+			group.artifactId = dir.artifactId;
+		}
+		group.dirs.push(dir);
 	}
 
 	const candidates = [];
 
 	for (const {
 		artifactName,
+		artifactId,
 		attempt,
 		dirs,
 	} of byArtifactAndAttempt.values()) {
@@ -123,6 +130,10 @@ function buildEvidenceCandidates(testName, resultDirs) {
 
 		candidates.push({
 			artifactName,
+			artifactId:
+				matched.find((dir) => dir.artifactId)?.artifactId ||
+				artifactId ||
+				null,
 			attempt,
 			shardIndex: shardIndexFromArtifactName(artifactName),
 			matchedDirs: matched.map((dir) => dir.dirName),
@@ -262,7 +273,7 @@ function listRecentRunIds(repo, profile) {
  *
  * @param {string} repo - Repository in "owner/repo" format
  * @param {object} artifact - Artifact metadata with {id, name, attempt, size_in_bytes}
- * @returns {Array<{dirName: string, artifactName: string, attempt: number, hasTrace: boolean}>}
+ * @returns {Array<{dirName: string, artifactName: string, artifactId: number, attempt: number, hasTrace: boolean}>}
  */
 function readArtifactResultDirs(repo, artifact, deps = {}) {
 	const { list = listArtifactResultDirs, download = downloadResultDirs } =
@@ -281,6 +292,7 @@ function readArtifactResultDirs(repo, artifact, deps = {}) {
 	return dirs.map((dir) => ({
 		...dir,
 		artifactName: artifact.name,
+		artifactId: artifact.id,
 		attempt: artifact.attempt,
 	}));
 }
@@ -406,6 +418,8 @@ function main() {
 	setOutput('shard_index', evidence.shardIndex);
 	setOutput('matched_dirs', evidence.matchedDirs.join(','));
 	setOutput('has_trace', String(evidence.hasTrace));
+	setOutput('evidence_attempt', String(evidence.attempt || ''));
+	setOutput('evidence_artifact_id', String(evidence.artifactId || ''));
 }
 
 if (require.main === module) {

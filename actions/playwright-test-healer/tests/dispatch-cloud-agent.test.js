@@ -103,6 +103,22 @@ describe('buildPrompt', () => {
 		expect(buildPrompt(input)).toContain('playwright-test-results-28');
 	});
 
+	it('tells the agent to download by artifact id when one was resolved', () => {
+		const prompt = buildPrompt({
+			...input,
+			evidenceArtifactId: '555',
+			evidenceAttempt: '1',
+			repository: 'elementor/elementor-pro',
+		});
+
+		expect(prompt).toContain('artifact ID 555');
+		expect(prompt).toContain('workflow attempt 1');
+		expect(prompt).toContain(
+			'gh api repos/elementor/elementor-pro/actions/artifacts/555/zip',
+		);
+		expect(prompt).toContain('gh run download -n');
+	});
+
 	it('tells the agent to find the failed shard itself when none was resolved', () => {
 		// Arrange
 		const prompt = buildPrompt({ ...input, shardIndex: '' });

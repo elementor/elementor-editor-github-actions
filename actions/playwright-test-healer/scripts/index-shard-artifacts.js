@@ -10,8 +10,9 @@
  *
  * A re-run evidence run has one copy of a shard's artifact per attempt that
  * failed, under the same name, and the copy from an earlier attempt is the
- * only evidence for a test that failed there and passed on the re-run. Copies
- * of one shard are merged: a directory has a trace if any copy's does.
+ * only evidence for a test that failed there and passed on the re-run.
+ * Attempts stay distinct so ranking can pass the matching artifact id to the
+ * agent; names alone cannot tell copies apart.
  */
 
 const fs = require('fs');
@@ -47,18 +48,22 @@ function pickShardArtifactsToIndex(artifacts, profile) {
 }
 
 /**
- * One entry per (artifact, directory), merged across attempts.
+ * One entry per (artifact name, directory, attempt). Same-name copies from
+ * different attempts stay separate so the agent can download by artifact id.
  */
 function mergeResultDirs(resultDirs) {
 	const merged = new Map();
 
-	for (const { dirName, artifactName, hasTrace } of resultDirs) {
-		const key = `${artifactName}/${dirName}`;
+	for (const dir of resultDirs) {
+		const attempt = dir.attempt || 1;
+		const key = `${dir.artifactName}/${dir.dirName}/attempt-${attempt}`;
 		const existing = merged.get(key);
 		merged.set(key, {
-			dirName,
-			artifactName,
-			hasTrace: Boolean(existing && existing.hasTrace) || hasTrace,
+			dirName: dir.dirName,
+			artifactName: dir.artifactName,
+			artifactId: dir.artifactId || existing?.artifactId || null,
+			attempt,
+			hasTrace: Boolean(existing && existing.hasTrace) || dir.hasTrace,
 		});
 	}
 

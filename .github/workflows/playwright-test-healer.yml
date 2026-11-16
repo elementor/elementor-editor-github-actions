@@ -28,7 +28,7 @@ name: Playwright Test Healer
 # workflow again, so the caller must declare these workflow_dispatch inputs
 # and forward them: test_name, source_run_id, base_ref, verify_repeat,
 # max_fix_attempts, attempt, previous_branch, previous_run_id,
-# allow_duplicate_pr and trigger_mode.
+# allow_duplicate_pr, trigger_mode, candidate_kind and candidate_retries.
 #
 # Repository variables the caller's repo can set:
 #   TEST_HEALER_ENABLED       off (default), manual, or all; see Resolve input.
@@ -117,6 +117,16 @@ on:
                 required: false
                 type: boolean
                 default: false
+            candidate_kind:
+                description: 'Set when dispatching an extra auto candidate: hard or flaky. Empty for a human-named test.'
+                required: false
+                type: string
+                default: ''
+            candidate_retries:
+                description: 'Set when dispatching an extra flaky candidate: how many retries it needed to pass.'
+                required: false
+                type: string
+                default: ''
             jira_parent_key:
                 description: 'Epic each healer PR gets its own Jira task under. The PR title falls back to this key if the task cannot be created.'
                 required: false
@@ -178,6 +188,8 @@ jobs:
             previous_run_id: ${{ steps.set.outputs.previous_run_id }}
             label: ${{ steps.set.outputs.label }}
             allow_duplicate_pr: ${{ steps.set.outputs.allow_duplicate_pr }}
+            candidate_kind: ${{ steps.set.outputs.candidate_kind }}
+            candidate_retries: ${{ steps.set.outputs.candidate_retries }}
         steps:
             - name: Check out the healer
               uses: actions/checkout@v6
@@ -206,6 +218,8 @@ jobs:
                   IN_TRIGGER_MODE: ${{ inputs.trigger_mode }}
                   IN_PREVIOUS_BRANCH: ${{ inputs.previous_branch }}
                   IN_PREVIOUS_RUN_ID: ${{ inputs.previous_run_id }}
+                  IN_CANDIDATE_KIND: ${{ inputs.candidate_kind }}
+                  IN_CANDIDATE_RETRIES: ${{ inputs.candidate_retries }}
               run: |
                   set -euo pipefail
                   source "$HEALER_DIR/scripts/github-output.sh"
@@ -325,6 +339,15 @@ jobs:
                     fi
                   done
 
+                  CANDIDATE_KIND="$(printf '%s' "${IN_CANDIDATE_KIND}" | tr '[:upper:]' '[:lower:]')"
+                  case "$CANDIDATE_KIND" in
+                    hard|flaky|'') ;;
+                    *)
+                      echo "::error::candidate_kind must be hard, flaky or empty, got '${IN_CANDIDATE_KIND}'."
+                      exit 1
+                      ;;
+                  esac
+
                   set_output attempt "$ATTEMPT"
                   set_output max_fix_attempts "$MAX_FIX_ATTEMPTS"
                   set_output enabled "$ENABLED"
@@ -340,6 +363,8 @@ jobs:
                   set_output label "$LABEL"
                   set_output allow_duplicate_pr "$ALLOW_DUPLICATE_PR"
                   set_output test_name "$TEST_NAME"
+                  set_output candidate_kind "$CANDIDATE_KIND"
+                  set_output candidate_retries "${IN_CANDIDATE_RETRIES}"
 
                   echo "Mode: $MODE; trigger: $TRIGGER${TEST_NAME:+ (test: $TEST_NAME)}${FIX_BRANCH:+; verify-only: $FIX_BRANCH}; scheduled: ${IN_SCHEDULED:-false}; switch: $SWITCH; enabled: $ENABLED"
 
@@ -366,6 +391,8 @@ jobs:
             extra_candidates: ${{ steps.candidate.outputs.extra_candidates }}
             shard_index: ${{ steps.candidate.outputs.shard_index }}
             matched_dirs: ${{ steps.candidate.outputs.matched_dirs }}
+            evidence_attempt: ${{ steps.candidate.outputs.evidence_attempt }}
+            evidence_artifact_id: ${{ steps.candidate.outputs.evidence_artifact_id }}
             source_run_id: ${{ steps.candidate.outputs.source_run_id }}
             reason: ${{ steps.candidate.outputs.reason }}
             ranked_failures: ${{ steps.candidate.outputs.ranked_failures }}
@@ -437,8 +464,11 @@ jobs:
                   gh run download "${SOURCE_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n allure-report -D allure-report
                   echo "available=true" >> "$GITHUB_OUTPUT"
 
+            # Always collect: Allure from the latest attempt marks earlier-attempt
+            # hard failures as passed, so job logs across attempts are the only
+            # record of those titles. Ranking unions them with Allure.
             - name: Collect hard failures from job logs
-              if: needs.resolve-input.outputs.mode == 'auto' && steps.allure.outputs.available != 'true'
+              if: needs.resolve-input.outputs.mode == 'auto'
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
                   GITHUB_REPOSITORY: ${{ github.repository }}
@@ -535,6 +565,8 @@ jobs:
                   MODE: ${{ needs.resolve-input.outputs.mode }}
                   REQUESTED_TEST_NAME: ${{ needs.resolve-input.outputs.test_name }}
                   REQUESTED_RUN_ID: ${{ needs.resolve-input.outputs.source_run_id }}
+                  REQUESTED_CANDIDATE_KIND: ${{ needs.resolve-input.outputs.candidate_kind }}
+                  REQUESTED_CANDIDATE_RETRIES: ${{ needs.resolve-input.outputs.candidate_retries }}
                   AUTO_HAS_CANDIDATE: ${{ steps.rank.outputs.has_candidate }}
                   AUTO_TEST_NAME: ${{ steps.rank.outputs.test_name }}
                   AUTO_CANDIDATE_KIND: ${{ steps.rank.outputs.candidate_kind }}
@@ -542,6 +574,8 @@ jobs:
                   AUTO_EXTRA_CANDIDATES: ${{ steps.rank.outputs.extra_candidates }}
                   AUTO_SHARD_INDEX: ${{ steps.rank.outputs.shard_index }}
                   AUTO_MATCHED_DIRS: ${{ steps.rank.outputs.matched_dirs }}
+                  AUTO_EVIDENCE_ATTEMPT: ${{ steps.rank.outputs.evidence_attempt }}
+                  AUTO_EVIDENCE_ARTIFACT_ID: ${{ steps.rank.outputs.evidence_artifact_id }}
                   AUTO_REASON: ${{ steps.rank.outputs.reason }}
                   AUTO_RANKED_FAILURES: ${{ steps.rank.outputs.ranked_failures }}
                   AUTO_SKIPPED_CANDIDATES: ${{ steps.rank.outputs.skipped_candidates }}
@@ -550,6 +584,8 @@ jobs:
                   MANUAL_RUN_ID: ${{ steps.manual.outputs.source_run_id }}
                   MANUAL_SHARD_INDEX: ${{ steps.manual.outputs.shard_index }}
                   MANUAL_MATCHED_DIRS: ${{ steps.manual.outputs.matched_dirs }}
+                  MANUAL_EVIDENCE_ATTEMPT: ${{ steps.manual.outputs.evidence_attempt }}
+                  MANUAL_EVIDENCE_ARTIFACT_ID: ${{ steps.manual.outputs.evidence_artifact_id }}
               run: |
                   set -euo pipefail
                   source "$HEALER_DIR/scripts/github-output.sh"
@@ -565,12 +601,16 @@ jobs:
                       set_output shard_index "${MANUAL_SHARD_INDEX}"
                       set_output matched_dirs "${MANUAL_MATCHED_DIRS}"
                       set_output source_run_id "${MANUAL_RUN_ID}"
+                      set_output evidence_attempt "${MANUAL_EVIDENCE_ATTEMPT}"
+                      set_output evidence_artifact_id "${MANUAL_EVIDENCE_ARTIFACT_ID}"
                     else
                       set_output has_candidate false
                       set_output reason no-manual-evidence
                       set_output source_run_id "${REQUESTED_RUN_ID}"
                     fi
                     set_output test_name "${REQUESTED_TEST_NAME}"
+                    set_output candidate_kind "${REQUESTED_CANDIDATE_KIND}"
+                    set_output candidate_retries "${REQUESTED_CANDIDATE_RETRIES}"
                     exit 0
                   fi
 
@@ -585,6 +625,8 @@ jobs:
                     set_output candidate_kind "${AUTO_CANDIDATE_KIND:-hard}"
                     set_output candidate_retries "${AUTO_CANDIDATE_RETRIES}"
                     set_output extra_candidates "${AUTO_EXTRA_CANDIDATES:-[]}"
+                    set_output evidence_attempt "${AUTO_EVIDENCE_ATTEMPT}"
+                    set_output evidence_artifact_id "${AUTO_EVIDENCE_ARTIFACT_ID}"
                   else
                     set_output has_candidate false
                     set_output reason "${AUTO_REASON}"
@@ -626,8 +668,13 @@ jobs:
                         return;
                       }
 
-                      const testNames = JSON.parse(process.env.EXTRA_CANDIDATES);
-                      for (const testName of testNames) {
+                      const extras = JSON.parse(process.env.EXTRA_CANDIDATES);
+                      const labels = [];
+                      for (const extra of extras) {
+                        const testName = typeof extra === 'string' ? extra : extra.testName;
+                        const kind = typeof extra === 'object' ? (extra.kind || '') : '';
+                        const retries = typeof extra === 'object' ? String(extra.retries || '') : '';
+                        labels.push(testName);
                         await github.rest.actions.createWorkflowDispatch({
                           owner: context.repo.owner,
                           repo: context.repo.repo,
@@ -642,14 +689,16 @@ jobs:
                             attempt: '1',
                             allow_duplicate_pr: 'false',
                             trigger_mode: 'auto',
+                            candidate_kind: kind,
+                            candidate_retries: retries,
                           },
                         });
-                        core.notice(`Dispatched a healer run for "${testName}".`);
+                        core.notice(`Dispatched a healer run for "${testName}"${kind ? ` (${kind})` : ''}.`);
                       }
 
                       await core.summary
                         .addHeading('Other candidates', 3)
-                        .addList(testNames)
+                        .addList(labels)
                         .addRaw('Each is healed by a run of its own.')
                         .write();
 
@@ -707,6 +756,8 @@ jobs:
                   HEAL_PREVIOUS_RUN_ID: ${{ needs.resolve-input.outputs.previous_run_id }}
                   HEAL_CANDIDATE_KIND: ${{ needs.find-candidate.outputs.candidate_kind }}
                   HEAL_CANDIDATE_RETRIES: ${{ needs.find-candidate.outputs.candidate_retries }}
+                  HEAL_EVIDENCE_ATTEMPT: ${{ needs.find-candidate.outputs.evidence_attempt }}
+                  HEAL_EVIDENCE_ARTIFACT_ID: ${{ needs.find-candidate.outputs.evidence_artifact_id }}
               run: node "$HEALER_DIR/scripts/dispatch-cloud-agent.js"
 
     wait-for-agent:

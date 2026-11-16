@@ -46,12 +46,30 @@ describe('buildEvidenceCandidates', () => {
 		).toEqual([
 			{
 				artifactName: 'playwright-test-results-taxonomy_filter_2',
+				artifactId: null,
 				attempt: 1,
 				shardIndex: 'taxonomy_filter_2',
 				matchedDirs: ['modules-loop-filter-loop-taxonomy-filter-works'],
 				hasTrace: true,
 			},
 		]);
+	});
+
+	it('carries the artifact id from the matching attempt', () => {
+		const resultDirs = [
+			{
+				dirName: 'modules-loop-filter-loop-taxonomy-filter-works',
+				artifactName: 'playwright-test-results-taxonomy_filter_2',
+				artifactId: 4242,
+				attempt: 1,
+				hasTrace: true,
+			},
+		];
+
+		expect(
+			buildEvidenceCandidates('Loop taxonomy filter works', resultDirs)[0]
+				.artifactId,
+		).toBe(4242);
 	});
 
 	it('groups matches per shard artifact rather than merging them', () => {

@@ -223,11 +223,29 @@ function readResultDirs(root) {
 }
 
 /**
+ * Trace-backed evidence first, then the later attempt — same order as
+ * find-test-evidence's pickBestEvidence, so ranking and manual agree on
+ * which copy the agent should download.
+ */
+function preferredMatchedDir(matchedDirs) {
+	if (!matchedDirs || matchedDirs.length === 0) {
+		return null;
+	}
+
+	return [...matchedDirs].sort((a, b) => {
+		if (a.hasTrace !== b.hasTrace) {
+			return a.hasTrace ? -1 : 1;
+		}
+		return (b.attempt || 1) - (a.attempt || 1);
+	})[0];
+}
+
+/**
  * The shard the evidence came from, preferring a trace-backed directory so
  * the reported shard matches the evidence the agent will actually read.
  */
 function shardIndexForMatchedDirs(matchedDirs, profile = loadProfile()) {
-	const preferred = matchedDirs.find((dir) => dir.hasTrace) || matchedDirs[0];
+	const preferred = preferredMatchedDir(matchedDirs);
 	return preferred
 		? shardIndexFromArtifactName(preferred.artifactName, profile)
 		: '';
@@ -261,15 +279,21 @@ function pickFromTests({
 	const eligible = tests
 		.map((test) => {
 			const matchedDirs = matchResultDirectories(test.name, resultDirs);
+			const preferred = preferredMatchedDir(matchedDirs);
 			return {
 				testName: test.name,
 				kind,
 				...(KIND_FLAKY === kind ? { retries: test.retries } : {}),
-				matchedDirs: matchedDirs.map((dir) => dir.dirName),
+				matchedDirs: [
+					...new Set(matchedDirs.map((dir) => dir.dirName)),
+				],
 				shardIndex: shardIndexForMatchedDirs(matchedDirs, profile),
 				hasTrace: matchedDirs.some((dir) => dir.hasTrace),
 				score: scoreCandidate(matchedDirs),
 				hasEvidence: matchedDirs.length > 0,
+				evidenceAttempt: preferred ? preferred.attempt || 1 : '',
+				evidenceArtifactId: preferred?.artifactId || '',
+				evidenceArtifactName: preferred?.artifactName || '',
 			};
 		})
 		.filter(
@@ -448,29 +472,60 @@ function readResultDirsSource(indexPath, resultsRoot) {
 }
 
 /**
- * The Allure report is preferred while it exists. Past its 1-day retention the
- * job-log list stands in, which is what makes an older run rankable.
+ * Unique titles, first occurrence wins, so Allure order is kept when unioning
+ * with the job-log list.
+ */
+function uniqueTestNames(names) {
+	return [...new Set((names || []).filter(Boolean))];
+}
+
+/**
+ * Allure alone is not enough on a re-run night: the latest report marks
+ * earlier-attempt hard failures as passed. Job logs across attempts still
+ * list those titles, so when both sources exist they are unioned. Past
+ * Allure's 1-day retention the log list stands in alone.
  */
 function readHardFailureSource(
 	suitesPath,
 	hardFailuresPath,
 	flakyTestsPath = DEFAULT_FLAKY_TESTS_PATH,
 ) {
-	if (fs.existsSync(suitesPath)) {
+	const hasAllure = fs.existsSync(suitesPath);
+	const hasLogs = fs.existsSync(hardFailuresPath);
+	const flakyTests = fs.existsSync(flakyTestsPath)
+		? JSON.parse(fs.readFileSync(flakyTestsPath, 'utf8'))
+		: [];
+
+	if (hasAllure) {
+		const allureSuitesJson = JSON.parse(
+			fs.readFileSync(suitesPath, 'utf8'),
+		);
+		const allureHard = flattenAllureFailures(allureSuitesJson).map(
+			(test) => test.name,
+		);
+
+		if (hasLogs) {
+			const logHard = JSON.parse(
+				fs.readFileSync(hardFailuresPath, 'utf8'),
+			);
+			const hardFailureNames = uniqueTestNames([
+				...allureHard,
+				...logHard,
+			]);
+			console.log(
+				`Ranking from Allure (${allureHard.length} hard) union job logs (${logHard.length} hard)`,
+			);
+			return { hardFailureNames, allureSuitesJson, flakyTests };
+		}
+
 		console.log(`Ranking from the Allure report at ${suitesPath}`);
-		return {
-			allureSuitesJson: JSON.parse(fs.readFileSync(suitesPath, 'utf8')),
-		};
+		return { allureSuitesJson };
 	}
 
-	if (fs.existsSync(hardFailuresPath)) {
+	if (hasLogs) {
 		console.log(
 			`No Allure report; ranking from job logs at ${hardFailuresPath}`,
 		);
-		// Written only on a night with no hard failures in the logs.
-		const flakyTests = fs.existsSync(flakyTestsPath)
-			? JSON.parse(fs.readFileSync(flakyTestsPath, 'utf8'))
-			: [];
 		return {
 			hardFailureNames: JSON.parse(
 				fs.readFileSync(hardFailuresPath, 'utf8'),
@@ -549,10 +604,22 @@ function main(args) {
 	setOutput('shard_index', candidate.shardIndex);
 	setOutput('matched_dirs', candidate.matchedDirs.join(','));
 	setOutput('has_trace', String(candidate.hasTrace));
-	// Healed by runs of their own; this run heals the first.
+	setOutput('evidence_attempt', String(candidate.evidenceAttempt || ''));
+	setOutput(
+		'evidence_artifact_id',
+		String(candidate.evidenceArtifactId || ''),
+	);
+	// Healed by runs of their own; this run heals the first. Kind and retries
+	// travel with the name so a flaky-only night keeps the flaky prompt.
 	setOutput(
 		'extra_candidates',
-		JSON.stringify(extraCandidates.map((test) => test.testName)),
+		JSON.stringify(
+			extraCandidates.map((test) => ({
+				testName: test.testName,
+				kind: test.kind,
+				retries: test.retries || '',
+			})),
+		),
 	);
 }
 
@@ -574,10 +641,12 @@ module.exports = {
 	flattenAllureFlakies,
 	hasTraceInDirectory,
 	matchResultDirectories,
+	preferredMatchedDir,
 	readHardFailureSource,
 	readResultDirs,
 	readResultDirsSource,
 	selectHealCandidate,
 	selectHealCandidates,
 	shardIndexForMatchedDirs,
+	uniqueTestNames,
 };
