@@ -27,6 +27,7 @@ const {
 	isHealableShard,
 	shardIndexFromArtifactName,
 } = require('./resolve-shard-command');
+const { listArtifactResultDirs } = require('./artifact-listing');
 const {
 	downloadArtifactById,
 	listArtifactsAcrossAttempts,
@@ -255,40 +256,56 @@ function listRecentRunIds(repo, profile) {
 }
 
 /**
- * Reads one shard artifact's directory names without keeping the download:
- * only the layout matters here, and trace zips are large.
+ * Reads one shard artifact's directory names. Only the layout matters here,
+ * so the zip's file list is read without downloading it; a full download is
+ * the fallback if that fails.
  *
  * @param {string} repo - Repository in "owner/repo" format
- * @param {object} artifact - Artifact metadata with {id, name, attempt}
+ * @param {object} artifact - Artifact metadata with {id, name, attempt, size_in_bytes}
  * @returns {Array<{dirName: string, artifactName: string, attempt: number, hasTrace: boolean}>}
  */
-function readArtifactResultDirs(repo, artifact) {
+function readArtifactResultDirs(repo, artifact, deps = {}) {
+	const { list = listArtifactResultDirs, download = downloadResultDirs } =
+		deps;
+	let dirs;
+
+	try {
+		dirs = list(repo, artifact);
+	} catch (error) {
+		console.log(
+			`::notice::Could not list artifact ${artifact.name} (id ${artifact.id}) without downloading it: ${error.message}. Downloading it instead.`,
+		);
+		dirs = download(repo, artifact);
+	}
+
+	return dirs.map((dir) => ({
+		...dir,
+		artifactName: artifact.name,
+		attempt: artifact.attempt,
+	}));
+}
+
+function downloadResultDirs(repo, artifact) {
 	const downloadDir = fs.mkdtempSync(
 		path.join(os.tmpdir(), 'heal-evidence-'),
 	);
 
 	try {
 		downloadArtifactById(repo, artifact.id, downloadDir);
-	} catch (error) {
-		console.log(
-			`::warning::Could not download artifact ${artifact.name} (attempt ${artifact.attempt}, id ${artifact.id}): ${error.message}`,
-		);
-		fs.rmSync(downloadDir, { recursive: true, force: true });
-		return [];
-	}
-
-	try {
 		return fs
 			.readdirSync(downloadDir, { withFileTypes: true })
 			.filter((entry) => entry.isDirectory())
 			.map((entry) => ({
 				dirName: entry.name,
-				artifactName: artifact.name,
-				attempt: artifact.attempt,
 				hasTrace: hasTraceInDirectory(
 					path.join(downloadDir, entry.name),
 				),
 			}));
+	} catch (error) {
+		console.log(
+			`::warning::Could not download artifact ${artifact.name} (attempt ${artifact.attempt}, id ${artifact.id}): ${error.message}`,
+		);
+		return [];
 	} finally {
 		fs.rmSync(downloadDir, { recursive: true, force: true });
 	}
@@ -410,4 +427,5 @@ module.exports = {
 	listEvidenceRuns,
 	pickEvidenceRuns,
 	pickShardArtifacts,
+	readArtifactResultDirs,
 };

@@ -438,15 +438,16 @@ jobs:
                   HEAL_FLAKY: ${{ inputs.heal_flaky }}
               run: node "$HEALER_DIR/scripts/collect-log-hard-failures.js"
 
-            # Every attempt's copy, by artifact id: a test that failed in attempt 1
-            # and passed on a re-run has its only evidence in attempt 1's copy.
-            - name: Download per-shard failure artifacts
+            # Every attempt's copy: a test that failed in attempt 1 and passed on
+            # a re-run has its only evidence in attempt 1's copy. Only each zip's
+            # file list is read; the agent downloads the one it needs.
+            - name: Index per-shard failure artifacts
               if: needs.resolve-input.outputs.mode == 'auto'
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
                   GITHUB_REPOSITORY: ${{ github.repository }}
                   SOURCE_RUN_ID: ${{ needs.resolve-input.outputs.source_run_id }}
-              run: node "$HEALER_DIR/scripts/download-shard-artifacts.js"
+              run: node "$HEALER_DIR/scripts/index-shard-artifacts.js"
 
             # Manual mode: the human named the test, so all that is missing is a
             # real failure artifact to investigate from. With no source_run_id this

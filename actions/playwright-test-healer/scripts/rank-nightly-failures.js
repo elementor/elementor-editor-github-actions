@@ -404,6 +404,18 @@ function selectHealCandidate({
 
 const DEFAULT_ALLURE_SUITES_PATH = 'allure-report/data/suites.json';
 const DEFAULT_TEST_RESULTS_ROOT = 'test-results';
+const DEFAULT_TEST_RESULTS_INDEX_PATH = 'test-results-index.json';
+
+/**
+ * Auto mode writes an index of the shard artifacts' directories instead of
+ * downloading them (index-shard-artifacts.js); a `test-results/` tree is
+ * still read when there is no index.
+ */
+function readResultDirsSource(indexPath, resultsRoot) {
+	return fs.existsSync(indexPath)
+		? JSON.parse(fs.readFileSync(indexPath, 'utf8'))
+		: readResultDirs(resultsRoot);
+}
 
 /**
  * The Allure report is preferred while it exists. Past its 1-day retention the
@@ -462,7 +474,10 @@ function main(args) {
 		...readHardFailureSource(suitesPath, hardFailuresPath, flakyTestsPath),
 		healFlaky,
 	};
-	const resultDirs = readResultDirs(resultsRoot);
+	const resultDirs = readResultDirsSource(
+		process.env.TEST_RESULTS_INDEX_PATH || DEFAULT_TEST_RESULTS_INDEX_PATH,
+		resultsRoot,
+	);
 
 	if (args.includes('--has-eligible')) {
 		const { candidate } = selectHealCandidate({ ...source, resultDirs });
@@ -510,6 +525,7 @@ if (require.main === module) {
 
 // collect-pr-failures.js also uses these, so a change here affects the PR healer.
 module.exports = {
+	DEFAULT_TEST_RESULTS_INDEX_PATH,
 	KIND_FLAKY,
 	KIND_HARD,
 	flattenAllureFailures,
@@ -518,6 +534,7 @@ module.exports = {
 	matchResultDirectories,
 	readHardFailureSource,
 	readResultDirs,
+	readResultDirsSource,
 	selectHealCandidate,
 	shardIndexForMatchedDirs,
 };

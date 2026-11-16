@@ -5,6 +5,7 @@ const {
 	isShardArtifact,
 	listEvidenceRuns,
 	pickBestEvidence,
+	readArtifactResultDirs,
 } = require('../scripts/find-test-evidence');
 
 describe('isShardArtifact', () => {
@@ -320,5 +321,49 @@ describe('groupArtifactsByName', () => {
 				.map((artifact) => artifact.id),
 		).toEqual([3, 1]);
 		expect(groups.get('playwright-test-results-9')).toHaveLength(1);
+	});
+});
+
+describe('readArtifactResultDirs', () => {
+	const artifact = {
+		id: 7,
+		name: 'playwright-test-results-3',
+		attempt: 2,
+		size_in_bytes: 1000,
+	};
+
+	it("reads the zip's listing and tags each directory with the artifact", () => {
+		// Arrange
+		const download = vi.fn();
+
+		// Act
+		const dirs = readArtifactResultDirs('o/r', artifact, {
+			list: () => [{ dirName: 'a', hasTrace: true }],
+			download,
+		});
+
+		// Assert
+		expect(dirs).toEqual([
+			{
+				dirName: 'a',
+				hasTrace: true,
+				artifactName: 'playwright-test-results-3',
+				attempt: 2,
+			},
+		]);
+		expect(download).not.toHaveBeenCalled();
+	});
+
+	it('downloads the artifact when its listing cannot be read', () => {
+		// Act
+		const dirs = readArtifactResultDirs('o/r', artifact, {
+			list: () => {
+				throw new Error('range ignored');
+			},
+			download: () => [{ dirName: 'b', hasTrace: false }],
+		});
+
+		// Assert
+		expect(dirs.map((dir) => dir.dirName)).toEqual(['b']);
 	});
 });

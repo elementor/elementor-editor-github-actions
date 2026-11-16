@@ -2,6 +2,7 @@ const {
 	flattenAllureFailures,
 	flattenAllureFlakies,
 	matchResultDirectories,
+	readResultDirsSource,
 	selectHealCandidate,
 	shardIndexForMatchedDirs,
 } = require('../scripts/rank-nightly-failures');
@@ -711,5 +712,32 @@ describe('selectHealCandidate flaky fallback', () => {
 			kind: 'flaky',
 			retries: 2,
 		});
+	});
+});
+
+describe('readResultDirsSource', () => {
+	const fs = require('fs');
+	const os = require('os');
+	const path = require('path');
+
+	it('prefers the index written by index-shard-artifacts', () => {
+		// Arrange
+		const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rank-index-'));
+		const indexPath = path.join(dir, 'index.json');
+		const entry = { dirName: 'a', artifactName: 'p-3', hasTrace: true };
+		fs.writeFileSync(indexPath, JSON.stringify([entry]));
+
+		// Act
+		const dirs = readResultDirsSource(indexPath, path.join(dir, 'none'));
+
+		// Assert
+		expect(dirs).toEqual([entry]);
+		fs.rmSync(dir, { recursive: true, force: true });
+	});
+
+	it('reads a test-results tree when there is no index', () => {
+		expect(
+			readResultDirsSource('/no/such/index.json', '/no/such/dir'),
+		).toEqual([]);
 	});
 });
