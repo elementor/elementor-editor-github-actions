@@ -178,9 +178,7 @@ function downloadArtifactById(repo, artifactId, destinationDir) {
 	const zipPath = path.join(tmpDir, 'artifact.zip');
 
 	try {
-		// `gh api` follows the endpoint's redirect to the blob and prints the
-		// zip body, which goes straight into the file. (`--silent` would
-		// suppress that body and leave the file empty.)
+		// No `--silent`: it suppresses the body, which is the zip itself.
 		const fdOut = fs.openSync(zipPath, 'w');
 		try {
 			execFileSync(

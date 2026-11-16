@@ -172,8 +172,6 @@ describe('pickBestEvidence', () => {
 	});
 
 	it('handles the case where test failed in attempt 1 but not attempt 2', () => {
-		// This scenario represents a flaky test that failed initially but passed on re-run.
-		// Evidence should come from attempt 1 where it actually failed.
 		const candidates = [
 			{
 				shardIndex: '5',
@@ -181,7 +179,6 @@ describe('pickBestEvidence', () => {
 				matchedDirs: ['test-failed-directory'],
 				hasTrace: true,
 			},
-			// Attempt 2 would have no evidence for this test since it passed
 		];
 
 		const best = pickBestEvidence(candidates);
@@ -190,7 +187,6 @@ describe('pickBestEvidence', () => {
 	});
 
 	it('prefers later failed attempt when test failed in multiple attempts', () => {
-		// Test failed in both attempt 1 and attempt 2
 		const candidates = [
 			{
 				shardIndex: '5',

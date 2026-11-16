@@ -67,17 +67,14 @@ function pickBestEvidence(candidates) {
 	}
 
 	const sorted = [...usable].sort((a, b) => {
-		// Prefer trace-backed evidence
 		if (a.hasTrace !== b.hasTrace) {
 			return a.hasTrace ? -1 : 1;
 		}
-		// Prefer later attempts (more recent)
 		const attemptA = a.attempt || 1;
 		const attemptB = b.attempt || 1;
 		if (attemptA !== attemptB) {
 			return attemptB - attemptA;
 		}
-		// Tiebreaker: shard index
 		return String(a.shardIndex).localeCompare(String(b.shardIndex));
 	});
 
@@ -93,7 +90,6 @@ function pickBestEvidence(candidates) {
  * same artifact name are kept separate, annotated with their attempt number.
  */
 function buildEvidenceCandidates(testName, resultDirs) {
-	// Key by artifact name + attempt to keep attempts separate
 	const byArtifactAndAttempt = new Map();
 
 	for (const dir of resultDirs || []) {
@@ -327,11 +323,8 @@ function findEvidenceInRun(repo, runId, testName, profile) {
 
 	const resultDirs = [];
 
-	// A results artifact only holds directories for tests that failed at least
-	// once in its attempt, so a match there is a failure in that attempt and
-	// no job log needs reading to know it. Each shard's copies are tried newest
-	// attempt first, stopping at the first that has the test: a test that failed
-	// in attempt 1 and passed on the re-run is still found in attempt 1.
+	// A results artifact only holds tests that failed in its attempt, so the
+	// newest copy that has the test is the attempt it last failed in.
 	for (const versions of groupArtifactsByName(artifacts).values()) {
 		for (const artifact of versions) {
 			const dirs = readArtifactResultDirs(repo, artifact);
