@@ -1,0 +1,63 @@
+name: Announce Branch Structure
+description: >-
+    Posts the release branch mapping (release/stable, release/beta, main) to Slack after a beta
+    branch-out or when a new stable version line (X.Y.0) is published. Patch releases do not post.
+    Versions that are not passed are read from the package.json of each branch, so the caller must
+    check out the repository with an "origin" remote.
+
+inputs:
+    event:
+        description: '"beta-branch-out" or "stable-release"'
+        required: true
+    slack-token:
+        description: Slack bot token with chat:write access to the channel
+        required: true
+    slack-channel:
+        description: Slack channel ID. When empty, the announcement is skipped with a warning
+        required: false
+        default: ''
+    stable-version:
+        description: Released version for "stable-release". Read from release/stable for "beta-branch-out" when empty
+        required: false
+        default: ''
+    beta-version:
+        description: release/beta version. Read from the branch when empty
+        required: false
+        default: ''
+    main-version:
+        description: main version. Read from the branch when empty
+        required: false
+        default: ''
+    bump-pr-outcome:
+        description: Outcome of the main version bump step for "beta-branch-out". Any value other than "success" posts a follow-up warning
+        required: false
+        default: success
+    dry-run:
+        description: When "true", print the message and do not post it
+        required: false
+        default: 'false'
+
+runs:
+    using: composite
+    steps:
+        - name: Build branch structure announcement
+          id: build
+          shell: bash
+          env:
+              EVENT: ${{ inputs.event }}
+              SLACK_CHANNEL: ${{ inputs.slack-channel }}
+              STABLE_VERSION: ${{ inputs.stable-version }}
+              BETA_VERSION: ${{ inputs.beta-version }}
+              MAIN_VERSION: ${{ inputs.main-version }}
+              BUMP_PR_OUTCOME: ${{ inputs.bump-pr-outcome }}
+              DRY_RUN: ${{ inputs.dry-run }}
+              ACTION_PATH: ${{ github.action_path }}
+          run: bash "$ACTION_PATH/announce-branch-structure.sh"
+
+        - name: Post branch structure announcement to Slack
+          if: steps.build.outputs.payload != ''
+          uses: slackapi/slack-github-action@v3
+          with:
+              method: chat.postMessage
+              token: ${{ inputs.slack-token }}
+              payload: ${{ steps.build.outputs.payload }}
