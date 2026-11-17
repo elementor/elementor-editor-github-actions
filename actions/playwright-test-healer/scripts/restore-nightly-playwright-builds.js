@@ -7,6 +7,11 @@ const path = require('path');
 
 const { setOutput } = require('./github-output');
 const { loadProfile } = require('./profile');
+const {
+	downloadArtifactById,
+	latestArtifactPerName,
+	listArtifactsAcrossAttempts,
+} = require('./run-attempts');
 
 const CORE_BUILD_ARTIFACT_NAME = 'elementor-core-build';
 const CORE_PLUGIN_ARTIFACT_NAME = /^elementor-\d+\.\d+\.\d+/;
@@ -71,40 +76,38 @@ function planBuildRestore(artifacts) {
 	};
 }
 
+const runArtifactsCache = new Map();
+
+/**
+ * A re-run evidence run has one copy of each build artifact per attempt that
+ * built it; the latest attempt's copy is the build the run last tested. Listed
+ * once per run, since every download below needs the same list.
+ */
 function listRunArtifacts(repo, runId) {
-	return execFileSync(
-		'gh',
-		[
-			'api',
-			`repos/${repo}/actions/runs/${runId}/artifacts?per_page=100`,
-			'--paginate',
-			'--jq',
-			'.artifacts[] | tojson',
-		],
-		{ encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 },
-	)
-		.split('\n')
-		.filter(Boolean)
-		.map((line) => JSON.parse(line));
+	const key = `${repo}#${runId}`;
+
+	if (!runArtifactsCache.has(key)) {
+		runArtifactsCache.set(
+			key,
+			latestArtifactPerName(listArtifactsAcrossAttempts(repo, runId)),
+		);
+	}
+
+	return runArtifactsCache.get(key);
 }
 
+// By id, not name: `gh run download -n` cannot pick between attempts' copies.
 function downloadArtifact(repo, runId, artifactName, destinationDir) {
-	fs.mkdirSync(destinationDir, { recursive: true });
-	execFileSync(
-		'gh',
-		[
-			'run',
-			'download',
-			String(runId),
-			'--repo',
-			repo,
-			'-n',
-			artifactName,
-			'-D',
-			destinationDir,
-		],
-		{ stdio: 'inherit' },
+	const artifact = listRunArtifacts(repo, runId).find(
+		(candidate) => candidate.name === artifactName,
 	);
+
+	if (!artifact) {
+		throw new Error(`Artifact ${artifactName} not found in run ${runId}`);
+	}
+
+	fs.mkdirSync(destinationDir, { recursive: true });
+	downloadArtifactById(repo, artifact.id, destinationDir);
 }
 
 function walkFiles(rootDir, visitor) {

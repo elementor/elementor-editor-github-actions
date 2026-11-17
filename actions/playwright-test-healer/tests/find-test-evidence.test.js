@@ -36,6 +36,7 @@ describe('buildEvidenceCandidates', () => {
 			{
 				dirName: 'modules-loop-filter-loop-taxonomy-filter-works',
 				artifactName: 'playwright-test-results-taxonomy_filter_2',
+				attempt: 1,
 				hasTrace: true,
 			},
 		];
@@ -45,6 +46,8 @@ describe('buildEvidenceCandidates', () => {
 		).toEqual([
 			{
 				artifactName: 'playwright-test-results-taxonomy_filter_2',
+				artifactId: null,
+				attempt: 1,
 				shardIndex: 'taxonomy_filter_2',
 				matchedDirs: ['modules-loop-filter-loop-taxonomy-filter-works'],
 				hasTrace: true,
@@ -52,16 +55,35 @@ describe('buildEvidenceCandidates', () => {
 		]);
 	});
 
+	it('carries the artifact id from the matching attempt', () => {
+		const resultDirs = [
+			{
+				dirName: 'modules-loop-filter-loop-taxonomy-filter-works',
+				artifactName: 'playwright-test-results-taxonomy_filter_2',
+				artifactId: 4242,
+				attempt: 1,
+				hasTrace: true,
+			},
+		];
+
+		expect(
+			buildEvidenceCandidates('Loop taxonomy filter works', resultDirs)[0]
+				.artifactId,
+		).toBe(4242);
+	});
+
 	it('groups matches per shard artifact rather than merging them', () => {
 		const resultDirs = [
 			{
 				dirName: 'a-search-widget-functionality',
 				artifactName: 'playwright-test-results-3',
+				attempt: 1,
 				hasTrace: false,
 			},
 			{
 				dirName: 'b-search-widget-functionality',
 				artifactName: 'playwright-test-results-9',
+				attempt: 1,
 				hasTrace: true,
 			},
 		];
@@ -77,11 +99,46 @@ describe('buildEvidenceCandidates', () => {
 		]);
 	});
 
+	it('keeps evidence from different attempts of the same artifact separate', () => {
+		const resultDirs = [
+			{
+				dirName: 'a-search-widget-functionality',
+				artifactName: 'playwright-test-results-3',
+				attempt: 1,
+				hasTrace: false,
+			},
+			{
+				dirName: 'a-search-widget-functionality',
+				artifactName: 'playwright-test-results-3',
+				attempt: 2,
+				hasTrace: true,
+			},
+		];
+
+		const candidates = buildEvidenceCandidates(
+			'Search widget functionality',
+			resultDirs,
+		);
+
+		expect(candidates).toHaveLength(2);
+		expect(candidates[0]).toMatchObject({
+			artifactName: 'playwright-test-results-3',
+			attempt: 1,
+			hasTrace: false,
+		});
+		expect(candidates[1]).toMatchObject({
+			artifactName: 'playwright-test-results-3',
+			attempt: 2,
+			hasTrace: true,
+		});
+	});
+
 	it('returns nothing when no directory matches the title', () => {
 		const resultDirs = [
 			{
 				dirName: 'unrelated-spec-something-else',
 				artifactName: 'playwright-test-results-1',
+				attempt: 1,
 				hasTrace: true,
 			},
 		];
@@ -95,18 +152,52 @@ describe('buildEvidenceCandidates', () => {
 describe('pickBestEvidence', () => {
 	it('prefers trace-backed evidence over log-only evidence', () => {
 		const best = pickBestEvidence([
-			{ shardIndex: '3', matchedDirs: ['a'], hasTrace: false },
-			{ shardIndex: '9', matchedDirs: ['b'], hasTrace: true },
+			{
+				shardIndex: '3',
+				attempt: 1,
+				matchedDirs: ['a'],
+				hasTrace: false,
+			},
+			{ shardIndex: '9', attempt: 1, matchedDirs: ['b'], hasTrace: true },
 		]);
 
 		expect(best.shardIndex).toBe('9');
+	});
+
+	it('prefers evidence from later attempts when quality is equal', () => {
+		const best = pickBestEvidence([
+			{ shardIndex: '3', attempt: 1, matchedDirs: ['a'], hasTrace: true },
+			{ shardIndex: '3', attempt: 2, matchedDirs: ['a'], hasTrace: true },
+		]);
+
+		expect(best.attempt).toBe(2);
+	});
+
+	it('prefers trace evidence even from an earlier attempt', () => {
+		const best = pickBestEvidence([
+			{ shardIndex: '3', attempt: 1, matchedDirs: ['a'], hasTrace: true },
+			{
+				shardIndex: '3',
+				attempt: 2,
+				matchedDirs: ['a'],
+				hasTrace: false,
+			},
+		]);
+
+		expect(best.attempt).toBe(1);
+		expect(best.hasTrace).toBe(true);
 	});
 
 	it('returns null when nothing matched', () => {
 		expect(pickBestEvidence([])).toBeNull();
 		expect(
 			pickBestEvidence([
-				{ shardIndex: '1', matchedDirs: [], hasTrace: true },
+				{
+					shardIndex: '1',
+					attempt: 1,
+					matchedDirs: [],
+					hasTrace: true,
+				},
 			]),
 		).toBeNull();
 	});
@@ -119,6 +210,7 @@ describe('findEvidenceInResultDirs', () => {
 				dirName:
 					'modules-search-search-infr-364a4-Search-widget-functionality',
 				artifactName: 'playwright-test-results-nightly-12',
+				attempt: 1,
 				hasTrace: true,
 			},
 		];
@@ -128,7 +220,11 @@ describe('findEvidenceInResultDirs', () => {
 			resultDirs,
 		);
 
-		expect(evidence).toMatchObject({ shardIndex: '12', hasTrace: true });
+		expect(evidence).toMatchObject({
+			shardIndex: '12',
+			attempt: 1,
+			hasTrace: true,
+		});
 	});
 });
 

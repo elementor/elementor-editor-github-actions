@@ -304,6 +304,8 @@ jobs:
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
                   SOURCE_RUN_ID: ${{ steps.run.outputs.source_run_id }}
+                  # The PR healer re-runs and triages only hard failures.
+                  HEAL_FLAKY: 'false'
               run: node "$HEALER_DIR/scripts/collect-log-hard-failures.js"
 
             - name: Download the failed shards' test results

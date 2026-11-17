@@ -1,7 +1,14 @@
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+
 const {
 	flattenAllureFailures,
+	flattenAllureFlakies,
 	matchResultDirectories,
+	readHardFailureSource,
 	selectHealCandidate,
+	selectHealCandidates,
 	shardIndexForMatchedDirs,
 } = require('../scripts/rank-nightly-failures');
 
@@ -562,5 +569,221 @@ describe('shardIndexForMatchedDirs', () => {
 
 	it('returns an empty string when there is no evidence', () => {
 		expect(shardIndexForMatchedDirs([])).toBe('');
+	});
+});
+
+describe('flattenAllureFlakies', () => {
+	it('returns passed tests that needed retries, not hard failures', () => {
+		const allureSuitesJson = {
+			children: [
+				{
+					children: [
+						{
+							children: [
+								{
+									name: 'hard fails',
+									status: 'failed',
+									retriesCount: 3,
+								},
+								{
+									name: 'flaky recovers',
+									status: 'passed',
+									retriesCount: 2,
+								},
+								{
+									name: 'clean pass',
+									status: 'passed',
+									retriesCount: 0,
+								},
+							],
+						},
+					],
+				},
+			],
+		};
+
+		expect(
+			flattenAllureFlakies(allureSuitesJson).map((t) => t.name),
+		).toEqual(['flaky recovers']);
+	});
+});
+
+describe('readHardFailureSource', () => {
+	let dir;
+
+	beforeEach(() => {
+		dir = fs.mkdtempSync(path.join(os.tmpdir(), 'healer-rank-src-'));
+	});
+
+	afterEach(() => {
+		fs.rmSync(dir, { recursive: true, force: true });
+	});
+
+	it('unions Allure hard failures with earlier-attempt log titles', () => {
+		const suitesPath = path.join(dir, 'suites.json');
+		const hardPath = path.join(dir, 'log-hard-failures.json');
+		fs.writeFileSync(
+			suitesPath,
+			JSON.stringify({
+				children: [
+					{
+						children: [
+							{
+								children: [
+									{
+										name: 'still failing tonight',
+										status: 'failed',
+										retriesCount: 3,
+									},
+									{
+										name: 'failed earlier then passed',
+										status: 'passed',
+										retriesCount: 0,
+									},
+								],
+							},
+						],
+					},
+				],
+			}),
+		);
+		fs.writeFileSync(
+			hardPath,
+			JSON.stringify([
+				'failed earlier then passed',
+				'still failing tonight',
+			]),
+		);
+
+		const source = readHardFailureSource(suitesPath, hardPath);
+
+		expect(source.hardFailureNames).toEqual([
+			'still failing tonight',
+			'failed earlier then passed',
+		]);
+		expect(source.allureSuitesJson).toBeDefined();
+	});
+});
+
+describe('selectHealCandidates', () => {
+	it('selects earlier-attempt log failures as hard when Allure is all-passed', () => {
+		const allureSuitesJson = {
+			children: [
+				{
+					children: [
+						{
+							children: [
+								{
+									name: 'failed earlier then passed',
+									status: 'passed',
+									retriesCount: 0,
+								},
+							],
+						},
+					],
+				},
+			],
+		};
+		const resultDirs = [
+			{
+				dirName: 'suite-failed-earlier-then-passed',
+				artifactName: 'playwright-test-results-7',
+				artifactId: 9001,
+				attempt: 1,
+				hasTrace: true,
+			},
+		];
+
+		const result = selectHealCandidates({
+			allureSuitesJson,
+			hardFailureNames: ['failed earlier then passed'],
+			resultDirs,
+			maxCandidates: 1,
+		});
+
+		expect(result.candidates).toHaveLength(1);
+		expect(result.candidates[0]).toMatchObject({
+			testName: 'failed earlier then passed',
+			kind: 'hard',
+			evidenceAttempt: 1,
+			evidenceArtifactId: 9001,
+		});
+	});
+
+	it('picks flaky tests only when no hard candidate is healable, ranked by retries', () => {
+		const allureSuitesJson = {
+			children: [
+				{
+					children: [
+						{
+							children: [
+								{
+									name: 'hard but no evidence',
+									status: 'failed',
+									retriesCount: 3,
+								},
+								{
+									name: 'mild flake',
+									status: 'passed',
+									retriesCount: 1,
+								},
+								{
+									name: 'worst flake',
+									status: 'passed',
+									retriesCount: 3,
+								},
+							],
+						},
+					],
+				},
+			],
+		};
+		const resultDirs = [
+			{
+				dirName: 'suite-mild-flake',
+				artifactName: 'playwright-test-results-1',
+				hasTrace: true,
+			},
+			{
+				dirName: 'suite-worst-flake',
+				artifactName: 'playwright-test-results-2',
+				hasTrace: true,
+			},
+		];
+
+		const result = selectHealCandidates({
+			allureSuitesJson,
+			healFlaky: true,
+			resultDirs,
+			maxCandidates: 2,
+		});
+
+		expect(result.candidates.map((c) => c.testName)).toEqual([
+			'worst flake',
+			'mild flake',
+		]);
+		expect(result.candidates.every((c) => c.kind === 'flaky')).toBe(true);
+		expect(result.candidates[0].retries).toBe(3);
+	});
+
+	it('returns at most maxCandidates', () => {
+		const hardFailureNames = ['alpha', 'bravo', 'charlie'];
+		const resultDirs = hardFailureNames.map((name) => ({
+			dirName: `suite-${name}`,
+			artifactName: 'playwright-test-results-1',
+			hasTrace: true,
+		}));
+
+		const result = selectHealCandidates({
+			hardFailureNames,
+			resultDirs,
+			maxCandidates: 2,
+		});
+
+		expect(result.candidates).toHaveLength(2);
+		expect(result.candidates.map((c) => c.testName)).toEqual([
+			'alpha',
+			'bravo',
+		]);
 	});
 });
