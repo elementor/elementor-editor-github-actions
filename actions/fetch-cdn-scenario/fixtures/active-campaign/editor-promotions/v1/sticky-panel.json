@@ -1,0 +1,8 @@
+{
+	"sticky-panel": {
+		"is_active": true,
+		"message": "E2E campaign sticky panel message",
+		"button_text": "E2E campaign sticky panel button",
+		"url": "https://go.elementor.com/e2e-campaign-sticky-panel/"
+	}
+}

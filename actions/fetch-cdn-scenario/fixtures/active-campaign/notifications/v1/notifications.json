@@ -1,0 +1,22 @@
+{
+	"notifications": [
+		{
+			"id": "e2e-campaign-free",
+			"title": "E2E campaign notification title",
+			"description": "E2E campaign notification description",
+			"topic": "Campaign",
+			"cta": "E2E campaign notification button",
+			"ctaLink": "https://go.elementor.com/e2e-campaign-notification/",
+			"featured": true,
+			"conditions": [
+				[
+					{
+						"type": "plugin",
+						"operator": "!=",
+						"plugin": "elementor-pro/elementor-pro.php"
+					}
+				]
+			]
+		}
+	]
+}

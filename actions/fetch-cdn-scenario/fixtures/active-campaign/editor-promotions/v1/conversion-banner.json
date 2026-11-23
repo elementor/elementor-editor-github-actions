@@ -1,0 +1,9 @@
+{
+	"conversion-banner": {
+		"is_active": true,
+		"title": "E2E campaign conversion banner title",
+		"text": "E2E campaign conversion banner text",
+		"cta_text": "E2E campaign conversion banner button",
+		"cta_url": "https://go.elementor.com/e2e-campaign-conversion-banner/"
+	}
+}

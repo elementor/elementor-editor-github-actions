@@ -1,0 +1,10 @@
+{
+	"pointer": {
+		"is_active": true,
+		"campaign_id": "e2e-campaign",
+		"title": "E2E campaign pointer title",
+		"text": "E2E campaign pointer text",
+		"cta_text": "E2E campaign pointer button",
+		"cta_url": "https://go.elementor.com/e2e-campaign-pointer/"
+	}
+}
