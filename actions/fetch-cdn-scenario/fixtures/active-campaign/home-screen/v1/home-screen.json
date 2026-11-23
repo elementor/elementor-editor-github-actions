@@ -3,9 +3,7 @@
 	"home-screen": {
 		"top_with_licences": [
 			{
-				"license": [
-					"free"
-				],
+				"license": ["free"],
 				"title_small": "Hi!",
 				"title": "Unleash your imagination with Elementor",
 				"description": "Start building your website with Elementor's no code drag & drop editor.",
@@ -15,9 +13,7 @@
 				"youtube_embed_id": "le72grP_Q6k?si=g2akyWNODL6usu6u"
 			},
 			{
-				"license": [
-					"pro"
-				],
+				"license": ["pro"],
 				"title_small": "Hi!",
 				"title": "Unleash your imagination with Elementor",
 				"description": "Now you've got all the tools to start creating professional, high-performing websites - and that journey begins by creating your first page.",
@@ -27,9 +23,7 @@
 				"youtube_embed_id": "QdkDGrS8ZZs?si=s_VjZCQR6Fh1jgB5"
 			},
 			{
-				"license": [
-					"one"
-				],
+				"license": ["one"],
 				"title_small": "Hi!",
 				"title": "Unleash your imagination with Elementor",
 				"description": "Now you've got all the tools to start creating professional, high-performing websites - and that journey begins by creating your first page.",
@@ -41,9 +35,7 @@
 		],
 		"get_started": [
 			{
-				"license": [
-					"free"
-				],
+				"license": ["free"],
 				"header": {
 					"title": "Jumpstart your web-creation",
 					"description": "These quick actions will get your site airborne with a customized design."
@@ -119,9 +111,7 @@
 				]
 			},
 			{
-				"license": [
-					"pro"
-				],
+				"license": ["pro"],
 				"header": {
 					"title": "Jumpstart your web-creation",
 					"description": "These quick actions will get your site airborne with a customized design."
@@ -189,9 +179,7 @@
 				]
 			},
 			{
-				"license": [
-					"one"
-				],
+				"license": ["one"],
 				"header": {
 					"title": "Jumpstart your web-creation",
 					"description": "These quick actions will get your site airborne with a customized design."
@@ -260,12 +248,7 @@
 			}
 		],
 		"add_ons": {
-			"hide_section": [
-				"free",
-				"essential",
-				"pro",
-				"one"
-			],
+			"hide_section": ["free", "essential", "pro", "one"],
 			"header": {
 				"title": "Expand your design toolkit",
 				"description": "These plugins, add-ons, and tools, have been selected to streamline your workflow and maximize your creativity."
@@ -318,9 +301,7 @@
 		},
 		"sidebar_promotion_variants": [
 			{
-				"license": [
-					"essential"
-				],
+				"license": ["essential"],
 				"is_enabled": "true",
 				"type": "banner",
 				"data": {
@@ -329,9 +310,7 @@
 				}
 			},
 			{
-				"license": [
-					"free"
-				],
+				"license": ["free"],
 				"is_enabled": "true",
 				"type": "banner",
 				"data": {
@@ -340,9 +319,7 @@
 				}
 			},
 			{
-				"license": [
-					"expired"
-				],
+				"license": ["expired"],
 				"is_enabled": "true",
 				"type": "banner",
 				"data": {
@@ -351,9 +328,7 @@
 				}
 			},
 			{
-				"license": [
-					"free"
-				],
+				"license": ["free"],
 				"is_enabled": "false",
 				"type": "default",
 				"data": {
@@ -396,9 +371,7 @@
 				}
 			},
 			{
-				"license": [
-					"pro"
-				],
+				"license": ["pro"],
 				"is_enabled": "false",
 				"type": "default",
 				"data": {
@@ -441,9 +414,7 @@
 				}
 			},
 			{
-				"license": [
-					"one"
-				],
+				"license": ["one"],
 				"is_enabled": "false",
 				"type": "default",
 				"data": {

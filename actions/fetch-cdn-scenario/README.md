@@ -20,13 +20,13 @@ This action consolidates the CDN test infrastructure previously duplicated in [e
 
 ## Inputs
 
-| Input | Description | Required | Default |
-|-------|-------------|----------|---------|
-| `cdn-source` | CDN source URL or local directory | No | `https://assets.elementor.com` |
-| `allow-failure` | Allow WordPress to start if fetch fails | No | `false` |
-| `output-dir` | Target directory for fetched CDN files | **Yes** | - |
-| `mu-plugins-dir` | Target directory for mock mu-plugin | No | `''` |
-| `copy-fixtures` | Copy shared no-promotion fixtures | No | `true` |
+| Input            | Description                             | Required | Default                        |
+| ---------------- | --------------------------------------- | -------- | ------------------------------ |
+| `cdn-source`     | CDN source URL or local directory       | No       | `https://assets.elementor.com` |
+| `allow-failure`  | Allow WordPress to start if fetch fails | No       | `false`                        |
+| `output-dir`     | Target directory for fetched CDN files  | **Yes**  | -                              |
+| `mu-plugins-dir` | Target directory for mock mu-plugin     | No       | `''`                           |
+| `copy-fixtures`  | Copy shared no-promotion fixtures       | No       | `true`                         |
 
 ## Usage
 
@@ -50,16 +50,19 @@ steps:
 ```
 
 **Files you can delete from Core**:
+
 - `scripts/fetch-live-cdn-scenario.mjs` ✓
 - `tests/playwright/mu-plugins/mock-editor-assets-cdn.php` (replace with shared version)
 - `tests/playwright/mu-plugins/editor-assets-cdn/no-promotion/**/*` (use shared fixtures)
 
 **Keep in Core**:
+
 - `tests/playwright/sanity/modules/promotions/campaign/campaign-promotions.test.ts`
 - `tests/playwright/sanity/modules/promotions/campaign/cdn-scenario.ts`
 - `tests/playwright/mu-plugins/editor-assets-cdn/live/` (git-ignored, populated by action)
 
 **Update in Core**:
+
 - Remove `npm run test:playwright:fetch-cdn` from `package.json` scripts
 - Update workflows to use this action instead of the local script
 
@@ -84,17 +87,20 @@ steps:
 ```
 
 **Files you can delete from Pro**:
+
 - `scripts/fetch-live-cdn-scenario.mjs` ✓
 - `tests/playwright/mu-plugins/mock-editor-assets-cdn.php` (replace with shared version)
 - `tests/playwright/mu-plugins/editor-assets-cdn/no-promotion/**/*` (use shared fixtures)
 - `tests/playwright/mu-plugins/editor-assets-cdn/active-campaign/**/*` (Pro-specific, keep if needed for Pro tests)
 
 **Keep in Pro**:
+
 - `tests/playwright/sanity/modules/promotions/cdn-free-promotions-hidden.test.ts`
 - `tests/playwright/sanity/modules/promotions/cdn-scenario.ts`
 - `tests/playwright/mu-plugins/editor-assets-cdn/live/` (git-ignored, populated by action)
 
 **Update in Pro**:
+
 - Remove `npm run test:playwright:fetch-cdn` from `package.json` scripts
 - Update `start-local-server` to use this action instead of the local script
 
@@ -103,6 +109,7 @@ steps:
 ### Testing a campaign before it goes live
 
 **Core example**:
+
 ```yaml
 - name: Fetch CDN from local editor-assets build
   uses: elementor/elementor-editor-github-actions/actions/fetch-cdn-scenario@main
@@ -113,6 +120,7 @@ steps:
 ```
 
 **Pro example**:
+
 ```yaml
 - name: Fetch CDN from custom URL
   uses: elementor/elementor-editor-github-actions/actions/fetch-cdn-scenario@main
@@ -143,13 +151,13 @@ steps:
 
 ## Key Differences from Original PRs
 
-| Feature | Core PR #38251 | Pro PR #7989 | Shared Action |
-|---------|---------------|--------------|---------------|
-| Timeout | ❌ None | ✅ 15s | ✅ 15s |
-| Retry | ❌ None | ✅ 3 attempts | ✅ 3 attempts |
-| `--allow-failure` | ❌ | ✅ | ✅ |
-| Atomic staging | ❌ | ✅ | ✅ |
-| Backoff | ❌ | ✅ Exponential | ✅ Exponential |
+| Feature           | Core PR #38251 | Pro PR #7989   | Shared Action  |
+| ----------------- | -------------- | -------------- | -------------- |
+| Timeout           | ❌ None        | ✅ 15s         | ✅ 15s         |
+| Retry             | ❌ None        | ✅ 3 attempts  | ✅ 3 attempts  |
+| `--allow-failure` | ❌             | ✅             | ✅             |
+| Atomic staging    | ❌             | ✅             | ✅             |
+| Backoff           | ❌             | ✅ Exponential | ✅ Exponential |
 
 The shared action uses Pro's more robust implementation as the baseline.
 
