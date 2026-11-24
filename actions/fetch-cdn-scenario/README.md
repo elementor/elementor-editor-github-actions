@@ -6,103 +6,77 @@ Shared GitHub Actions composite action that provides CDN campaign promotion test
 
 This action consolidates the CDN test infrastructure previously duplicated in [elementor/elementor#38251](https://github.com/elementor/elementor/pull/38251) and [elementor/elementor-pro#7989](https://github.com/elementor/elementor-pro/pull/7989). It provides:
 
-1. **Fetch script** (`fetch-cdn-scenario.mjs`) - Downloads current CDN JSON files with retry logic, timeout handling, and optional failure tolerance
-2. **Mock mu-plugin** (`mock-editor-assets-cdn.php`) - Intercepts WordPress HTTP requests to serve local fixtures instead of live CDN
-3. **Shared fixtures** - No-promotion scenario fixtures shared between Core and Pro
+1. **Fetch script** (`fetch-cdn-scenario.mjs`) - Downloads the current CDN JSON files into a `live` scenario, with retries, a request timeout and optional failure tolerance
+2. **Mock mu-plugin** (`mock-editor-assets-cdn.php`) - Answers WordPress requests to `assets.elementor.com` from local fixtures instead of the live CDN
+3. **Shared fixtures** - The `no-promotion` scenario (the default, current CDN content) and the `active-campaign` scenario (a campaign with `e2e-` texts and links that differ from every Core default)
+
+## Mocked CDN files
+
+| CDN path                                        | Used by                                                      |
+| ----------------------------------------------- | ------------------------------------------------------------ |
+| `editor-promotions/v1/*.json`                   | Plugins page, admin menu, conversion banner, pointer, editor |
+| `notifications/v1/notifications.json`           | What's New                                                   |
+| `home-screen/v1/home-screen.json`               | Home screen, including the sidebar banner for each tier      |
+| `packages/v1/promotions.json`                   | V4 (atomic) promotions, `elementor.config.v4Promotions`      |
+| `free-to-pro-upsell/v1/free-to-pro-upsell.json` | Widget upsell images, `elementorPromotionsData`              |
+
+A CDN file without a fixture is not mocked and reaches the live CDN, so a new CDN file needs a fixture here, a path in `CDN_PATHS` and its cache option in `ELEMENTOR_E2E_CDN_CACHE_OPTIONS`.
+
+The `active-campaign` scenario gives every case a value that the live CDN and the defaults do not have, so a test that finds it proves the mock answered:
+
+- What's New: a Free-only card, a Pro-only card and a card for everyone
+- Home screen sidebar: a different `e2e-campaign-home-sidebar-*` link for the `free`, `essential`, `essential-oct2023` and `expired` tiers
 
 ## Features
 
-- **Retry logic**: Up to 3 attempts with exponential backoff (2s, 4s, 6s)
-- **Timeout handling**: 15s request timeout per file
-- **Graceful failure**: Optional `--allow-failure` to allow WordPress to start even if CDN is down
-- **Atomic updates**: Fetches to staging directory and swaps in only on complete success
-- **Flexible source**: Fetch from live CDN, custom URL, or local directory
+- **Retries**: Up to 3 attempts per file, waiting 2s and then 4s
+- **Timeout**: 15s per request
+- **Graceful failure**: `allow-failure` lets WordPress start even if the CDN is down. The previous `live` scenario is kept.
+- **Atomic updates**: Files are fetched into a staging directory, which replaces `live` only when every file succeeded
+- **Flexible source**: The live CDN, another URL, or a local directory
 
 ## Inputs
 
-| Input            | Description                             | Required | Default                        |
-| ---------------- | --------------------------------------- | -------- | ------------------------------ |
-| `cdn-source`     | CDN source URL or local directory       | No       | `https://assets.elementor.com` |
-| `allow-failure`  | Allow WordPress to start if fetch fails | No       | `false`                        |
-| `output-dir`     | Target directory for fetched CDN files  | **Yes**  | -                              |
-| `mu-plugins-dir` | Target directory for mock mu-plugin     | No       | `''`                           |
-| `copy-fixtures`  | Copy shared no-promotion fixtures       | No       | `true`                         |
+| Input            | Description                                                                                  | Required | Default                        |
+| ---------------- | -------------------------------------------------------------------------------------------- | -------- | ------------------------------ |
+| `output-dir`     | Directory of the `live` scenario. The shared scenarios are copied next to it.                | **Yes**  | -                              |
+| `fetch-live`     | Fetch the live CDN into `output-dir`. Set to `false` on PR CI to stay offline.               | No       | `true`                         |
+| `cdn-source`     | CDN source URL or local directory                                                            | No       | `https://assets.elementor.com` |
+| `allow-failure`  | Allow WordPress to start if the fetch fails                                                  | No       | `false`                        |
+| `mu-plugins-dir` | Directory to copy the mock mu-plugin into                                                    | No       | `''`                           |
+| `copy-fixtures`  | Copy the shared `no-promotion` and `active-campaign` scenarios to the parent of `output-dir` | No       | `true`                         |
 
 ## Usage
 
-### Elementor Core
+PR CI runs offline against the shared fixtures. A scheduled job fetches the live CDN and runs the promotion tests against it with `E2E_CDN_SCENARIO=live`, so a broken live campaign is reported within a day.
 
-**In your workflow** (e.g., `.github/workflows/playwright-suite.yml`):
-
-```yaml
-steps:
-  - uses: actions/checkout@v6
-
-  - name: Fetch live CDN scenario
-    uses: elementor/elementor-editor-github-actions/actions/fetch-cdn-scenario@main
-    with:
-      output-dir: tests/playwright/mu-plugins/editor-assets-cdn/live
-      mu-plugins-dir: tests/playwright/mu-plugins
-      copy-fixtures: true
-
-  - name: Install WordPress environment
-    run: npm run start-local-server
-```
-
-**Files you can delete from Core**:
-
-- `scripts/fetch-live-cdn-scenario.mjs` ✓
-- `tests/playwright/mu-plugins/mock-editor-assets-cdn.php` (replace with shared version)
-- `tests/playwright/mu-plugins/editor-assets-cdn/no-promotion/**/*` (use shared fixtures)
-
-**Keep in Core**:
-
-- `tests/playwright/sanity/modules/promotions/campaign/campaign-promotions.test.ts`
-- `tests/playwright/sanity/modules/promotions/campaign/cdn-scenario.ts`
-- `tests/playwright/mu-plugins/editor-assets-cdn/live/` (git-ignored, populated by action)
-
-**Update in Core**:
-
-- Remove `npm run test:playwright:fetch-cdn` from `package.json` scripts
-- Update workflows to use this action instead of the local script
-
-### Elementor Pro
-
-**In your workflow** (e.g., `start-local-server` script or workflow):
+### PR CI
 
 ```yaml
-steps:
-  - uses: actions/checkout@v6
-
-  - name: Fetch live CDN scenario with failure tolerance
-    uses: elementor/elementor-editor-github-actions/actions/fetch-cdn-scenario@main
-    with:
-      output-dir: tests/playwright/mu-plugins/editor-assets-cdn/live
-      mu-plugins-dir: tests/playwright/mu-plugins
-      allow-failure: true
-      copy-fixtures: true
-
-  - name: Start wp-env
-    run: bash ./.github/scripts/start-wp-env.sh
+- name: Setup CDN promotion fixtures
+  uses: elementor/elementor-editor-github-actions/actions/fetch-cdn-scenario@<sha>
+  with:
+    output-dir: tests/playwright/mu-plugins/editor-assets-cdn/live
+    mu-plugins-dir: tests/playwright/mu-plugins
+    fetch-live: false
 ```
 
-**Files you can delete from Pro**:
+### Nightly live CDN check
 
-- `scripts/fetch-live-cdn-scenario.mjs` ✓
-- `tests/playwright/mu-plugins/mock-editor-assets-cdn.php` (replace with shared version)
-- `tests/playwright/mu-plugins/editor-assets-cdn/no-promotion/**/*` (use shared fixtures)
-- `tests/playwright/mu-plugins/editor-assets-cdn/active-campaign/**/*` (Pro-specific, keep if needed for Pro tests)
+```yaml
+- name: Fetch live CDN scenario
+  uses: elementor/elementor-editor-github-actions/actions/fetch-cdn-scenario@<sha>
+  with:
+    output-dir: tests/playwright/mu-plugins/editor-assets-cdn/live
+    mu-plugins-dir: tests/playwright/mu-plugins
 
-**Keep in Pro**:
+- name: Run promotion tests against the live CDN
+  env:
+    E2E_CDN_SCENARIO: live
+  run: npx playwright test --grep @promotions
+```
 
-- `tests/playwright/sanity/modules/promotions/cdn-free-promotions-hidden.test.ts`
-- `tests/playwright/sanity/modules/promotions/cdn-scenario.ts`
-- `tests/playwright/mu-plugins/editor-assets-cdn/live/` (git-ignored, populated by action)
-
-**Update in Pro**:
-
-- Remove `npm run test:playwright:fetch-cdn` from `package.json` scripts
-- Update `start-local-server` to use this action instead of the local script
+`fetch-live` keeps `allow-failure: false` here on purpose: a CDN that cannot be fetched fails the job.
 
 ## Advanced Usage
 
@@ -143,33 +117,11 @@ steps:
 
 ## How It Works
 
-1. **Fetch**: Downloads 10 CDN JSON files from the specified source
-2. **Atomic swap**: Fetches to a temporary staging directory, then renames to target only on success
-3. **Fallback**: If a file is missing from source, logs a warning and uses default scenario
-4. **Mock plugin**: PHP mu-plugin intercepts `assets.elementor.com` requests and serves local fixtures
-5. **Cookie-based scenarios**: Tests set `e2e_cdn_scenario` cookie to switch between scenarios
-
-## Key Differences from Original PRs
-
-| Feature           | Core PR #38251 | Pro PR #7989   | Shared Action  |
-| ----------------- | -------------- | -------------- | -------------- |
-| Timeout           | ❌ None        | ✅ 15s         | ✅ 15s         |
-| Retry             | ❌ None        | ✅ 3 attempts  | ✅ 3 attempts  |
-| `--allow-failure` | ❌             | ✅             | ✅             |
-| Atomic staging    | ❌             | ✅             | ✅             |
-| Backoff           | ❌             | ✅ Exponential | ✅ Exponential |
-
-The shared action uses Pro's more robust implementation as the baseline.
-
-## Migration Path
-
-Both Core and Pro can migrate incrementally:
-
-1. Keep existing `fetch-live-cdn-scenario.mjs` initially
-2. Add this action to workflows alongside the local script
-3. Verify tests pass with the action
-4. Remove local script and update workflows to use only the action
-5. Clean up fixture directories
+1. **Fetch**: Downloads the mocked CDN files from the source into a staging directory
+2. **Atomic swap**: The staging directory replaces `output-dir` only when every file succeeded
+3. **Missing files**: A file that the source does not have is skipped with a warning, and the default scenario answers for it
+4. **Mock plugin**: The mu-plugin answers `assets.elementor.com` requests from the fixtures of the selected scenario, or of the default scenario
+5. **Scenarios**: Tests select a scenario with the `e2e_cdn_scenario` cookie. A non-default scenario skips the CDN cache options, so its data never reaches requests of the default scenario.
 
 ## Related
 

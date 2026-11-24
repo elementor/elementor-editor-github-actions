@@ -17,6 +17,32 @@
 					}
 				]
 			]
+		},
+		{
+			"id": "e2e-campaign-pro",
+			"title": "E2E campaign Pro notification title",
+			"description": "E2E campaign Pro notification description",
+			"topic": "Campaign",
+			"cta": "E2E campaign Pro notification button",
+			"ctaLink": "https://go.elementor.com/e2e-campaign-notification-pro/",
+			"featured": true,
+			"conditions": [
+				[
+					{
+						"type": "plugin",
+						"operator": "==",
+						"plugin": "elementor-pro/elementor-pro.php"
+					}
+				]
+			]
+		},
+		{
+			"id": "e2e-campaign-all",
+			"title": "E2E campaign notification for everyone",
+			"description": "E2E campaign notification for everyone description",
+			"topic": "Campaign",
+			"cta": "E2E campaign notification for everyone button",
+			"ctaLink": "https://go.elementor.com/e2e-campaign-notification-all/"
 		}
 	]
 }

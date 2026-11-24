@@ -306,7 +306,16 @@
 				"type": "banner",
 				"data": {
 					"image": "https://assets.elementor.com/home-screen/v1/images/essential-upgrade.svg",
-					"link": "https://go.elementor.com/go-pro-advanced-home-sidebar-upgrade/"
+					"link": "https://go.elementor.com/e2e-campaign-home-sidebar-essential/"
+				}
+			},
+			{
+				"license": ["essential-oct2023"],
+				"is_enabled": "true",
+				"type": "banner",
+				"data": {
+					"image": "https://assets.elementor.com/home-screen/v1/images/essential-upgrade.svg",
+					"link": "https://go.elementor.com/e2e-campaign-home-sidebar-essential-oct2023/"
 				}
 			},
 			{
@@ -324,7 +333,7 @@
 				"type": "banner",
 				"data": {
 					"image": "https://assets.elementor.com/home-screen/v1/images/upgrade-free.svg",
-					"link": "https://go.elementor.com/go-pro-home-sidebar-expired/"
+					"link": "https://go.elementor.com/e2e-campaign-home-sidebar-expired/"
 				}
 			},
 			{

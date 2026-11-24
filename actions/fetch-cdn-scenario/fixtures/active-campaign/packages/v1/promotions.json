@@ -1,0 +1,75 @@
+{
+	"lastUpdated": "2026-11-19T13:44:16.241Z",
+	"promotions": [
+		{
+			"customCss": {
+				"title": "Custom CSS",
+				"content": "Add custom CSS to refine and enrich the appearance of any element on your site.",
+				"ctaUrl": "https://go.elementor.com/go-pro-style-custom-css/",
+				"image": "https://assets.elementor.com/packages/v1/images/custom_css_promotion.png"
+			},
+			"displayConditions": {
+				"title": "Display conditions",
+				"content": "Control when and where elements are shown across your site.",
+				"ctaUrl": "https://go.elementor.com/go-pro-display-conditions-modal/",
+				"image": "https://assets.elementor.com/packages/v1/images/display_conditions_promotion.png"
+			},
+			"attributes": {
+				"title": "E2E campaign attributes title",
+				"content": "E2E campaign attributes content",
+				"ctaUrl": "https://go.elementor.com/e2e-campaign-attributes/",
+				"image": "https://assets.elementor.com/packages/v1/images/attributes_promotion.png?e2e-campaign"
+			},
+			"Portfolio": {
+				"title": "Portfolio",
+				"content": "Upgrade to build dynamic portfolio grids featuring interactive category filtering and engaging hover effects designed to captivate your site visitors.",
+				"image": "https://assets.elementor.com/packages/v1/images/Portfolio_promotion.png"
+			},
+			"Form": {
+				"title": "Form",
+				"content": "Upgrade to build advanced forms featuring custom fields, multi-step layouts, automated email notifications, and direct CRM integrations.",
+				"image": "https://assets.elementor.com/packages/v1/images/Form_promotion.png"
+			},
+			"PriceList": {
+				"title": "Price list",
+				"content": "Upgrade to present items, descriptions, and pricing within a cohesive structure that aligned perfectly with your site.",
+				"image": "https://assets.elementor.com/packages/v1/images/Price_list_promotion.png"
+			},
+			"PriceTable": {
+				"title": "Price table",
+				"content": "Upgrade to build pricing matrices featuring highlighted columns, interactive check mark lists, and integrated action buttons.",
+				"image": "https://assets.elementor.com/packages/v1/images/Price_table_promotion.png"
+			},
+			"LoopGrid": {
+				"title": "Loop Grid",
+				"content": "Upgrade to connect custom layouts directly to your site database, seamlessly rendering dynamic content queries that engage your site visitors.",
+				"image": "https://assets.elementor.com/packages/v1/images/Loop_grid_promotion.png"
+			},
+			"CallToAction": {
+				"title": "Call to Action",
+				"content": "Upgrade to build Call to Action blocks with image overlays, custom hover animations, and promotional layout control across your site.",
+				"image": "https://assets.elementor.com/packages/v1/images/CTA_promotion.png"
+			},
+			"Template": {
+				"title": "Template",
+				"content": "Upgrade to embed saved templates that sync automatically across your entire site, preserving layout integrity and accelerating your production speed.",
+				"image": "https://assets.elementor.com/packages/v1/images/Template_promotion.png"
+			},
+			"Gallery": {
+				"title": "Gallery pro",
+				"content": "Upgrade to build gallery with dynamic categorization and custom layout control across your site.",
+				"image": "https://assets.elementor.com/packages/v1/images/Gallery_pro_promotion.png"
+			},
+			"MediaCarousel": {
+				"title": "Media carousel",
+				"content": "Upgrade to build advanced Media Carousel with dynamic video elements into your sliders to better engage your site visitors.",
+				"image": "https://assets.elementor.com/packages/v1/images/Media_carousel_promotion.png"
+			},
+			"LoopCarousel": {
+				"title": "Loop carousel",
+				"content": "Upgrade to build advanced Loop Carousel with dynamic posts, custom layouts seamlessly to better engage your site visitors.",
+				"image": "https://assets.elementor.com/packages/v1/images/Loop_carousel_promotion.png"
+			}
+		}
+	]
+}

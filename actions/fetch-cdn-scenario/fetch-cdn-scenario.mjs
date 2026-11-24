@@ -21,6 +21,8 @@ const CDN_PATHS = [
 	'editor-promotions/v1/theme-builder.json',
 	'notifications/v1/notifications.json',
 	'home-screen/v1/home-screen.json',
+	'packages/v1/promotions.json',
+	'free-to-pro-upsell/v1/free-to-pro-upsell.json',
 ];
 
 const {
@@ -136,7 +138,15 @@ const copyCdnFile = async (path) => {
 try {
 	await rm(STAGING_DIR, { recursive: true, force: true });
 	await mkdir(STAGING_DIR, { recursive: true });
-	await Promise.all(CDN_PATHS.map(copyCdnFile));
+	// Every write settles before the staging directory may be removed below.
+	const results = await Promise.allSettled(CDN_PATHS.map(copyCdnFile));
+
+	for (const result of results) {
+		if ('rejected' === result.status) {
+			throw result.reason;
+		}
+	}
+
 	await rm(LIVE_SCENARIO_DIR, { recursive: true, force: true });
 	await rename(STAGING_DIR, LIVE_SCENARIO_DIR);
 } catch (error) {

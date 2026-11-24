@@ -18,7 +18,7 @@ inputs:
         required: false
         default: ''
     copy-fixtures:
-        description: 'Copy the shared no-promotion and active-campaign fixtures to the fixtures directory (default: true)'
+        description: 'Copy the shared no-promotion and active-campaign scenarios to the parent of output-dir (default: true)'
         required: false
         default: 'true'
     fetch-live:
