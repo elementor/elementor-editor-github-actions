@@ -35,7 +35,7 @@ The sidebar images are part of the fixture, at the same paths as on the CDN. The
 - **Timeout**: 15s per request
 - **Graceful failure**: `allow-failure` lets WordPress start even if the CDN is down. The previous `live` scenario is kept.
 - **Atomic updates**: Files are fetched into a staging directory, which replaces `live` only when every file succeeded
-- **Flexible source**: The live CDN, another URL, or a local directory
+- **Flexible source**: The live CDN (`assets.elementor.com`), staging CDN (`assets.stg.elementor.red`), or a local directory
 
 ## Inputs
 
