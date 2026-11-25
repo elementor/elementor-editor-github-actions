@@ -5,7 +5,13 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { parseArgs } from 'node:util';
 
 const CDN_ORIGIN = 'https://assets.elementor.com';
+const ALLOWED_CDN_ORIGINS = new Set([
+	CDN_ORIGIN,
+	'https://assets.stg.elementor.red',
+]);
 const HTTP_NOT_FOUND = 404;
+const HTTP_TOO_MANY_REQUESTS = 429;
+const HTTP_SERVER_ERROR_MIN = 500;
 const MAX_ATTEMPTS = 3;
 const RETRY_DELAY_MS = 2000;
 const REQUEST_TIMEOUT_MS = 15000;
@@ -47,7 +53,37 @@ if (!outputDir) {
 const source = from || CDN_ORIGIN;
 const LIVE_SCENARIO_DIR = resolve(outputDir);
 const STAGING_DIR = `${LIVE_SCENARIO_DIR}.tmp-${String(process.pid)}`;
-const isUrl = /^https?:\/\//.test(source);
+const isUrl = /^https?:\/\//i.test(source);
+
+/**
+ * @param {string} rawUrl
+ * @returns {string}
+ */
+const resolveAllowedUrlBase = (rawUrl) => {
+	const parsed = new URL(rawUrl);
+
+	if (
+		'https:' !== parsed.protocol ||
+		!ALLOWED_CDN_ORIGINS.has(parsed.origin)
+	) {
+		throw new Error(
+			`Unsupported CDN URL origin "${parsed.origin}". Allowed origins: ${[...ALLOWED_CDN_ORIGINS].join(', ')}`,
+		);
+	}
+
+	if (parsed.username || parsed.password || parsed.search || parsed.hash) {
+		throw new Error(
+			`CDN URL must not include credentials, query, or hash: ${rawUrl}`,
+		);
+	}
+
+	const normalizedPath = parsed.pathname.replace(/\/+$/, '');
+	return `${parsed.origin}${normalizedPath}`;
+};
+
+const urlBase = isUrl ? resolveAllowedUrlBase(source) : '';
+
+class NonRetryableHttpError extends Error {}
 
 /** @param {unknown} error */
 const getErrorMessage = (error) =>
@@ -58,7 +94,7 @@ const getErrorMessage = (error) =>
  * @returns {Promise<unknown>}
  */
 const fetchOnce = async (path) => {
-	const response = await fetch(`${source.replace(/\/$/, '')}/${path}`, {
+	const response = await fetch(`${urlBase}/${path}`, {
 		cache: 'no-store',
 		signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
 	});
@@ -68,9 +104,14 @@ const fetchOnce = async (path) => {
 	}
 
 	if (!response.ok) {
-		throw new Error(
-			`${source} answered ${String(response.status)} for ${path}`,
-		);
+		const message = `${urlBase} answered ${String(response.status)} for ${path}`;
+		const isRetryable =
+			HTTP_TOO_MANY_REQUESTS === response.status ||
+			response.status >= HTTP_SERVER_ERROR_MIN;
+
+		throw isRetryable
+			? new Error(message)
+			: new NonRetryableHttpError(message);
 	}
 
 	const data = /** @type {unknown} */ (await response.json());
@@ -86,7 +127,10 @@ const readFromUrl = async (path) => {
 		try {
 			return await fetchOnce(path);
 		} catch (error) {
-			if (attempt >= MAX_ATTEMPTS) {
+			if (
+				error instanceof NonRetryableHttpError ||
+				attempt >= MAX_ATTEMPTS
+			) {
 				throw error;
 			}
 

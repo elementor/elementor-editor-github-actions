@@ -70,6 +70,7 @@ runs:
           run: |
               FIXTURES_BASE=$(dirname "$OUTPUT_DIR")
               for scenario in no-promotion active-campaign; do
+                rm -rf "$FIXTURES_BASE/$scenario"
                 mkdir -p "$FIXTURES_BASE/$scenario"
                 cp -r "$ACTION_PATH/fixtures/$scenario/"* "$FIXTURES_BASE/$scenario/"
                 echo "Copied shared $scenario fixtures to $FIXTURES_BASE/$scenario"

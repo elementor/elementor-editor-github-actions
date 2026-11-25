@@ -40,14 +40,20 @@ function elementor_e2e_cdn_scenario(): string {
 }
 
 function elementor_e2e_cdn_find_fixture( string $path ): string {
-	if ( false !== strpos( $path, '..' ) ) {
+	if ( false !== strpos( $path, '..' ) || '.json' !== strtolower( substr( $path, -5 ) ) ) {
+		return '';
+	}
+
+	$base_dir = realpath( ELEMENTOR_E2E_CDN_FIXTURES_DIR );
+
+	if ( false === $base_dir ) {
 		return '';
 	}
 
 	foreach ( array_unique( [ elementor_e2e_cdn_scenario(), ELEMENTOR_E2E_CDN_DEFAULT_SCENARIO ] ) as $scenario ) {
-		$fixture = ELEMENTOR_E2E_CDN_FIXTURES_DIR . '/' . $scenario . $path;
+		$fixture = realpath( $base_dir . '/' . $scenario . $path );
 
-		if ( is_file( $fixture ) ) {
+		if ( false !== $fixture && 0 === strpos( $fixture, $base_dir . DIRECTORY_SEPARATOR ) && is_file( $fixture ) ) {
 			return $fixture;
 		}
 	}
