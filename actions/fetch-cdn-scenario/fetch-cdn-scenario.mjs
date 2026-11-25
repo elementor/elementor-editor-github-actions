@@ -100,7 +100,7 @@ const fetchOnce = async (path) => {
 	});
 
 	if (HTTP_NOT_FOUND === response.status) {
-		return null;
+		return undefined;
 	}
 
 	if (!response.ok) {
@@ -150,7 +150,7 @@ const readFromDir = async (path) => {
 	const file = resolve(source, path);
 
 	if (!existsSync(file)) {
-		return null;
+		return undefined;
 	}
 
 	const data = /** @type {unknown} */ (
@@ -166,7 +166,7 @@ const readFromDir = async (path) => {
 const copyCdnFile = async (path) => {
 	const json = await (isUrl ? readFromUrl(path) : readFromDir(path));
 
-	if (null === json) {
+	if (undefined === json) {
 		console.warn(
 			`Missing in ${source}, the default scenario answers instead: ${path}`,
 		);
