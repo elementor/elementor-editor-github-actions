@@ -3,7 +3,7 @@ description: Fetch live editor-assets CDN data and set up mock CDN infrastructur
 
 inputs:
     cdn-source:
-        description: 'CDN source URL or local directory to fetch from (default: https://assets.elementor.com)'
+        description: 'CDN source URL or local directory to fetch from, e.g. https://assets.stg.elementor.red. Empty means https://assets.elementor.com.'
         required: false
         default: 'https://assets.elementor.com'
     allow-failure:
@@ -38,17 +38,17 @@ runs:
               ALLOW_FAILURE: ${{ inputs.allow-failure }}
               OUTPUT_DIR: ${{ inputs.output-dir }}
           run: |
-              ALLOW_FAILURE_FLAG=""
-              if [ "$ALLOW_FAILURE" = "true" ]; then
-                ALLOW_FAILURE_FLAG="--allow-failure"
+              ARGS=( --output="$OUTPUT_DIR" )
+
+              if [ -n "$CDN_SOURCE" ]; then
+                ARGS+=( --from="$CDN_SOURCE" )
               fi
 
-              FROM_FLAG="--from=$CDN_SOURCE"
+              if [ "$ALLOW_FAILURE" = "true" ]; then
+                ARGS+=( --allow-failure )
+              fi
 
-              node "$ACTION_PATH/fetch-cdn-scenario.mjs" \
-                --output="$OUTPUT_DIR" \
-                $FROM_FLAG \
-                $ALLOW_FAILURE_FLAG
+              node "$ACTION_PATH/fetch-cdn-scenario.mjs" "${ARGS[@]}"
 
         - name: Copy mock CDN mu-plugin
           if: inputs.mu-plugins-dir != ''

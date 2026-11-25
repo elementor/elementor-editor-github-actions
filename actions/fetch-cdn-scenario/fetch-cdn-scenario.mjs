@@ -26,11 +26,7 @@ const CDN_PATHS = [
 ];
 
 const {
-	values: {
-		from: source = CDN_ORIGIN,
-		'allow-failure': allowFailure = false,
-		output: outputDir,
-	},
+	values: { from, 'allow-failure': allowFailure = false, output: outputDir },
 } = parseArgs({
 	options: {
 		from: { type: 'string' },
@@ -47,6 +43,8 @@ if (!outputDir) {
 	throw new Error('Missing required --output argument');
 }
 
+// Callers pass an empty source when they have none, so it means the production CDN.
+const source = from || CDN_ORIGIN;
 const LIVE_SCENARIO_DIR = resolve(outputDir);
 const STAGING_DIR = `${LIVE_SCENARIO_DIR}.tmp-${String(process.pid)}`;
 const isUrl = /^https?:\/\//.test(source);

@@ -41,7 +41,7 @@ The `active-campaign` scenario gives every case a value that the live CDN and th
 | ---------------- | -------------------------------------------------------------------------------------------- | -------- | ------------------------------ |
 | `output-dir`     | Directory of the `live` scenario. The shared scenarios are copied next to it.                | **Yes**  | -                              |
 | `fetch-live`     | Fetch the live CDN into `output-dir`. Set to `false` on PR CI to stay offline.               | No       | `true`                         |
-| `cdn-source`     | CDN source URL or local directory                                                            | No       | `https://assets.elementor.com` |
+| `cdn-source`     | CDN source URL or local directory, empty means the production CDN                            | No       | `https://assets.elementor.com` |
 | `allow-failure`  | Allow WordPress to start if the fetch fails                                                  | No       | `false`                        |
 | `mu-plugins-dir` | Directory to copy the mock mu-plugin into                                                    | No       | `''`                           |
 | `copy-fixtures`  | Copy the shared `no-promotion` and `active-campaign` scenarios to the parent of `output-dir` | No       | `true`                         |
@@ -93,13 +93,13 @@ PR CI runs offline against the shared fixtures. A scheduled job fetches the live
     mu-plugins-dir: tests/playwright/mu-plugins
 ```
 
-**Pro example**:
+**Staging example**: every editor-assets pull request to `master` is deployed to `https://assets.stg.elementor.red`.
 
 ```yaml
-- name: Fetch CDN from custom URL
+- name: Fetch CDN from staging
   uses: elementor/elementor-editor-github-actions/actions/fetch-cdn-scenario@main
   with:
-    cdn-source: https://staging.assets.elementor.com
+    cdn-source: https://assets.stg.elementor.red
     output-dir: tests/playwright/mu-plugins/editor-assets-cdn/live
     mu-plugins-dir: tests/playwright/mu-plugins
     allow-failure: true
