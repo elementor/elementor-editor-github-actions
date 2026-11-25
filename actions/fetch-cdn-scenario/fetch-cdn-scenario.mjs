@@ -115,7 +115,10 @@ const readFromDir = async (path) => {
 	return data;
 };
 
-/** @param {string} path */
+/**
+ * @param {string} path
+ * @returns {Promise<boolean>} Whether the source has the file.
+ */
 const copyCdnFile = async (path) => {
 	const json = await (isUrl ? readFromUrl(path) : readFromDir(path));
 
@@ -123,7 +126,7 @@ const copyCdnFile = async (path) => {
 		console.warn(
 			`Missing in ${source}, the default scenario answers instead: ${path}`,
 		);
-		return;
+		return false;
 	}
 
 	const target = resolve(STAGING_DIR, path);
@@ -131,6 +134,7 @@ const copyCdnFile = async (path) => {
 	await mkdir(dirname(target), { recursive: true });
 	await writeFile(target, JSON.stringify(json, null, '\t') + '\n');
 	console.log(`Saved ${path}`);
+	return true;
 };
 
 try {
@@ -143,6 +147,13 @@ try {
 		if ('rejected' === result.status) {
 			throw result.reason;
 		}
+	}
+
+	// A source without any of the files is a wrong source, not a CDN that dropped a file.
+	if (!results.some((result) => result.value)) {
+		throw new Error(
+			`none of the ${String(CDN_PATHS.length)} CDN files exist there, check the source`,
+		);
 	}
 
 	await rm(LIVE_SCENARIO_DIR, { recursive: true, force: true });
