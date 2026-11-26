@@ -4,7 +4,7 @@ Shared GitHub Actions composite action that provides CDN campaign promotion test
 
 ## Overview
 
-This action consolidates the CDN test infrastructure previously duplicated in [elementor/elementor#38251](https://github.com/elementor/elementor/pull/38251) and [elementor/elementor-pro#7989](https://github.com/elementor/elementor-pro/pull/7989). It provides:
+The action provides:
 
 1. **Fetch script** (`fetch-cdn-scenario.mjs`) - Downloads the current CDN JSON files into a `live` scenario, with retries, a request timeout and optional failure tolerance
 2. **Mock mu-plugin** (`mock-editor-assets-cdn.php`) - Answers WordPress requests to `assets.elementor.com` from local fixtures instead of the live CDN
@@ -56,7 +56,7 @@ PR CI runs offline against the shared fixtures. A scheduled job fetches the live
 
 ```yaml
 - name: Setup CDN promotion fixtures
-  uses: elementor/elementor-editor-github-actions/actions/fetch-cdn-scenario@<sha>
+  uses: elementor/elementor-editor-github-actions/actions/fetch-cdn-scenario@main
   with:
     output-dir: tests/playwright/mu-plugins/editor-assets-cdn/live
     mu-plugins-dir: tests/playwright/mu-plugins
@@ -67,7 +67,7 @@ PR CI runs offline against the shared fixtures. A scheduled job fetches the live
 
 ```yaml
 - name: Fetch live CDN scenario
-  uses: elementor/elementor-editor-github-actions/actions/fetch-cdn-scenario@<sha>
+  uses: elementor/elementor-editor-github-actions/actions/fetch-cdn-scenario@main
   with:
     output-dir: tests/playwright/mu-plugins/editor-assets-cdn/live
     mu-plugins-dir: tests/playwright/mu-plugins
@@ -75,10 +75,10 @@ PR CI runs offline against the shared fixtures. A scheduled job fetches the live
 - name: Run promotion tests against the live CDN
   env:
     E2E_CDN_SCENARIO: live
-  run: npx playwright test --grep @promotions
+  run: npx playwright test --grep "live @promotions"
 ```
 
-`fetch-live` keeps `allow-failure: false` here on purpose: a CDN that cannot be fetched fails the job.
+`allow-failure` stays `false` here on purpose: a CDN that cannot be fetched fails the job.
 
 ## Advanced Usage
 
@@ -104,7 +104,6 @@ PR CI runs offline against the shared fixtures. A scheduled job fetches the live
     cdn-source: https://assets.stg.elementor.red
     output-dir: tests/playwright/mu-plugins/editor-assets-cdn/live
     mu-plugins-dir: tests/playwright/mu-plugins
-    allow-failure: true
 ```
 
 ### Skip copying fixtures (if you have custom ones)
@@ -121,12 +120,11 @@ PR CI runs offline against the shared fixtures. A scheduled job fetches the live
 
 1. **Fetch**: Downloads the mocked CDN files from the source into a staging directory
 2. **Atomic swap**: The staging directory replaces `output-dir` only when every file succeeded
-3. **Missing files**: A file that the source does not have is skipped with a warning, and the default scenario answers for it
+3. **Missing files**: A file that the source does not have is skipped with a warning, and the default scenario answers for it. A source without any of the files fails the fetch.
 4. **Mock plugin**: The mu-plugin answers `assets.elementor.com` requests from the fixtures of the selected scenario, or of the default scenario
 5. **Scenarios**: Tests select a scenario with the `e2e_cdn_scenario` cookie. A non-default scenario skips the CDN cache options, so its data never reaches requests of the default scenario.
 
-## Related
+## Used by
 
-- Core PR: [elementor/elementor#38251](https://github.com/elementor/elementor/pull/38251)
-- Pro PR: [elementor/elementor-pro#7989](https://github.com/elementor/elementor-pro/pull/7989)
-- Jira: [ED-26391](https://elementor.atlassian.net/browse/ED-26391)
+- Elementor Core: the `Playwright` workflow, nightly `live @promotions` at 04:30 UTC
+- Elementor Pro: the `Playwright CDN Promotions` workflow, nightly at 04:30 UTC
