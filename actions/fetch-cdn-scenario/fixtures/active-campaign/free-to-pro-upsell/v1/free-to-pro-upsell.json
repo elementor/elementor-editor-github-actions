@@ -1,0 +1,29 @@
+{
+	"lastUpdated": "2026-11-19T13:44:16.080Z",
+	"free-to-pro-upsell": [
+		{
+			"id": "animated_headline",
+			"imageSrc": "https://assets.elementor.com/free-to-pro-upsell/v1/images/animated_headline.jpg?e2e-campaign"
+		},
+		{
+			"id": "video_playlist",
+			"imageSrc": "https://assets.elementor.com/free-to-pro-upsell/v1/images/video_playlist.jpg"
+		},
+		{
+			"id": "cta",
+			"imageSrc": "https://assets.elementor.com/free-to-pro-upsell/v1/images/cta.jpg"
+		},
+		{
+			"id": "testimonial_widget",
+			"imageSrc": "https://assets.elementor.com/free-to-pro-upsell/v1/images/testimonial_widget.jpg"
+		},
+		{
+			"id": "image_carousel",
+			"imageSrc": "https://assets.elementor.com/free-to-pro-upsell/v1/images/image_carousel.jpg"
+		},
+		{
+			"id": "connect-pro-upgrade",
+			"imageSrc": "https://assets.elementor.com/free-to-pro-upsell/v1/images/connect-pro-upgrade.jpg"
+		}
+	]
+}

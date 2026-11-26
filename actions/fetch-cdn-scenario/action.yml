@@ -1,0 +1,77 @@
+name: Fetch CDN Scenario
+description: Fetch live editor-assets CDN data and set up mock CDN infrastructure for Playwright tests
+
+inputs:
+    cdn-source:
+        description: 'CDN source URL or local directory to fetch from, e.g. https://assets.stg.elementor.red. Empty means https://assets.elementor.com.'
+        required: false
+        default: 'https://assets.elementor.com'
+    allow-failure:
+        description: 'Allow WordPress to start even if CDN fetch fails (default: false)'
+        required: false
+        default: 'false'
+    output-dir:
+        description: 'Target directory for fetched CDN files (required)'
+        required: true
+    mu-plugins-dir:
+        description: 'Target directory for the mock CDN mu-plugin (optional, if you want to copy the mu-plugin)'
+        required: false
+        default: ''
+    copy-fixtures:
+        description: 'Copy the shared no-promotion and active-campaign scenarios to the parent of output-dir (default: true)'
+        required: false
+        default: 'true'
+    fetch-live:
+        description: 'Fetch live CDN data into output-dir (default: true). Set to false on PR CI to stay offline.'
+        required: false
+        default: 'true'
+
+runs:
+    using: composite
+    steps:
+        - name: Fetch CDN scenario
+          if: inputs.fetch-live == 'true'
+          shell: bash
+          env:
+              ACTION_PATH: ${{ github.action_path }}
+              CDN_SOURCE: ${{ inputs.cdn-source }}
+              ALLOW_FAILURE: ${{ inputs.allow-failure }}
+              OUTPUT_DIR: ${{ inputs.output-dir }}
+          run: |
+              ARGS=( --output="$OUTPUT_DIR" )
+
+              if [ -n "$CDN_SOURCE" ]; then
+                ARGS+=( --from="$CDN_SOURCE" )
+              fi
+
+              if [ "$ALLOW_FAILURE" = "true" ]; then
+                ARGS+=( --allow-failure )
+              fi
+
+              node "$ACTION_PATH/fetch-cdn-scenario.mjs" "${ARGS[@]}"
+
+        - name: Copy mock CDN mu-plugin
+          if: inputs.mu-plugins-dir != ''
+          shell: bash
+          env:
+              ACTION_PATH: ${{ github.action_path }}
+              MU_PLUGINS_DIR: ${{ inputs.mu-plugins-dir }}
+          run: |
+              mkdir -p "$MU_PLUGINS_DIR"
+              cp "$ACTION_PATH/mock-editor-assets-cdn.php" "$MU_PLUGINS_DIR/"
+              echo "Copied mock-editor-assets-cdn.php to $MU_PLUGINS_DIR"
+
+        - name: Copy shared fixtures
+          if: inputs.copy-fixtures == 'true'
+          shell: bash
+          env:
+              ACTION_PATH: ${{ github.action_path }}
+              OUTPUT_DIR: ${{ inputs.output-dir }}
+          run: |
+              FIXTURES_BASE=$(dirname "$OUTPUT_DIR")
+              for scenario in no-promotion active-campaign; do
+                rm -rf "$FIXTURES_BASE/$scenario"
+                mkdir -p "$FIXTURES_BASE/$scenario"
+                cp -r "$ACTION_PATH/fixtures/$scenario/"* "$FIXTURES_BASE/$scenario/"
+                echo "Copied shared $scenario fixtures to $FIXTURES_BASE/$scenario"
+              done

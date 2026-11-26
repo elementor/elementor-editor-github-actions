@@ -1,0 +1,7 @@
+{
+	"plugins-page": {
+		"is_active": true,
+		"label": "E2E campaign plugins page label",
+		"url": "https://go.elementor.com/e2e-campaign-plugins-page/"
+	}
+}
