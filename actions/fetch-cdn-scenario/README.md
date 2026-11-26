@@ -25,9 +25,9 @@ A CDN file without a fixture is not mocked and reaches the live CDN, so a new CD
 The `active-campaign` scenario gives every case a value that the live CDN and the defaults do not have, so a test that finds it proves the mock answered:
 
 - What's New: a Free-only card, a Pro-only card and a card for everyone
-- Home screen sidebar: a different `e2e-campaign-home-sidebar-*` link and `e2e-campaign-*.svg` image for the `free`, `essential`, `essential-oct2023` and `expired` tiers
+- Home screen sidebar: a different `e2e-campaign-home-sidebar-*` link and `e2e-campaign-*.svg` image URL for the `free`, `essential`, `essential-oct2023` and `expired` tiers
 
-The sidebar images are part of the fixture, at the same paths as on the CDN. The browser loads images from the CDN itself, not through the mock, so the tests answer those requests from the fixture. This keeps offline tests independent of the live CDN.
+The fixtures hold JSON only. The browser loads images from the CDN itself, not through the mock, and the `e2e-campaign-*.svg` images do not exist there: the tests check the image URL, not the picture.
 
 ## Features
 
